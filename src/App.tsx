@@ -33,7 +33,7 @@ function App() {
         {showSplash ? (
           <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-white">
             <img
-              src="/src/assets/images/clean_education_ui_no_text_1787528171471.jpg"
+              src="https://blog.ixl.com/wp-content/uploads/2023/08/GD-3024-IXL-Blog-images_-Student-Dashboard-1200x600-1.png"
               alt="Loading..."
               className="h-full w-full object-cover"
               referrerPolicy="no-referrer"
