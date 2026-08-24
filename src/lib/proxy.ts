@@ -10,7 +10,6 @@ export const SCRAMJET_PREFIX = "/~/scramjet/";
 
 /** Alternates to fall back on when one relay refuses a site (TLS handshake eof). */
 export const WISP_SERVERS = [
-  { name: "Self-Hosted Local (Fastest)", url: "" },
   { name: "Mercury Workshop", url: "wss://wisp.mercurywork.shop/" },
   { name: "TitaniumNetwork", url: "wss://wisp.terbiumon.top/wisp/" },
   { name: "Nebula Public", url: "wss://anura.pro/" },
@@ -18,23 +17,7 @@ export const WISP_SERVERS = [
 ];
 
 export function getAvailableWispServers(): { name: string; url: string }[] {
-  const isBrowser = typeof window !== "undefined";
-  const localWisp = isBrowser
-    ? `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/wisp/`
-    : "";
-
-  const list: { name: string; url: string }[] = [];
-  if (localWisp) {
-    list.push({ name: "Self-Hosted Local (Fastest)", url: localWisp });
-  }
-
-  WISP_SERVERS.forEach((s) => {
-    if (s.url && s.url !== localWisp) {
-      list.push(s);
-    }
-  });
-
-  return list;
+  return [...WISP_SERVERS];
 }
 
 export function getOptimalWisp(url?: string): string {
