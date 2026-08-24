@@ -1,14 +1,4 @@
-import {
-  Clapperboard,
-  Gamepad2,
-  Globe,
-  Music,
-  Plus,
-  Search,
-  Sparkles,
-  Tv,
-  X,
-} from "lucide-react";
+import { Clapperboard, Gamepad2, Globe, Music, Plus, Search, Sparkles, Tv, X } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 

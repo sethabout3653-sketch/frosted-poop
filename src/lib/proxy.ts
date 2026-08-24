@@ -260,6 +260,19 @@ export async function initProxy(wisp: string): Promise<AnyRecord> {
         return {};
       } catch (err) {
         console.warn("[Scramjet controller init warn]:", err);
+        // If IndexedDB is corrupt (missing object stores), attempt to delete it
+        if (
+          err instanceof Error &&
+          (err.message.includes("IDBDatabase") || err.name === "NotFoundError")
+        ) {
+          try {
+            console.info("[Frosted Proxy] Attempting to clear corrupt Scramjet IndexedDB...");
+            window.indexedDB.deleteDatabase("scramjet");
+            window.indexedDB.deleteDatabase("__scramjet");
+          } catch (e) {
+            // ignore cleanup errors
+          }
+        }
         return {};
       }
     })();

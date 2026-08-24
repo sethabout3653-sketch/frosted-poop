@@ -26,9 +26,7 @@ export function GamesLibrary({ onLaunch }: { onLaunch: (game: Game) => void }) {
       <div className="mx-auto max-w-6xl px-6 py-10">
         <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-6">
           <div>
-            <h1 className="text-4xl font-light tracking-tight text-foreground">
-              Games
-            </h1>
+            <h1 className="text-4xl font-light tracking-tight text-foreground">Games</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               {isLoading ? "Loading library…" : `${games.length} titles`}
             </p>

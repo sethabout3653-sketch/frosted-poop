@@ -8,9 +8,7 @@ import {
   type ReactNode,
 } from "react";
 
-import {
-  FROSTED_ICON_SVG,
-} from "./favicons";
+import { FROSTED_ICON_SVG } from "./favicons";
 
 export type Settings = {
   defaultEngine: "auto" | "ultraviolet" | "scramjet";

@@ -343,7 +343,7 @@
                     new URL(e.fetch.remote),
                     e.fetch.method,
                     e.fetch.body,
-                    e.fetch.headers,
+                    new Headers(e.fetch.headers),
                     null,
                   );
                   if (!d() && a.body instanceof ReadableStream) {

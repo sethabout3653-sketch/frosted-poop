@@ -133,7 +133,7 @@ export function BrowserShell() {
     if (!url) return;
 
     const newEntry: TabHistoryEntry = {
-      kind: "games", // We use the same 'games' kind internally but change the label
+      kind: "web",
       url,
       target: url,
       title: hostOf(url),
