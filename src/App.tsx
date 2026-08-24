@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { SettingsProvider } from "./lib/settings";
 import { BrowserShell } from "./components/browser/BrowserShell";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { CLASSROOM_FAVICON, FROSTED_ICON_SVG } from "./lib/favicons";
+import { IXL_FAVICON, FROSTED_ICON_SVG } from "./lib/favicons";
 
 const queryClient = new QueryClient();
 
@@ -12,9 +12,9 @@ function App() {
   useEffect(() => {
     // Tab Cloaking: Disguise as school only during splash
     if (showSplash) {
-      document.title = "Home";
+      document.title = "IXL";
       const link = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
-      if (link) link.href = CLASSROOM_FAVICON;
+      if (link) link.href = IXL_FAVICON;
     } else {
       document.title = "Frosted";
       const link = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
