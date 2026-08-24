@@ -1,4 +1,4 @@
-import gameProxy from "../src/server/gameProxy";
+import gameProxy from "../src/server/gameProxy.js";
 import express from "express";
 
 const app = express();

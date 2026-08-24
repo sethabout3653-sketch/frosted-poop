@@ -3,7 +3,7 @@ import path from "path";
 import http from "http";
 import { createServer as createViteServer } from "vite";
 import { server as wispServer } from "@mercuryworkshop/wisp-js";
-import gameProxy from "./src/server/gameProxy";
+import gameProxy from "./src/server/gameProxy.js";
 
 async function startServer() {
   const app = express();
