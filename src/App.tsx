@@ -13,12 +13,22 @@ function App() {
     // Tab Cloaking: Disguise as school only during splash
     if (showSplash) {
       document.title = "IXL";
-      const link = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
-      if (link) link.href = IXL_FAVICON;
+      let link = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
+      if (!link) {
+        link = document.createElement("link");
+        link.rel = "icon";
+        document.head.appendChild(link);
+      }
+      link.href = IXL_FAVICON;
     } else {
       document.title = "Frosted";
-      const link = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
-      if (link) link.href = FROSTED_ICON_SVG;
+      let link = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
+      if (!link) {
+        link = document.createElement("link");
+        link.rel = "icon";
+        document.head.appendChild(link);
+      }
+      link.href = FROSTED_ICON_SVG;
     }
 
     if (showSplash) {
