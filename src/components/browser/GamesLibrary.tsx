@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Gamepad2, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { fetchGames, gameCover, type Game } from "@/lib/games";
@@ -68,12 +68,11 @@ export function GamesLibrary({ onLaunch }: { onLaunch: (game: Game) => void }) {
                   src={gameCover(game)}
                   alt={`${game.name} cover art`}
                   loading="lazy"
-                  className="h-full w-full object-cover grayscale transition duration-300 group-hover:scale-105 group-hover:grayscale-0"
+                  className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
                   onError={(e) => {
                     e.currentTarget.style.display = "none";
                   }}
                 />
-                <Gamepad2 className="absolute inset-0 m-auto h-8 w-8 text-muted-foreground opacity-40" />
               </div>
               <p className="truncate px-3 py-2 text-xs text-foreground">{game.name}</p>
             </button>
