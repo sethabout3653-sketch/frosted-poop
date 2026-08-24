@@ -66,7 +66,7 @@ export function WebView({ url, active, onMeta, registerNav }: Props) {
           const sjFrame = createFrame.call(controller);
           frameRef.current = sjFrame;
 
-          const iframe = sjFrame["frame"] as HTMLIFrameElement;
+          const iframe = (sjFrame["element"] || sjFrame["frame"]) as HTMLIFrameElement;
           iframeRef.current = iframe;
           iframe.className = "h-full w-full border-0 bg-background";
           iframe.style.width = "100%";

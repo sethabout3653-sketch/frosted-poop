@@ -14,6 +14,8 @@
     "@hookform/resolvers": "^5.2.2",
     "@mercuryworkshop/bare-mux": "^2.1.9",
     "@mercuryworkshop/epoxy-transport": "^3.0.1",
+    "@mercuryworkshop/scramjet": "^2.0.67-alpha.2",
+    "@mercuryworkshop/scramjet-controller": "^0.0.14",
     "@mercuryworkshop/wisp-js": "^0.4.1",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -85,6 +87,7 @@
     "tsx": "^4.19.1",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
-    "vite": "^8.2.0"
+    "vite": "^8.2.0",
+    "vite-plugin-static-copy": "^4.1.1"
   }
 }

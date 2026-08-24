@@ -12,8 +12,6 @@ export const SCRAMJET_PREFIX = "/~/scramjet/";
 export const WISP_SERVERS = [
   { name: "Mercury Workshop", url: "wss://wisp.mercurywork.shop/" },
   { name: "TitaniumNetwork", url: "wss://wisp.terbiumon.top/wisp/" },
-  { name: "Nebula Public", url: "wss://anura.pro/" },
-  { name: "PyDodge Relay", url: "wss://wisp.pydodge.com/" },
 ];
 
 export function getAvailableWispServers(): { name: string; url: string }[] {
@@ -165,7 +163,11 @@ function loadScript(src: string): Promise<void> {
 
 async function ensureScripts() {
   await loadScript("/uv/uv.bundle.js");
-  await Promise.all([loadScript("/uv/uv.config.js"), loadScript("/proxy/scramjet.all.js")]);
+  await Promise.all([
+    loadScript("/uv/uv.config.js"),
+    loadScript("/scramjet/scramjet.js"),
+    loadScript("/controller/controller.api.js"),
+  ]);
 }
 
 async function ensureTransport(wisp: string) {
@@ -225,19 +227,31 @@ export async function initProxy(wisp: string): Promise<AnyRecord> {
   if (!controllerPromise) {
     controllerPromise = (async () => {
       try {
-        const loader = (window as unknown as AnyRecord)["$scramjetLoadController"] as
-          (() => { ScramjetController: new (config: AnyRecord) => AnyRecord }) | undefined;
-        if (loader) {
-          const { ScramjetController } = loader();
+        const ScramjetController = (window as unknown as AnyRecord).$scramjetController?.Controller;
+        const defaultConfigDev = (window as unknown as AnyRecord).$scramjet?.defaultConfigDev;
+        if (ScramjetController && defaultConfigDev) {
+          const transportMod = await dynamicImport(`${location.origin}/proxy/epoxy.mjs`);
+          const EpoxyClient = transportMod.EpoxyClient;
+
+          let readySw = navigator.serviceWorker.controller;
+          if (!readySw) {
+            const reg = await navigator.serviceWorker.ready;
+            readySw = reg.active;
+          }
+          if (!readySw) throw new Error("No active SW for Scramjet Controller");
+
           const controller = new ScramjetController({
-            prefix: SCRAMJET_PREFIX,
-            files: {
-              wasm: "/proxy/scramjet.wasm.wasm",
-              all: "/proxy/scramjet.all.js",
-              sync: "/proxy/scramjet.sync.js",
+            serviceworker: readySw,
+            transport: new EpoxyClient({ wisp: currentWisp }),
+            scramjetConfig: defaultConfigDev,
+            config: {
+              prefix: SCRAMJET_PREFIX,
+              scramjetPath: "/scramjet/scramjet.js",
+              injectPath: "/controller/controller.inject.js",
+              wasmPath: "/scramjet/scramjet.wasm",
             },
           });
-          await (controller["init"] as () => Promise<void>).call(controller);
+          await controller.wait();
           return controller;
         }
         return {};
