@@ -1,4 +1,4 @@
-import { Search, Shuffle, Plus, Settings, Shield, Snowflake, Sparkles } from "lucide-react";
+import { Search, Shuffle, Plus, SlidersHorizontal, Shield, Gamepad2 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { Game } from "@/lib/games";
 
@@ -37,41 +37,38 @@ export function FrostedNavbar({
   }, []);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/80 backdrop-blur-xl">
+    <header className="sticky top-0 z-40 border-b border-neutral-900 bg-black/90 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
-        {/* Logo & Brand */}
+        {/* Logo & Brand (Original Frosted Wordmark) */}
         <button
           onClick={onHome}
-          className="group flex items-center gap-2.5 transition-transform active:scale-95"
+          className="group flex items-center gap-2.5 transition-transform active:scale-95 cursor-pointer"
         >
-          <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-cyan-500 via-indigo-500 to-sky-400 p-[1px] shadow-lg shadow-cyan-500/20 group-hover:shadow-cyan-500/35 transition-all">
-            <div className="flex h-full w-full items-center justify-center rounded-[11px] bg-slate-950/90">
-              <Snowflake className="h-5 w-5 text-cyan-300 transition-transform group-hover:rotate-45 duration-300" />
-            </div>
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-neutral-800 bg-black text-white shadow-sm group-hover:border-neutral-700 transition-all">
+            <Gamepad2 className="h-5 w-5 text-white" />
           </div>
-          <div className="text-left">
-            <div className="flex items-center gap-1">
-              <span className="text-lg font-bold tracking-tight text-white">FROSTED</span>
-              <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
-            </div>
-            <span className="block text-[10px] font-medium tracking-wider text-slate-400 uppercase">
-              Games Arcade
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl font-normal tracking-tight text-white font-sans drop-shadow-[0_0_20px_rgba(255,255,255,0.25)]">
+              frosted
+            </span>
+            <span className="rounded-md border border-neutral-800 bg-[#0a0a0a] px-1.5 py-0.5 text-[10px] font-mono text-neutral-400 uppercase tracking-wider">
+              games
             </span>
           </div>
         </button>
 
-        {/* Global Search Field */}
+        {/* Global Search Field (Frosted Omnibox Style) */}
         <div className="relative flex-1 max-w-md hidden md:block">
-          <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-slate-400" />
+          <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-neutral-500" />
           <input
             ref={searchInputRef}
             type="text"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search unblocked games..."
-            className="w-full rounded-xl border border-white/10 bg-slate-900/60 pl-10 pr-10 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-cyan-500/50 focus:bg-slate-900/90 focus:ring-1 focus:ring-cyan-500/50 transition-all"
+            placeholder="Search games or type to filter..."
+            className="w-full rounded-xl border border-neutral-800 bg-[#0a0a0a] pl-10 pr-10 py-2 text-xs text-white placeholder-neutral-500 outline-none focus:border-neutral-500 focus:shadow-[0_0_15px_rgba(255,255,255,0.05)] transition-all"
           />
-          <kbd className="absolute right-3 top-2.5 pointer-events-none rounded border border-white/10 bg-slate-800 px-1.5 text-[10px] font-mono text-slate-400">
+          <kbd className="absolute right-3 top-2.5 pointer-events-none rounded border border-neutral-800 bg-black px-1.5 text-[10px] font-mono text-neutral-500">
             /
           </kbd>
         </div>
@@ -81,7 +78,7 @@ export function FrostedNavbar({
           {activeGame && (
             <button
               onClick={onHome}
-              className="hidden sm:flex items-center gap-1.5 rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-all"
+              className="hidden sm:flex items-center gap-1.5 rounded-xl border border-neutral-800 bg-black px-3 py-2 text-xs font-medium text-neutral-300 hover:border-neutral-700 hover:text-white transition-all cursor-pointer"
             >
               <span>Library</span>
             </button>
@@ -90,36 +87,36 @@ export function FrostedNavbar({
           <button
             onClick={onRandomGame}
             title="Play Random Game"
-            className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-300 hover:border-cyan-500/40 hover:bg-slate-800 hover:text-cyan-300 transition-all"
+            className="flex items-center gap-1.5 rounded-xl border border-neutral-800 bg-black px-3 py-2 text-xs font-medium text-neutral-300 hover:border-neutral-700 hover:text-white hover:bg-neutral-900/80 transition-all cursor-pointer"
           >
-            <Shuffle className="h-3.5 w-3.5 text-cyan-400" />
+            <Shuffle className="h-3.5 w-3.5 text-neutral-400" />
             <span className="hidden sm:inline">Random</span>
           </button>
 
           <button
             onClick={onOpenCustomModal}
-            title="Play Custom Game URL"
-            className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-300 hover:border-indigo-500/40 hover:bg-slate-800 hover:text-indigo-300 transition-all"
+            title="Play Custom Game Link"
+            className="flex items-center gap-1.5 rounded-xl border border-neutral-800 bg-black px-3 py-2 text-xs font-medium text-neutral-300 hover:border-neutral-700 hover:text-white hover:bg-neutral-900/80 transition-all cursor-pointer"
           >
-            <Plus className="h-3.5 w-3.5 text-indigo-400" />
-            <span className="hidden sm:inline">Add Link</span>
+            <Plus className="h-3.5 w-3.5 text-neutral-400" />
+            <span className="hidden sm:inline">Add Game</span>
           </button>
 
           <button
             onClick={onPanic}
             title="Panic Button (Esc)"
-            className="flex items-center gap-1.5 rounded-xl border border-rose-500/30 bg-rose-950/30 px-3 py-2 text-xs font-medium text-rose-300 hover:bg-rose-900/50 hover:text-white transition-all"
+            className="flex items-center gap-1.5 rounded-xl border border-neutral-800 bg-neutral-900/90 px-3 py-2 text-xs font-medium text-neutral-300 hover:border-neutral-600 hover:text-white transition-all cursor-pointer"
           >
-            <Shield className="h-3.5 w-3.5 text-rose-400" />
+            <Shield className="h-3.5 w-3.5 text-neutral-400" />
             <span className="hidden sm:inline">Panic</span>
           </button>
 
           <button
             onClick={onOpenSettingsModal}
             title="Settings & Cloak"
-            className="rounded-xl border border-white/10 bg-slate-900/60 p-2 text-slate-400 hover:bg-slate-800 hover:text-white transition-all"
+            className="rounded-xl border border-neutral-800 bg-black p-2 text-neutral-400 hover:border-neutral-700 hover:text-white transition-all cursor-pointer"
           >
-            <Settings className="h-4 w-4" />
+            <SlidersHorizontal className="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -127,13 +124,13 @@ export function FrostedNavbar({
       {/* Mobile Search Bar */}
       <div className="px-4 pb-3 md:hidden">
         <div className="relative">
-          <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-slate-400" />
+          <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-neutral-500" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Search games..."
-            className="w-full rounded-xl border border-white/10 bg-slate-900/60 pl-10 pr-4 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-cyan-500/50 transition-all"
+            className="w-full rounded-xl border border-neutral-800 bg-[#0a0a0a] pl-10 pr-4 py-2 text-xs text-white placeholder-neutral-500 outline-none focus:border-neutral-500 transition-all"
           />
         </div>
       </div>

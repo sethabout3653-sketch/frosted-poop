@@ -96,10 +96,10 @@ export function GamesGrid({
             <button
               key={cat.id}
               onClick={() => setActiveCategory(cat.id)}
-              className={`flex shrink-0 items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-medium transition-all ${
+              className={`flex shrink-0 items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-medium transition-all cursor-pointer ${
                 isActive
-                  ? "border-cyan-500/60 bg-gradient-to-r from-cyan-500/20 to-indigo-500/20 text-white shadow-lg shadow-cyan-500/10"
-                  : "border-white/10 bg-slate-900/40 text-slate-400 hover:border-white/20 hover:bg-slate-900/80 hover:text-slate-200"
+                  ? "border-neutral-600 bg-neutral-900 text-white shadow-[0_0_12px_rgba(255,255,255,0.08)]"
+                  : "border-neutral-800 bg-[#0a0a0a] text-neutral-400 hover:border-neutral-700 hover:bg-neutral-900/60 hover:text-neutral-200"
               }`}
             >
               {cat.icon}
@@ -120,8 +120,8 @@ export function GamesGrid({
         featuredGames.length > 0 && (
           <div className="mb-10 mt-4">
             <div className="flex items-center gap-2 mb-4">
-              <Sparkles className="h-4 w-4 text-cyan-400 animate-pulse" />
-              <h2 className="text-sm font-semibold tracking-wider text-slate-300 uppercase">
+              <Sparkles className="h-4 w-4 text-neutral-300" />
+              <h2 className="text-sm font-semibold tracking-wider text-neutral-300 uppercase font-sans">
                 Featured & Trending
               </h2>
             </div>
@@ -134,9 +134,10 @@ export function GamesGrid({
                   <motion.div
                     key={"featured-" + game.id}
                     whileHover={{ y: -4 }}
-                    className="group relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-slate-900/80 to-slate-950/90 shadow-xl backdrop-blur-md transition-all hover:border-cyan-500/40 hover:shadow-cyan-500/20"
+                    onClick={() => onSelectGame(game)}
+                    className="group relative cursor-pointer overflow-hidden rounded-2xl border border-neutral-800 bg-[#0a0a0a] shadow-lg backdrop-blur-md transition-all hover:border-neutral-600 hover:shadow-[0_0_15px_rgba(255,255,255,0.08)]"
                   >
-                    <div className="relative aspect-[16/10] overflow-hidden bg-slate-950">
+                    <div className="relative aspect-[16/10] overflow-hidden bg-black">
                       <img
                         src={gameCover(game)}
                         alt={game.name}
@@ -146,39 +147,39 @@ export function GamesGrid({
                             "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&auto=format&fit=crop&q=80";
                         }}
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent opacity-80 group-hover:opacity-60 transition-opacity" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent opacity-80 group-hover:opacity-60 transition-opacity" />
 
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           toggleFavorite(game.id);
                         }}
-                        className="absolute right-3 top-3 rounded-xl bg-slate-950/60 p-2 text-slate-300 backdrop-blur-md hover:text-amber-400 transition-colors"
+                        className="absolute right-3 top-3 rounded-xl bg-black/70 p-2 text-neutral-300 backdrop-blur-md hover:text-amber-400 transition-colors"
                       >
                         <Star
                           className={`h-4 w-4 ${isFav ? "fill-amber-400 text-amber-400" : ""}`}
                         />
                       </button>
 
-                      <div className="absolute left-3 top-3 rounded-lg bg-cyan-500/20 border border-cyan-500/30 px-2 py-0.5 text-[10px] font-bold text-cyan-300 uppercase tracking-wider backdrop-blur-md">
+                      <div className="absolute left-3 top-3 rounded-lg border border-neutral-700 bg-black/80 px-2 py-0.5 text-[10px] font-bold text-white uppercase tracking-wider backdrop-blur-md">
                         Featured
                       </div>
 
                       <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={() => onSelectGame(game)}
-                          className="flex h-12 w-12 items-center justify-center rounded-full bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/40 hover:scale-110 transition-transform"
+                          className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-black shadow-lg hover:scale-110 transition-transform"
                         >
-                          <Play className="h-6 w-6 fill-slate-950 ml-0.5" />
+                          <Play className="h-6 w-6 fill-black ml-0.5" />
                         </button>
                       </div>
                     </div>
 
                     <div className="p-4">
-                      <h3 className="truncate text-base font-bold text-white group-hover:text-cyan-300 transition-colors">
+                      <h3 className="truncate text-base font-bold text-white group-hover:text-neutral-200 transition-colors">
                         {game.name}
                       </h3>
-                      <div className="mt-1 flex items-center justify-between text-xs text-slate-400">
+                      <div className="mt-1 flex items-center justify-between text-xs text-neutral-400">
                         <span className="capitalize">{game.category || "arcade"}</span>
                         {game.rating && (
                           <span className="flex items-center gap-1 text-amber-300">
@@ -197,10 +198,10 @@ export function GamesGrid({
 
       {/* Main Grid Section Header */}
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold tracking-wider text-slate-300 uppercase">
+        <h2 className="text-sm font-semibold tracking-wider text-neutral-400 uppercase font-sans">
           {searchQuery
             ? `Search Results (${filteredGames.length})`
-            : `${activeCategory.toUpperCase()} Games (${filteredGames.length})`}
+            : `${activeCategory.toUpperCase()} GAMES (${filteredGames.length})`}
         </h2>
       </div>
 
@@ -210,7 +211,7 @@ export function GamesGrid({
           {Array.from({ length: 18 }).map((_, i) => (
             <div
               key={i}
-              className="aspect-[4/5] animate-pulse rounded-2xl border border-white/5 bg-slate-900/40"
+              className="aspect-[4/5] animate-pulse rounded-2xl border border-neutral-800 bg-[#0a0a0a]"
             />
           ))}
         </div>
@@ -219,11 +220,11 @@ export function GamesGrid({
       {/* Empty States */}
       {!isLoading && filteredGames.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-900 border border-white/10 text-slate-400 mb-4">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-black border border-neutral-800 text-neutral-500 mb-4">
             <Search className="h-8 w-8" />
           </div>
           <h3 className="text-lg font-semibold text-white">No games found</h3>
-          <p className="mt-1 text-xs text-slate-400 max-w-sm">
+          <p className="mt-1 text-xs text-neutral-400 max-w-sm">
             {searchQuery
               ? `We couldn't find any games matching "${searchQuery}".`
               : activeCategory === "favorites"
@@ -248,9 +249,9 @@ export function GamesGrid({
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.2 }}
                 onClick={() => onSelectGame(game)}
-                className="group relative cursor-pointer overflow-hidden rounded-2xl border border-white/10 bg-slate-900/50 shadow-lg backdrop-blur-md transition-all hover:border-cyan-500/50 hover:bg-slate-900/80 hover:shadow-cyan-500/20 hover:-translate-y-1"
+                className="group relative cursor-pointer overflow-hidden rounded-2xl border border-neutral-800 bg-[#0a0a0a] shadow-md backdrop-blur-md transition-all hover:border-neutral-600 hover:bg-[#0f0f0f] hover:shadow-[0_0_15px_rgba(255,255,255,0.06)] hover:-translate-y-1"
               >
-                <div className="relative aspect-[4/3] overflow-hidden bg-slate-950">
+                <div className="relative aspect-[4/3] overflow-hidden bg-black">
                   <img
                     src={gameCover(game)}
                     alt={game.name}
@@ -261,7 +262,7 @@ export function GamesGrid({
                         "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&auto=format&fit=crop&q=80";
                     }}
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity" />
 
                   {/* Favorite Toggle Button */}
                   <button
@@ -269,7 +270,7 @@ export function GamesGrid({
                       e.stopPropagation();
                       toggleFavorite(game.id);
                     }}
-                    className="absolute right-2 top-2 rounded-lg bg-slate-950/60 p-1.5 text-slate-300 backdrop-blur-md hover:text-amber-400 transition-colors"
+                    className="absolute right-2 top-2 rounded-lg bg-black/70 p-1.5 text-neutral-300 backdrop-blur-md hover:text-amber-400 transition-colors"
                   >
                     <Star
                       className={`h-3.5 w-3.5 ${isFav ? "fill-amber-400 text-amber-400" : ""}`}
@@ -278,10 +279,10 @@ export function GamesGrid({
                 </div>
 
                 <div className="p-3">
-                  <h3 className="truncate text-xs font-semibold text-white group-hover:text-cyan-300 transition-colors">
+                  <h3 className="truncate text-xs font-semibold text-white group-hover:text-neutral-200 transition-colors">
                     {game.name}
                   </h3>
-                  <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
+                  <div className="mt-1 flex items-center justify-between text-[10px] text-neutral-400">
                     <span className="capitalize">{game.category || "game"}</span>
                     {game.rating && (
                       <span className="flex items-center gap-0.5 text-amber-300">

@@ -59,7 +59,7 @@ export function FrostedApp() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-cyan-500 selection:text-slate-950">
+    <div className="min-h-screen bg-black bg-[linear-gradient(to_right,rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:52px_52px] text-neutral-200 font-sans selection:bg-white selection:text-black">
       {/* Navigation Header */}
       <FrostedNavbar
         searchQuery={searchQuery}
