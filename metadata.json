@@ -1,6 +1,6 @@
 {
   "name": "Frosted",
-  "description": "A high-performance proxy browser and games library with a clean, uncloaked interface.",
+  "description": "Frosted - Unblocked HTML5 & retro games arcade with clean player controls, stealth cloaking, and favorites.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

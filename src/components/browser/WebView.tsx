@@ -142,6 +142,7 @@ export function WebView({ url, active, onMeta, registerNav }: Props) {
             const clean = cleanProxyUrl(frameUrl);
             if (
               clean &&
+              /^https?:\/\//i.test(clean) &&
               clean !== lastReportedUrl.current &&
               !clean.startsWith("about:") &&
               !clean.startsWith("blob:")
@@ -221,7 +222,8 @@ export function WebView({ url, active, onMeta, registerNav }: Props) {
 
   // Navigate when URL updates
   useEffect(() => {
-    const cleanTarget = cleanProxyUrl(url);
+    const rawClean = cleanProxyUrl(url);
+    const cleanTarget = /^https?:\/\//i.test(rawClean) ? rawClean : toUrl(rawClean);
     const cleanLast = cleanProxyUrl(lastUrl.current);
     if (!cleanTarget || cleanTarget === cleanLast) return;
     lastUrl.current = cleanTarget;

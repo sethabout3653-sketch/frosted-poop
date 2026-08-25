@@ -20,10 +20,56 @@ async function startServer() {
   // Attach game proxy routes
   app.use("/api/public", gameProxy);
 
-  // Catch any unintercepted proxy requests so they don't serve the React index.html app recursively
-  app.use(["/~/uv/*", "/~/scramjet/*", "/~/sj/*"], (req, res) => {
-    res.setHeader("content-type", "text/html; charset=utf-8");
-    res.send(`<!DOCTYPE html>
+  // Helper to extract target origin from a Scramjet/UV proxy referer header
+  function extractProxyTargetOrigin(referer?: string): string | null {
+    if (!referer) return null;
+    try {
+      const u = new URL(referer);
+      if (u.pathname.startsWith("/~/sj/")) {
+        const rawTarget = u.pathname.slice("/~/sj/".length);
+        const decoded = decodeURIComponent(rawTarget);
+        const targetUrl = /^https?:\/\//i.test(decoded) ? decoded : "https://" + decoded;
+        const targetObj = new URL(targetUrl);
+        return targetObj.origin;
+      }
+    } catch {
+      /* silent */
+    }
+    return null;
+  }
+
+  // Prevent internal site relative requests or unintercepted proxy requests from recursively serving the React index.html app
+  app.use((req, res, next) => {
+    const pathName = req.path;
+
+    // Allowed top-level app paths and system assets
+    const isAppSystemPath =
+      pathName === "/" ||
+      pathName === "/index.html" ||
+      pathName.startsWith("/src/") ||
+      pathName.startsWith("/public/") ||
+      pathName.startsWith("/node_modules/") ||
+      pathName.startsWith("/@") ||
+      pathName.startsWith("/proxy/") ||
+      pathName.startsWith("/scramjet/") ||
+      pathName.startsWith("/uv/") ||
+      pathName.startsWith("/controller/") ||
+      pathName === "/sw.js" ||
+      pathName.startsWith("/wisp") ||
+      pathName.startsWith("/api/");
+
+    if (isAppSystemPath) {
+      return next();
+    }
+
+    // Explicit proxy prefixes
+    if (
+      pathName.startsWith("/~/uv/") ||
+      pathName.startsWith("/~/scramjet/") ||
+      pathName.startsWith("/~/sj/")
+    ) {
+      res.setHeader("content-type", "text/html; charset=utf-8");
+      return res.send(`<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
@@ -45,6 +91,26 @@ async function startServer() {
   </script>
 </body>
 </html>`);
+    }
+
+    // Check if this request originated from inside a proxy iframe
+    const referer = req.headers.referer;
+    const targetOrigin = extractProxyTargetOrigin(referer);
+    if (targetOrigin) {
+      const redirectedTarget = targetOrigin + req.originalUrl;
+      return res.redirect(`/~/sj/${encodeURIComponent(redirectedTarget)}`);
+    }
+
+    const isIframeRequest =
+      req.headers["sec-fetch-dest"] === "iframe" ||
+      req.headers["sec-fetch-mode"] === "nested-navigate" ||
+      (referer && referer.includes("/~/"));
+
+    if (isIframeRequest) {
+      return res.status(404).send("Page not found in proxy frame.");
+    }
+
+    next();
   });
 
   // Vite middleware for development

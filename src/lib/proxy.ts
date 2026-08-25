@@ -76,12 +76,14 @@ export function chooseProxyEngine(_inputUrl?: string): ProxyEngine {
  */
 export function getProxyUrl(url: string, engine: ProxyEngine = "scramjet"): string {
   if (!url) return "";
+  const targetUrl = /^https?:\/\//i.test(url) ? url : toUrl(url);
+  if (!targetUrl) return "";
   if (engine === "scramjet") {
     // If scramjet controller frame is available, frame.go(url) will navigate directly.
     // For direct src generation:
-    return `${SCRAMJET_PREFIX}${encodeURIComponent(url)}`;
+    return `${SCRAMJET_PREFIX}${encodeURIComponent(targetUrl)}`;
   }
-  return `${UV_PREFIX}${encodeXor(url)}`;
+  return `${UV_PREFIX}${encodeXor(targetUrl)}`;
 }
 
 export function extractYouTubeVideoId(urlStr: string): string | null {
