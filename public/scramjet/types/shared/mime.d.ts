@@ -1,8 +1,8 @@
 export interface ParsedMimeType {
-    type: string;
-    subtype: string;
-    /** `type`/`subtype` in ASCII lowercase; excludes parameters. */
-    essence: string;
+  type: string;
+  subtype: string;
+  /** `type`/`subtype` in ASCII lowercase; excludes parameters. */
+  essence: string;
 }
 /**
  * Parses a MIME type string (e.g. a Content-Type value) into type, subtype, and essence.
@@ -37,7 +37,12 @@ export declare function isJavascriptMimeTypeEssenceMatch(s: string): boolean;
  * Resolves `type` when present; otherwise maps obsolete `language` to `text/…`.
  * @see https://html.spec.whatwg.org/multipage/scripting.html#prepare-a-script
  */
-export declare function getScriptBlockTypeString(type: string | null | undefined, language: string | null | undefined, hasTypeAttribute?: boolean, hasLanguageAttribute?: boolean): string;
+export declare function getScriptBlockTypeString(
+  type: string | null | undefined,
+  language: string | null | undefined,
+  hasTypeAttribute?: boolean,
+  hasLanguageAttribute?: boolean,
+): string;
 /**
  * Whether a `<script type="...">` value denotes executable JavaScript
  * (classic or module script), not a data block or import map.

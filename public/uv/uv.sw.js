@@ -52,7 +52,44 @@
           }
           let f = (await t.cookie.getCookies(w)) || [],
             x = t.cookie.serialize(f, t.meta, !1);
-          ((o.headers["user-agent"] = navigator.userAgent), x && (o.headers.cookie = x));
+
+          o.headers["user-agent"] = navigator.userAgent;
+          if (!o.headers["accept-language"]) {
+            o.headers["accept-language"] = "en-US,en;q=0.9";
+          }
+          if (!o.headers["sec-ch-ua"]) {
+            o.headers["sec-ch-ua"] =
+              '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"';
+          }
+          if (!o.headers["sec-ch-ua-mobile"]) {
+            o.headers["sec-ch-ua-mobile"] = "?0";
+          }
+          if (!o.headers["sec-ch-ua-platform"]) {
+            o.headers["sec-ch-ua-platform"] = '"Windows"';
+          }
+
+          // Anti-bot & consent bypass for Google, YouTube, and Cloudflare challenges
+          const host = t.meta.url.hostname.toLowerCase();
+          if (
+            host.includes("google.") ||
+            host.includes("youtube.") ||
+            host.includes("googlevideo.")
+          ) {
+            let cookieStr = x || "";
+            if (!cookieStr.includes("SOCS=")) {
+              cookieStr +=
+                (cookieStr ? "; " : "") + "SOCS=CAESEwgDEgk2OTQ0NTMwOTQaAmVuIAEaBgoBMhIA";
+            }
+            if (!cookieStr.includes("CONSENT=")) {
+              cookieStr += (cookieStr ? "; " : "") + "CONSENT=YES+cb.20210720-07-p0.en+FX+999";
+            }
+            if (!cookieStr.includes("PREF=")) {
+              cookieStr += (cookieStr ? "; " : "") + "PREF=f4=4000000&f6=400&f7=100&hl=en";
+            }
+            x = cookieStr;
+          }
+
+          if (x) o.headers.cookie = x;
           let p = new u(o, null, null);
           if ((this.emit("request", p), p.intercepted)) return p.returnValue;
           s = o.blob ? "blob:" + location.origin + o.url.pathname : o.url;
@@ -67,17 +104,20 @@
             }),
             r = new y(o, c),
             l = new u(r, null, null);
+          if (c.finalURL) {
+            try {
+              t.meta.url = t.meta.base = new URL(c.finalURL);
+            } catch {}
+          }
           if ((this.emit("beforemod", l), l.intercepted)) return l.returnValue;
           for (let i of O) r.headers[i] && delete r.headers[i];
-          if (
-            (r.headers.location && (r.headers.location = t.rewriteUrl(r.headers.location)),
-            ["document", "iframe"].includes(e.destination))
-          ) {
-            let i = r.getHeader("content-disposition");
-            if (!/\s*?((inline|attachment);\s*?)filename=/i.test(i)) {
-              let n = /^\s*?attachment/i.test(i) ? "attachment" : "inline",
-                [m] = new URL(c.finalURL).pathname.split("/").slice(-1);
-              r.headers["content-disposition"] = `${n}; filename=${JSON.stringify(m)}`;
+          if (r.headers.location) {
+            r.headers.location = t.rewriteUrl(r.headers.location);
+            if (
+              (r.status >= 300 && r.status < 400) ||
+              ["document", "iframe"].includes(e.destination)
+            ) {
+              return Response.redirect(r.headers.location, 302);
             }
           }
           if (
@@ -91,65 +131,81 @@
               }),
               delete r.headers["set-cookie"]),
             r.body)
-          )
-            switch (e.destination) {
-              case "script":
-                r.body = t.js.rewrite(await c.text());
-                break;
-              case "worker":
-                {
-                  let i = [t.bundleScript, t.clientScript, t.configScript, t.handlerScript]
-                    .map((n) => JSON.stringify(n))
-                    .join(",");
-                  ((r.body = `if (!self.__uv) {
-                                ${t.createJsInject(t.cookie.serialize(f, t.meta, !0), e.referrer)}
-                            importScripts(${i});
-                            }
-`),
-                    (r.body += t.js.rewrite(await c.text())));
-                }
-                break;
-              case "style":
-                r.body = t.rewriteCSS(await c.text());
-                break;
-              case "iframe":
-              case "document":
-                if (
-                  r.getHeader("content-type") &&
-                  r.getHeader("content-type").startsWith("text/html")
-                ) {
-                  let i = await c.text();
-                  if (Array.isArray(this.config.inject)) {
-                    let n = i.indexOf("<head>"),
-                      m = i.indexOf("<HEAD>"),
-                      b = i.indexOf("<body>"),
-                      k = i.indexOf("<BODY>"),
-                      S = new URL(s),
-                      U = this.config.inject;
-                    for (let d of U)
-                      new RegExp(d.host).test(S.host) &&
-                        (d.injectTo === "head"
-                          ? (n !== -1 || m !== -1) && (i = i.slice(0, n) + `${d.html}` + i.slice(n))
-                          : d.injectTo === "body" &&
-                            (b !== -1 || k !== -1) &&
-                            (i = i.slice(0, b) + `${d.html}` + i.slice(b)));
-                  }
-                  r.body = t.rewriteHtml(i, {
-                    document: !0,
-                    injectHead: t.createHtmlInject(
-                      t.handlerScript,
-                      t.bundleScript,
-                      t.clientScript,
-                      t.configScript,
-                      t.cookie.serialize(f, t.meta, !0),
-                      e.referrer,
-                    ),
-                  });
-                }
-                break;
-              default:
-                break;
+          ) {
+            const contentType = (r.getHeader("content-type") || "").toLowerCase();
+            if (
+              e.destination === "script" ||
+              contentType.includes("javascript") ||
+              contentType.includes("ecmascript")
+            ) {
+              r.body = t.js.rewrite(await c.text());
+              delete r.headers["content-length"];
+              delete r.headers["content-encoding"];
+              r.headers["content-type"] = "application/javascript; charset=utf-8";
+            } else if (e.destination === "worker") {
+              let i = [t.bundleScript, t.clientScript, t.configScript, t.handlerScript]
+                .map((n) => JSON.stringify(n))
+                .join(",");
+              r.body =
+                `if (!self.__uv) {
+                            ${t.createJsInject(t.cookie.serialize(f, t.meta, !0), e.referrer)}
+                        importScripts(${i});
+                        }
+` + t.js.rewrite(await c.text());
+              delete r.headers["content-length"];
+              delete r.headers["content-encoding"];
+              r.headers["content-type"] = "application/javascript; charset=utf-8";
+            } else if (e.destination === "style" || contentType.includes("text/css")) {
+              r.body = t.rewriteCSS(await c.text());
+              delete r.headers["content-length"];
+              delete r.headers["content-encoding"];
+              r.headers["content-type"] = "text/css; charset=utf-8";
+            } else if (
+              ["document", "iframe"].includes(e.destination) ||
+              contentType.startsWith("text/html")
+            ) {
+              let i = await c.text();
+              if (Array.isArray(this.config.inject)) {
+                let n = i.indexOf("<head>"),
+                  m = i.indexOf("<HEAD>"),
+                  b = i.indexOf("<body>"),
+                  k = i.indexOf("<BODY>"),
+                  S = new URL(s),
+                  U = this.config.inject;
+                for (let d of U)
+                  new RegExp(d.host).test(S.host) &&
+                    (d.injectTo === "head"
+                      ? (n !== -1 || m !== -1) && (i = i.slice(0, n) + `${d.html}` + i.slice(n))
+                      : d.injectTo === "body" &&
+                        (b !== -1 || k !== -1) &&
+                        (i = i.slice(0, b) + `${d.html}` + i.slice(b)));
+              }
+              r.body = t.rewriteHtml(i, {
+                document: !0,
+                injectHead: t.createHtmlInject(
+                  t.handlerScript,
+                  t.bundleScript,
+                  t.clientScript,
+                  t.configScript,
+                  t.cookie.serialize(f, t.meta, !0),
+                  e.referrer,
+                ),
+              });
+              delete r.headers["content-length"];
+              delete r.headers["content-encoding"];
+              r.headers["content-type"] = "text/html; charset=utf-8";
             }
+          }
+          if (r.getHeader("content-range")) {
+            r.headers["accept-ranges"] = "bytes";
+            if (r.status === 200) {
+              r.status = 206;
+              r.statusText = "Partial Content";
+            }
+          }
+          if (r.status === 206 && !r.statusText) {
+            r.statusText = "Partial Content";
+          }
           return (
             o.headers.accept === "text/event-stream" &&
               (r.headers["content-type"] = "text/event-stream"),
@@ -160,7 +216,7 @@
               : new Response(r.body, {
                   headers: r.headers,
                   status: r.status,
-                  statusText: r.statusText,
+                  statusText: r.statusText || (r.status === 200 ? "OK" : ""),
                 })
           );
         } catch (t) {
@@ -240,47 +296,88 @@
     let s = `
         errorTrace.value = ${JSON.stringify(a)};
         fetchedURL.textContent = ${JSON.stringify(e)};
-        for (const node of document.querySelectorAll("#uvHostname")) node.textContent = ${JSON.stringify(location.hostname)};
         reload.addEventListener("click", () => location.reload());
-        uvVersion.textContent = ${JSON.stringify("3.2.10")};
-        uvBuild.textContent = ${JSON.stringify("92d9075")};
+        const switchBtn = document.getElementById("switchRelay");
+        if (switchBtn) {
+          switchBtn.addEventListener("click", () => {
+            window.parent.postMessage({ type: "SWITCH_WISP_RELAY" }, "*");
+            switchBtn.textContent = "Switching Relay...";
+            setTimeout(() => location.reload(), 400);
+          });
+        }
     `;
     return `<!DOCTYPE html>
         <html>
         <head>
         <meta charset='utf-8' />
-        <title>Error</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Connection Error</title>
         <style>
-        * { background-color: white }
+          * { box-sizing: border-box; }
+          body { 
+            background-color: #09090b; 
+            color: #e4e4e7; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 24px;
+          }
+          .card {
+            background: #18181b;
+            border: 1px solid #27272a;
+            border-radius: 16px;
+            max-width: 520px;
+            width: 100%;
+            padding: 28px;
+            box-shadow: 0 20px 40px -15px rgba(0,0,0,0.5);
+          }
+          h1 { font-size: 18px; font-weight: 600; margin: 0 0 8px; color: #fafafa; }
+          p { font-size: 13px; line-height: 1.5; color: #a1a1aa; margin: 0 0 16px; word-break: break-word; }
+          .url-badge { color: #f43f5e; font-family: monospace; font-size: 12px; }
+          textarea {
+            width: 100%;
+            background: #09090b;
+            border: 1px solid #27272a;
+            border-radius: 8px;
+            color: #f87171;
+            font-family: monospace;
+            font-size: 11px;
+            padding: 10px;
+            resize: none;
+            margin-bottom: 20px;
+          }
+          .actions { display: flex; gap: 10px; }
+          button {
+            cursor: pointer;
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            border: none;
+            transition: all 0.15s;
+          }
+          .btn-primary { background: #ffffff; color: #09090b; }
+          .btn-primary:hover { opacity: 0.9; }
+          .btn-secondary { background: #27272a; color: #e4e4e7; border: 1px solid #3f3f46; }
+          .btn-secondary:hover { background: #3f3f46; }
         </style>
         </head>
         <body>
-        <h1 id='errorTitle'>Error processing your request</h1>
-        <hr />
-        <p>Failed to load <b id="fetchedURL"></b></p>
-        <p id="errorMessage">Internal Server Error</p>
-        <textarea id="errorTrace" cols="40" rows="10" readonly></textarea>
-        <p>Try:</p>
-        <ul>
-        <li>Checking your internet connection</li>
-        <li>Verifying you entered the correct address</li>
-        <li>Clearing the site data</li>
-        <li>Contacting <b id="uvHostname"></b>'s administrator</li>
-        <li>Verify the server isn't censored</li>
-        </ul>
-        <p>If you're the administrator of <b id="uvHostname"></b>, try:</p>
-        <ul>
-        <li>Restarting your server</li>
-        <li>Updating Ultraviolet</li>
-        <li>Troubleshooting the error on the <a href="https://github.com/titaniumnetwork-dev/Ultraviolet" target="_blank">GitHub repository</a></li>
-        </ul>
-        <button id="reload">Reload</button>
-        <hr />
-        <p><i>Ultraviolet v<span id="uvVersion"></span> (build <span id="uvBuild"></span>)</i></p>
-        <script src="${"data:application/javascript," + encodeURIComponent(s)}"><\/script>
+          <div class="card">
+            <h1>Connection Interrupted</h1>
+            <p>The destination website terminated the connection or refused TLS handshake: <span id="fetchedURL" class="url-badge"></span></p>
+            <textarea id="errorTrace" rows="4" readonly></textarea>
+            <div class="actions">
+              <button id="switchRelay" class="btn-primary">Switch Relay & Retry</button>
+              <button id="reload" class="btn-secondary">Reload</button>
+            </div>
+          </div>
+          <script src="${"data:application/javascript," + encodeURIComponent(s)}"><\/script>
         </body>
-        </html>
-        `;
+        </html>`;
   }
   function T(a, e) {
     let s = { "content-type": "text/html" };

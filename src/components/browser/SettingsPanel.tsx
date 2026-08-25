@@ -37,6 +37,56 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
+        {/* Proxy Engine Selection */}
+        <Section title="Proxy Engine">
+          <div className="space-y-2">
+            <button
+              onClick={() => update({ defaultEngine: "scramjet" })}
+              className={`flex w-full items-center justify-between rounded-lg border p-3 text-left transition-all ${
+                settings.defaultEngine === "scramjet"
+                  ? "border-foreground bg-accent/60 text-foreground"
+                  : "border-border bg-background/50 text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <div>
+                <div className="flex items-center gap-2 font-medium text-xs text-foreground">
+                  <span>Scramjet v2</span>
+                  <span className="rounded bg-foreground/10 px-1.5 py-0.5 text-[9px] uppercase font-mono tracking-wider text-foreground">
+                    Active
+                  </span>
+                </div>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  High-fidelity WASM rewriting engine with advanced streaming & SPA support.
+                </p>
+              </div>
+              {settings.defaultEngine === "scramjet" && (
+                <Check className="h-4 w-4 shrink-0 text-foreground" />
+              )}
+            </button>
+
+            <button
+              onClick={() => update({ defaultEngine: "ultraviolet" })}
+              className={`flex w-full items-center justify-between rounded-lg border p-3 text-left transition-all ${
+                settings.defaultEngine === "ultraviolet"
+                  ? "border-foreground bg-accent/60 text-foreground"
+                  : "border-border bg-background/50 text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <div>
+                <div className="flex items-center gap-2 font-medium text-xs text-foreground">
+                  <span>Ultraviolet (UV)</span>
+                </div>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  TitaniumNetwork proxy engine with standard Service Worker interception.
+                </p>
+              </div>
+              {settings.defaultEngine === "ultraviolet" && (
+                <Check className="h-4 w-4 shrink-0 text-foreground" />
+              )}
+            </button>
+          </div>
+        </Section>
+
         {/* Active Wisp Relays */}
         <Section title="Wisp Network Relays">
           <div className="space-y-1.5">

@@ -21,7 +21,7 @@ async function startServer() {
   app.use("/api/public", gameProxy);
 
   // Catch any unintercepted proxy requests so they don't serve the React index.html app recursively
-  app.use(["/~/uv/*", "/~/scramjet/*"], (req, res) => {
+  app.use(["/~/uv/*", "/~/scramjet/*", "/~/sj/*"], (req, res) => {
     res.setHeader("content-type", "text/html; charset=utf-8");
     res.send(`<!DOCTYPE html>
 <html>

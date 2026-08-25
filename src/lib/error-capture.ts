@@ -6,14 +6,35 @@ const TTL_MS = 5_000;
 
 function isIgnoredError(error: unknown): boolean {
   if (!error) return false;
-  const str = String(
-    (error as { message?: string })?.message || (error as { reason?: string })?.reason || error,
-  );
+  let str = "";
+  if (typeof error === "string") {
+    str = error;
+  } else if (error instanceof Error) {
+    str = `${error.name}: ${error.message}\n${error.stack || ""}`;
+  } else if (typeof error === "object") {
+    try {
+      str = JSON.stringify(error);
+    } catch {
+      str = String(error);
+    }
+  } else {
+    str = String(error);
+  }
+
+  const lower = str.toLowerCase();
   return (
-    str.includes("WebSocket closed without opened") ||
-    str.includes("failed to connect to websocket") ||
-    str.includes("WebSocket") ||
-    str.includes("[vite]")
+    lower.includes("hyper_util") ||
+    lower.includes("muxtaskended") ||
+    lower.includes("websocket") ||
+    lower.includes("wisp") ||
+    lower.includes("closure invoked") ||
+    lower.includes("wasm-bindgen") ||
+    lower.includes("scramjet") ||
+    lower.includes("controller request handler") ||
+    lower.includes("caught error") ||
+    lower.includes("resizeobserver") ||
+    lower.includes("cross-origin") ||
+    lower.includes("vite")
   );
 }
 
@@ -68,18 +89,44 @@ function isErrorLike(value: unknown): value is Error {
 // recorded for consumeLastCapturedError and expanded before serialization.
 const originalConsoleError = console.error.bind(console);
 console.error = (...args: unknown[]) => {
+  const isIgnored = args.some((arg) => isIgnoredError(arg));
+  if (isIgnored) {
+    return;
+  }
   const expanded = args.map((arg) => {
-    if (!isErrorLike(arg)) return arg;
     record(arg);
+    if (!isErrorLike(arg)) return arg;
     return describeError(arg);
   });
   originalConsoleError(...expanded);
 };
 
 if (typeof globalThis.addEventListener === "function") {
-  globalThis.addEventListener("error", (event) => record((event as ErrorEvent).error ?? event));
-  globalThis.addEventListener("unhandledrejection", (event) =>
-    record((event as PromiseRejectionEvent).reason),
+  globalThis.addEventListener(
+    "error",
+    (event) => {
+      const err = (event as ErrorEvent).error ?? (event as ErrorEvent).message ?? event;
+      if (isIgnoredError(err)) {
+        event.preventDefault();
+        event.stopImmediatePropagation?.();
+        return;
+      }
+      record(err);
+    },
+    true,
+  );
+  globalThis.addEventListener(
+    "unhandledrejection",
+    (event) => {
+      const reason = (event as PromiseRejectionEvent).reason;
+      if (isIgnoredError(reason)) {
+        event.preventDefault();
+        event.stopImmediatePropagation?.();
+        return;
+      }
+      record(reason);
+    },
+    true,
   );
 }
 

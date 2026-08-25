@@ -1,17 +1,19 @@
-import { AlertCircle, ArrowLeftRight, Check, Globe, Loader2, RefreshCw, Zap } from "lucide-react";
+import { AlertCircle, Loader2, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 
 import { getFaviconUrl } from "@/lib/favicons";
 import {
-  chooseProxyEngine,
   cleanProxyUrl,
+  extractYouTubeVideoId,
   getAvailableWispServers,
+  getBypassYouTubeUrl,
   getOptimalWisp,
   getProxyUrl,
   initProxy,
-  type ProxyEngine,
+  type ScramjetFrame,
 } from "@/lib/proxy";
+import { useSettings } from "@/lib/settings";
 
 type Props = {
   url: string;
@@ -20,12 +22,11 @@ type Props = {
   registerNav: (nav: { back: () => void; forward: () => void; reload: () => void } | null) => void;
 };
 
-type AnyRecord = Record<string, unknown>;
-
 export function WebView({ url, active, onMeta, registerNav }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const frameRef = useRef<AnyRecord | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const scramjetFrameRef = useRef<ScramjetFrame | null>(null);
+  const { settings } = useSettings();
 
   const lastUrl = useRef<string>("");
   const lastReportedTitle = useRef<string>("");
@@ -33,20 +34,11 @@ export function WebView({ url, active, onMeta, registerNav }: Props) {
   const metaRef = useRef(onMeta);
   metaRef.current = onMeta;
 
-  const [engine, setEngine] = useState<ProxyEngine>(() => chooseProxyEngine(url));
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [retrying, setRetrying] = useState(false);
   const [currentWisp, setCurrentWisp] = useState(() => getOptimalWisp(url));
   const [retryCount, setRetryCount] = useState(0);
-  const [showEngineMenu, setShowEngineMenu] = useState(false);
-
-  // Update chosen engine if URL significantly changes
-  useEffect(() => {
-    if (url && url !== lastUrl.current) {
-      setEngine(chooseProxyEngine(url));
-    }
-  }, [url]);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,169 +49,164 @@ export function WebView({ url, active, onMeta, registerNav }: Props) {
 
     (async () => {
       try {
-        const controller = await initProxy(currentWisp);
+        const proxyRes = await initProxy(currentWisp);
         if (cancelled || !hostRef.current) return;
 
-        if (engine === "scramjet" && typeof controller?.["createFrame"] === "function") {
-          // Scramjet execution via Controller Frame
-          const createFrame = controller["createFrame"] as () => AnyRecord;
-          const sjFrame = createFrame.call(controller);
-          frameRef.current = sjFrame;
+        const iframe = document.createElement("iframe");
+        iframeRef.current = iframe;
+        iframe.className = "h-full w-full border-0 bg-background";
+        iframe.style.width = "100%";
+        iframe.style.height = "100%";
+        iframe.style.border = "0";
+        iframe.style.display = "block";
+        iframe.setAttribute(
+          "allow",
+          "fullscreen; autoplay; gamepad; clipboard-read; clipboard-write; encrypted-media; picture-in-picture; camera; microphone; geolocation; midi; accelerometer; gyroscope; xr-spatial-tracking",
+        );
+        iframe.setAttribute("allowfullscreen", "true");
 
-          const iframe = (sjFrame["element"] || sjFrame["frame"]) as HTMLIFrameElement;
-          iframeRef.current = iframe;
-          iframe.className = "h-full w-full border-0 bg-background";
-          iframe.style.width = "100%";
-          iframe.style.height = "100%";
-          iframe.style.border = "0";
-          iframe.style.display = "block";
-          iframe.setAttribute(
-            "allow",
-            "fullscreen; autoplay; gamepad; clipboard-read; clipboard-write; encrypted-media; picture-in-picture; camera; microphone; geolocation; midi; accelerometer; gyroscope; xr-spatial-tracking",
-          );
-          iframe.setAttribute("allowfullscreen", "true");
-          hostRef.current.replaceChildren(iframe);
+        hostRef.current.replaceChildren(iframe);
 
-          registerNav({
-            back: () => (sjFrame["back"] as () => void).call(sjFrame),
-            forward: () => (sjFrame["forward"] as () => void).call(sjFrame),
-            reload: () => (sjFrame["reload"] as () => void).call(sjFrame),
-          });
-
-          const syncMeta = () => {
-            try {
-              const doc = iframe.contentDocument;
-              if (doc) {
-                const docTitle = doc.title?.trim();
-                if (docTitle && docTitle !== lastReportedTitle.current) {
-                  lastReportedTitle.current = docTitle;
-                  metaRef.current({ title: docTitle });
-                }
-              }
-
-              const frameUrl =
-                (sjFrame["url"] as string) || iframe.contentDocument?.location?.href || "";
-              const clean = cleanProxyUrl(frameUrl);
-              if (
-                clean &&
-                clean !== lastReportedUrl.current &&
-                !clean.startsWith("about:") &&
-                !clean.startsWith("blob:")
-              ) {
-                lastReportedUrl.current = clean;
-                metaRef.current({ url: clean, icon: getFaviconUrl(clean) });
-              }
-            } catch {
-              /* cross-origin iframe security */
-            }
-          };
-
-          iframe.addEventListener("load", () => {
-            setLoading(false);
-            syncMeta();
-          });
-
-          const addEvent = sjFrame["addEventListener"] as
-            ((type: string, cb: (e: { url: string }) => void) => void) | undefined;
-
-          if (typeof addEvent === "function") {
-            addEvent.call(sjFrame, "urlchange", (event) => {
-              if (!event.url) return;
-              const clean = cleanProxyUrl(event.url);
-              if (clean && clean !== lastReportedUrl.current) {
-                lastReportedUrl.current = clean;
-                metaRef.current({ url: clean, icon: getFaviconUrl(clean) });
-              }
-            });
-          }
-
-          poll = setInterval(syncMeta, 1500);
-
-          if (url) {
-            (sjFrame["go"] as (u: string) => void).call(sjFrame, url);
+        let sjFrame: ScramjetFrame | null = null;
+        if (settings.defaultEngine === "scramjet" && proxyRes.scramjet) {
+          try {
+            sjFrame = proxyRes.scramjet.createFrame(iframe);
+            scramjetFrameRef.current = sjFrame;
+            sjFrame.go(url);
+          } catch (err) {
+            iframe.src = getProxyUrl(url, "scramjet");
           }
         } else {
-          // Ultraviolet execution via Service Worker
-          const iframe = document.createElement("iframe");
-          iframeRef.current = iframe;
-          iframe.className = "h-full w-full border-0 bg-background";
-          iframe.style.width = "100%";
-          iframe.style.height = "100%";
-          iframe.style.border = "0";
-          iframe.style.display = "block";
-          iframe.setAttribute(
-            "allow",
-            "fullscreen; autoplay; gamepad; clipboard-read; clipboard-write; encrypted-media; picture-in-picture; camera; microphone; geolocation; midi; accelerometer; gyroscope; xr-spatial-tracking",
-          );
-          iframe.setAttribute("allowfullscreen", "true");
+          scramjetFrameRef.current = null;
+          iframe.src = getProxyUrl(url, settings.defaultEngine);
+        }
 
-          const proxySrc = getProxyUrl(url, "ultraviolet");
-          iframe.src = proxySrc;
-
-          hostRef.current.replaceChildren(iframe);
-
-          registerNav({
-            back: () => {
-              try {
-                iframe.contentWindow?.history.back();
-              } catch {
-                /* cross origin */
-              }
-            },
-            forward: () => {
-              try {
-                iframe.contentWindow?.history.forward();
-              } catch {
-                /* cross origin */
-              }
-            },
-            reload: () => {
-              iframe.src = getProxyUrl(lastUrl.current || url, "ultraviolet");
-            },
-          });
-
-          const syncUvMeta = () => {
+        registerNav({
+          back: () => {
             try {
-              const doc = iframe.contentDocument;
-              if (doc) {
-                const docTitle = doc.title?.trim();
-                if (docTitle && docTitle !== lastReportedTitle.current) {
-                  lastReportedTitle.current = docTitle;
-                  metaRef.current({ title: docTitle });
-                }
-              }
-
-              const frameUrl = iframe.contentWindow?.location?.href || "";
-              const clean = cleanProxyUrl(frameUrl);
-              if (
-                clean &&
-                clean !== lastReportedUrl.current &&
-                !clean.startsWith("about:") &&
-                !clean.startsWith("blob:")
-              ) {
-                lastReportedUrl.current = clean;
-                metaRef.current({ url: clean, icon: getFaviconUrl(clean) });
+              if (scramjetFrameRef.current) scramjetFrameRef.current.back();
+              else iframe.contentWindow?.history.back();
+            } catch {
+              /* cross origin */
+            }
+          },
+          forward: () => {
+            try {
+              if (scramjetFrameRef.current) scramjetFrameRef.current.forward();
+              else iframe.contentWindow?.history.forward();
+            } catch {
+              /* cross origin */
+            }
+          },
+          reload: () => {
+            try {
+              if (scramjetFrameRef.current) {
+                scramjetFrameRef.current.reload();
+              } else {
+                iframe.src = getProxyUrl(lastUrl.current || url, settings.defaultEngine);
               }
             } catch {
               /* cross origin */
             }
-          };
+          },
+        });
 
-          iframe.addEventListener("load", () => {
-            setLoading(false);
-            syncUvMeta();
-          });
+        const safetyTimer = setTimeout(() => {
+          setLoading(false);
+        }, 6000);
 
-          poll = setInterval(syncUvMeta, 1500);
-        }
+        const clearLoadingSafely = () => {
+          setLoading(false);
+          clearTimeout(safetyTimer);
+        };
+
+        const syncMeta = () => {
+          try {
+            const doc = iframe.contentDocument;
+            if (doc) {
+              if (
+                doc.readyState === "interactive" ||
+                doc.readyState === "complete" ||
+                (doc.body && doc.body.children.length > 0)
+              ) {
+                clearLoadingSafely();
+              }
+              const docTitle = doc.title?.trim();
+              if (docTitle && docTitle !== lastReportedTitle.current) {
+                lastReportedTitle.current = docTitle;
+                metaRef.current({ title: docTitle });
+              }
+            }
+
+            const frameUrl = iframe.contentWindow?.location?.href || "";
+            const clean = cleanProxyUrl(frameUrl);
+            if (
+              clean &&
+              clean !== lastReportedUrl.current &&
+              !clean.startsWith("about:") &&
+              !clean.startsWith("blob:")
+            ) {
+              const videoId = extractYouTubeVideoId(clean);
+              if (videoId && !clean.includes("/embed/")) {
+                const autoEmbedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&enablejsapi=1`;
+                lastReportedUrl.current = clean;
+                lastUrl.current = clean;
+                if (scramjetFrameRef.current) {
+                  try {
+                    scramjetFrameRef.current.go(autoEmbedUrl);
+                  } catch {
+                    if (iframeRef.current) {
+                      iframeRef.current.src = getProxyUrl(autoEmbedUrl, settings.defaultEngine);
+                    }
+                  }
+                } else if (iframeRef.current) {
+                  iframeRef.current.src = getProxyUrl(autoEmbedUrl, settings.defaultEngine);
+                }
+                metaRef.current({ url: clean, icon: getFaviconUrl(clean) });
+                return;
+              }
+
+              lastReportedUrl.current = clean;
+              lastUrl.current = clean;
+              metaRef.current({ url: clean, icon: getFaviconUrl(clean) });
+            }
+          } catch {
+            /* cross origin */
+          }
+        };
+
+        iframe.addEventListener("load", () => {
+          clearLoadingSafely();
+          syncMeta();
+        });
+
+        poll = setInterval(syncMeta, 1200);
 
         metaRef.current({ url, icon: getFaviconUrl(url) });
       } catch (err) {
-        console.error("[Frosted Proxy] Engine initialization error:", err);
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Browser initialization failed");
-          setLoading(false);
-          metaRef.current({ title: "Connection Error" });
+          const rawMsg = err instanceof Error ? err.message : String(err || "");
+          if (
+            rawMsg.includes("closure invoked") ||
+            rawMsg.includes("wasm-bindgen") ||
+            rawMsg.includes("CAUGHT ERROR")
+          ) {
+            console.warn("[Frosted Proxy] Suppressed non-fatal WASM warning:", rawMsg);
+          } else if (
+            rawMsg.includes("WebSocket") ||
+            rawMsg.includes("hyper_util") ||
+            rawMsg.includes("Wisp")
+          ) {
+            setError(
+              "Proxy relay connection failed. Click 'Switch Wisp Relay & Retry' below to use an alternative server.",
+            );
+            setLoading(false);
+            metaRef.current({ title: "Connection Error" });
+          } else {
+            setError(rawMsg || "Browser initialization failed");
+            setLoading(false);
+            metaRef.current({ title: "Connection Error" });
+          }
         }
       }
     })();
@@ -230,27 +217,58 @@ export function WebView({ url, active, onMeta, registerNav }: Props) {
       registerNav(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentWisp, retryCount, engine]);
+  }, [currentWisp, retryCount, settings.defaultEngine]);
 
-  // Navigate when URL updates in the same engine session
+  // Navigate when URL updates
   useEffect(() => {
-    if (!url || url === lastUrl.current) return;
-    lastUrl.current = url;
+    const cleanTarget = cleanProxyUrl(url);
+    const cleanLast = cleanProxyUrl(lastUrl.current);
+    if (!cleanTarget || cleanTarget === cleanLast) return;
+    lastUrl.current = cleanTarget;
+    setLoading(true);
 
-    const newWisp = getOptimalWisp(url);
+    const autoBypassTarget = getBypassYouTubeUrl(cleanTarget);
+
+    const newWisp = getOptimalWisp(autoBypassTarget);
     if (newWisp !== currentWisp) {
       setCurrentWisp(newWisp);
       return;
     }
 
-    if (engine === "scramjet" && frameRef.current) {
-      (frameRef.current["go"] as (u: string) => void).call(frameRef.current, url);
+    if (scramjetFrameRef.current && settings.defaultEngine === "scramjet") {
+      try {
+        scramjetFrameRef.current.go(autoBypassTarget);
+      } catch {
+        if (iframeRef.current) {
+          iframeRef.current.src = getProxyUrl(autoBypassTarget, "scramjet");
+        }
+      }
     } else if (iframeRef.current) {
-      iframeRef.current.src = getProxyUrl(url, "ultraviolet");
+      iframeRef.current.src = getProxyUrl(autoBypassTarget, settings.defaultEngine);
     }
 
-    metaRef.current({ url, icon: getFaviconUrl(url) });
-  }, [url, currentWisp, engine]);
+    const timer = setTimeout(() => setLoading(false), 6000);
+    metaRef.current({ url: cleanTarget, icon: getFaviconUrl(cleanTarget) });
+
+    return () => clearTimeout(timer);
+  }, [url, currentWisp, settings.defaultEngine]);
+
+  // Listen for switch relay messages from iframe error pages
+  useEffect(() => {
+    const handleMsg = (e: MessageEvent) => {
+      if (e.data && e.data.type === "SWITCH_WISP_RELAY") {
+        setRetrying(true);
+        setError(null);
+        const available = getAvailableWispServers();
+        const curIdx = available.findIndex((s) => s.url === currentWisp);
+        const nextIdx = (curIdx + 1) % available.length;
+        setCurrentWisp(available[nextIdx].url);
+        setRetryCount((c) => c + 1);
+      }
+    };
+    window.addEventListener("message", handleMsg);
+    return () => window.removeEventListener("message", handleMsg);
+  }, [currentWisp]);
 
   const handleRetryWithNextRelay = () => {
     setRetrying(true);
@@ -259,13 +277,6 @@ export function WebView({ url, active, onMeta, registerNav }: Props) {
     const curIdx = available.findIndex((s) => s.url === currentWisp);
     const nextIdx = (curIdx + 1) % available.length;
     setCurrentWisp(available[nextIdx].url);
-    setRetryCount((c) => c + 1);
-  };
-
-  const handleToggleEngine = (newEngine: ProxyEngine) => {
-    if (newEngine === engine) return;
-    setEngine(newEngine);
-    setShowEngineMenu(false);
     setRetryCount((c) => c + 1);
   };
 
@@ -278,7 +289,10 @@ export function WebView({ url, active, onMeta, registerNav }: Props) {
       {loading && !error && (
         <div className="pointer-events-none absolute bottom-3 right-3 flex items-center gap-2 rounded-full border border-neutral-800 bg-neutral-900/90 px-3 py-1.5 text-xs text-neutral-400 shadow-lg backdrop-blur-md">
           <Loader2 className="h-3.5 w-3.5 animate-spin text-white" />
-          <span>Connecting via Browser...</span>
+          <span>
+            Connecting via {settings.defaultEngine === "scramjet" ? "Scramjet v2" : "Ultraviolet"}
+            ...
+          </span>
         </div>
       )}
 
@@ -303,21 +317,9 @@ export function WebView({ url, active, onMeta, registerNav }: Props) {
 
             <div className="mt-6 flex flex-col gap-2">
               <button
-                onClick={() =>
-                  handleToggleEngine(engine === "ultraviolet" ? "scramjet" : "ultraviolet")
-                }
-                className="flex items-center justify-center gap-2 rounded-lg bg-white py-2.5 text-xs font-semibold text-black hover:opacity-90 transition-opacity"
-              >
-                <ArrowLeftRight className="h-3.5 w-3.5" />
-                <span>
-                  Switch to {engine === "ultraviolet" ? "Scramjet" : "Ultraviolet"} Engine
-                </span>
-              </button>
-
-              <button
                 onClick={handleRetryWithNextRelay}
                 disabled={retrying}
-                className="flex items-center justify-center gap-2 rounded-lg border border-neutral-800 bg-neutral-900 py-2.5 text-xs font-medium text-neutral-300 transition-colors hover:bg-neutral-800 disabled:opacity-50"
+                className="flex items-center justify-center gap-2 rounded-lg bg-white py-2.5 text-xs font-semibold text-black hover:opacity-90 transition-opacity disabled:opacity-50"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${retrying ? "animate-spin" : ""}`} />
                 <span>{retrying ? "Reconnecting..." : "Switch Wisp Relay & Retry"}</span>

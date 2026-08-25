@@ -1,40 +1,38 @@
 /**
  * Proxy Engine & Transport Layer.
- * Supports both Ultraviolet (UV) and Scramjet, backed by BareMux, Epoxy, and Wisp relays.
+ * Supports Scramjet v2 (default) and Ultraviolet (UV), backed by Epoxy WebAssembly transport and Wisp relays.
  */
 
-export type ProxyEngine = "ultraviolet" | "scramjet";
+export type ProxyEngine = "scramjet" | "ultraviolet";
 
 export const UV_PREFIX = "/~/uv/";
-export const SCRAMJET_PREFIX = "/~/scramjet/";
+export const SCRAMJET_PREFIX = "/~/sj/";
 
 /** Alternates to fall back on when one relay refuses a site (TLS handshake eof). */
 export const WISP_SERVERS = [
-  { name: "Mercury Workshop", url: "wss://wisp.mercurywork.shop/" },
-  { name: "TitaniumNetwork", url: "wss://wisp.terbiumon.top/wisp/" },
+  { name: "Mercury Workshop (Global)", url: "wss://wisp.mercurywork.shop/" },
+  { name: "Ruby Network (Unrestricted)", url: "wss://ruby.rubynetwork.co/wisp/" },
+  { name: "Terbium Relay (Fast)", url: "wss://wisp.terbiumon.top/wisp/" },
 ];
 
 export function getAvailableWispServers(): { name: string; url: string }[] {
-  return [...WISP_SERVERS];
+  const localWisp =
+    typeof location !== "undefined" && location.host
+      ? `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/wisp/`
+      : "";
+
+  const list: { name: string; url: string }[] = [];
+  if (localWisp) {
+    list.push({ name: "Built-in Server Relay", url: localWisp });
+  }
+  list.push(...WISP_SERVERS);
+  return list;
 }
 
 export function getOptimalWisp(url?: string): string {
   const servers = getAvailableWispServers();
   if (servers.length === 0) return "wss://wisp.mercurywork.shop/";
-  if (!url) return servers[0].url;
-
-  try {
-    const host = new URL(url.startsWith("http") ? url : `https://${url}`).hostname;
-    let hash = 0;
-    for (let i = 0; i < host.length; i++) {
-      hash = (hash << 5) - hash + host.charCodeAt(i);
-      hash |= 0;
-    }
-    const idx = Math.abs(hash) % servers.length;
-    return servers[idx].url;
-  } catch {
-    return servers[0].url;
-  }
+  return servers[0].url;
 }
 
 /**
@@ -67,51 +65,77 @@ export function decodeXor(str: string): string {
 }
 
 /**
- * Automatically chooses the best proxy engine based on target site architecture
+ * Chooses the proxy engine
  */
-export function chooseProxyEngine(inputUrl: string): ProxyEngine {
-  try {
-    const parsed = new URL(inputUrl.startsWith("http") ? inputUrl : `https://${inputUrl}`);
-    const host = parsed.hostname.toLowerCase().replace(/^www\./, "");
-
-    // Scramjet excels at heavy single-page apps, complex WebAssembly/streaming media apps, and Google services
-    const scramjetDomains = [
-      "youtube.com",
-      "youtu.be",
-      "tiktok.com",
-      "twitch.tv",
-      "spotify.com",
-      "google.com",
-      "google.co",
-      "accounts.google.com",
-      "docs.google.com",
-      "drive.google.com",
-      "mail.google.com",
-      "netflix.com",
-      "hulu.com",
-      "soundcloud.com",
-    ];
-
-    if (scramjetDomains.some((d) => host === d || host.endsWith(`.${d}`))) {
-      return "scramjet";
-    }
-
-    // Ultraviolet excels at canvas/WebGL games, Discord, Reddit, Wikipedia, GitHub, DuckDuckGo, news, and general web
-    return "ultraviolet";
-  } catch {
-    return "ultraviolet";
-  }
+export function chooseProxyEngine(_inputUrl?: string): ProxyEngine {
+  return "scramjet";
 }
 
 /**
  * Encodes a URL for the specified proxy engine
  */
-export function getProxyUrl(url: string, engine: ProxyEngine): string {
+export function getProxyUrl(url: string, engine: ProxyEngine = "scramjet"): string {
   if (!url) return "";
-  if (engine === "ultraviolet") {
-    return `${UV_PREFIX}${encodeXor(url)}`;
+  if (engine === "scramjet") {
+    // If scramjet controller frame is available, frame.go(url) will navigate directly.
+    // For direct src generation:
+    return `${SCRAMJET_PREFIX}${encodeURIComponent(url)}`;
   }
-  return `${SCRAMJET_PREFIX}${encodeURIComponent(url)}`;
+  return `${UV_PREFIX}${encodeXor(url)}`;
+}
+
+export function extractYouTubeVideoId(urlStr: string): string | null {
+  if (!urlStr) return null;
+  try {
+    const isFull = urlStr.startsWith("http://") || urlStr.startsWith("https://");
+    const u = new URL(urlStr, isFull ? undefined : "https://www.youtube.com");
+    if (u.hostname.includes("youtube.com") || u.hostname.includes("youtu.be")) {
+      if (u.searchParams.has("v")) return u.searchParams.get("v");
+      const parts = u.pathname.split("/").filter(Boolean);
+      if (parts[0] === "embed" || parts[0] === "v" || parts[0] === "shorts")
+        return parts[1] || null;
+      if (u.hostname.includes("youtu.be") && parts[0]) return parts[0];
+    }
+  } catch {
+    /* silent */
+  }
+  return null;
+}
+
+export function getBypassYouTubeUrl(urlStr: string): string {
+  const videoId = extractYouTubeVideoId(urlStr);
+  if (videoId) {
+    return `https://www.youtube.com/embed/${videoId}?autoplay=1&enablejsapi=1`;
+  }
+  if (urlStr.includes("youtube.com") && !urlStr.includes("m.youtube.com")) {
+    return urlStr.replace("www.youtube.com", "m.youtube.com");
+  }
+  return urlStr;
+}
+
+export function stripScramjetInternalParams(urlStr: string): string {
+  if (!urlStr) return "";
+  try {
+    const isFull = urlStr.startsWith("http://") || urlStr.startsWith("https://");
+    const dummyBase = "https://placeholder.internal";
+    const u = new URL(urlStr, isFull ? undefined : dummyBase);
+    const internalKeys = ["$io", "$rfs", "$csr", "$fs", "$cred", "$dest", "$fakedataurl"];
+    let modified = false;
+    for (const k of internalKeys) {
+      if (u.searchParams.has(k)) {
+        u.searchParams.delete(k);
+        modified = true;
+      }
+    }
+    if (!modified) return urlStr;
+    if (isFull) {
+      return u.toString();
+    } else {
+      return u.pathname + u.search + u.hash;
+    }
+  } catch {
+    return urlStr;
+  }
 }
 
 /**
@@ -119,27 +143,64 @@ export function getProxyUrl(url: string, engine: ProxyEngine): string {
  */
 export function cleanProxyUrl(raw: string): string {
   if (!raw) return "";
+  let result = raw;
   if (raw.includes(UV_PREFIX)) {
     const part = raw.split(UV_PREFIX)[1];
-    return decodeXor(part);
-  }
-  if (raw.includes(SCRAMJET_PREFIX)) {
-    const part = raw.split(SCRAMJET_PREFIX)[1];
-    try {
-      return decodeURIComponent(part);
-    } catch {
-      return part;
+    result = decodeXor(part);
+  } else if (raw.includes(SCRAMJET_PREFIX) || raw.includes("/~/scramjet/")) {
+    const sjMatch = raw.match(/\/~\/(?:sj|scramjet)\/(?:[^/]+\/[^/]+\/)?(.*)$/);
+    if (sjMatch && sjMatch[1]) {
+      try {
+        result = decodeURIComponent(sjMatch[1]);
+      } catch {
+        result = sjMatch[1];
+      }
     }
   }
-  return raw;
+  return stripScramjetInternalParams(result);
 }
 
 type AnyRecord = Record<string, unknown>;
 
+export interface ScramjetFrame {
+  id: string;
+  prefix: string;
+  element: HTMLIFrameElement;
+  go: (url: string) => void;
+  back: () => void;
+  forward: () => void;
+  reload: () => void;
+}
+
+export interface ScramjetController {
+  id: string;
+  prefix: string;
+  createFrame: (element?: HTMLIFrameElement, options?: unknown) => ScramjetFrame;
+  setTransport: (transport: unknown) => void;
+  wait: () => Promise<void>;
+}
+
+declare global {
+  interface Window {
+    $scramjet?: AnyRecord;
+    $scramjetController?: {
+      Controller: new (options: {
+        serviceworker: ServiceWorker;
+        transport: unknown;
+        config?: Record<string, unknown>;
+        scramjetConfig?: Record<string, unknown>;
+      }) => ScramjetController;
+    };
+  }
+}
+
 const scriptPromises: Record<string, Promise<void>> = {};
-let controllerPromise: Promise<AnyRecord> | null = null;
 let currentWisp = "";
 let connection: AnyRecord | null = null;
+let scramjetControllerInstance: ScramjetController | null = null;
+let currentEpoxyTransport: AnyRecord | null = null;
+
+const dynamicImport = new Function("p", "return import(p)") as (p: string) => Promise<AnyRecord>;
 
 function loadScript(src: string): Promise<void> {
   if (scriptPromises[src]) return scriptPromises[src];
@@ -162,19 +223,20 @@ function loadScript(src: string): Promise<void> {
 }
 
 async function ensureScripts() {
+  await loadScript("/scramjet/scramjet.js");
+  await loadScript("/controller/controller.api.js");
   await loadScript("/uv/uv.bundle.js");
-  await Promise.all([
-    loadScript("/uv/uv.config.js"),
-    loadScript("/scramjet/scramjet.js"),
-    loadScript("/controller/controller.api.js"),
-  ]);
+  await loadScript("/uv/uv.config.js");
 }
 
 async function ensureTransport(wisp: string) {
-  if (currentWisp === wisp && connection) return;
-  const dynamicImport = new Function("p", "return import(p)") as (p: string) => Promise<AnyRecord>;
-  const mod = await dynamicImport(`${location.origin}/proxy/baremux.mjs`);
-  const BareMuxConnection = mod["BareMuxConnection"] as new (worker: string) => AnyRecord;
+  if (currentWisp === wisp && currentEpoxyTransport && connection) return;
+
+  const epoxyMod = await dynamicImport(`${location.origin}/proxy/epoxy.mjs`);
+  const EpoxyTransport = epoxyMod["default"] as new (opts: { wisp: string }) => AnyRecord;
+
+  const bareMuxMod = await dynamicImport(`${location.origin}/proxy/baremux.mjs`);
+  const BareMuxConnection = bareMuxMod["BareMuxConnection"] as new (worker: string) => AnyRecord;
   if (!connection) {
     connection = new BareMuxConnection(`${location.origin}/proxy/baremux-worker.js`);
   }
@@ -189,13 +251,26 @@ async function ensureTransport(wisp: string) {
 
   for (const targetWisp of candidates) {
     try {
+      // 1. BareMux worker transport
       await setTransport.call(connection, `${location.origin}/proxy/epoxy.mjs`, [
         { wisp: targetWisp },
       ]);
+
+      // 2. Direct Epoxy transport instance for Scramjet controller
+      const transportInstance = new EpoxyTransport({ wisp: targetWisp });
+      const initFn = transportInstance["init"] as () => Promise<void>;
+      if (typeof initFn === "function") {
+        await initFn.call(transportInstance);
+      }
+
+      currentEpoxyTransport = transportInstance;
       currentWisp = targetWisp;
+
+      if (scramjetControllerInstance) {
+        scramjetControllerInstance.setTransport(transportInstance);
+      }
       return;
     } catch (err) {
-      console.warn(`[Frosted Proxy] Failed setting transport with wisp ${targetWisp}:`, err);
       lastError = err;
     }
   }
@@ -203,8 +278,8 @@ async function ensureTransport(wisp: string) {
   if (lastError) throw lastError;
 }
 
-/** Boots both Ultraviolet & Scramjet, registers the Service Worker, and sets Wisp transport. */
-export async function initProxy(wisp: string): Promise<AnyRecord> {
+/** Boots Scramjet & Ultraviolet, registers the Service Worker, and sets Wisp transport. */
+export async function initProxy(wisp: string): Promise<{ scramjet?: ScramjetController }> {
   await ensureScripts();
 
   if ("serviceWorker" in navigator) {
@@ -224,59 +299,21 @@ export async function initProxy(wisp: string): Promise<AnyRecord> {
 
   await ensureTransport(wisp);
 
-  if (!controllerPromise) {
-    controllerPromise = (async () => {
-      try {
-        const ScramjetController = (window as unknown as AnyRecord).$scramjetController?.Controller;
-        const defaultConfigDev = (window as unknown as AnyRecord).$scramjet?.defaultConfigDev;
-        if (ScramjetController && defaultConfigDev) {
-          const transportMod = await dynamicImport(`${location.origin}/proxy/epoxy.mjs`);
-          const EpoxyClient = transportMod.EpoxyClient;
-
-          let readySw = navigator.serviceWorker.controller;
-          if (!readySw) {
-            const reg = await navigator.serviceWorker.ready;
-            readySw = reg.active;
-          }
-          if (!readySw) throw new Error("No active SW for Scramjet Controller");
-
-          const controller = new ScramjetController({
-            serviceworker: readySw,
-            transport: new EpoxyClient({ wisp: currentWisp }),
-            scramjetConfig: defaultConfigDev,
-            config: {
-              prefix: SCRAMJET_PREFIX,
-              scramjetPath: "/scramjet/scramjet.js",
-              injectPath: "/controller/controller.inject.js",
-              wasmPath: "/scramjet/scramjet.wasm",
-            },
-          });
-          await controller.wait();
-          return controller;
-        }
-        return {};
-      } catch (err) {
-        console.warn("[Scramjet controller init warn]:", err);
-        // If IndexedDB is corrupt (missing object stores), attempt to delete it
-        if (
-          err instanceof Error &&
-          (err.message.includes("IDBDatabase") || err.name === "NotFoundError")
-        ) {
-          try {
-            console.info("[Frosted Proxy] Attempting to clear corrupt Scramjet IndexedDB...");
-            window.indexedDB.deleteDatabase("scramjet");
-            window.indexedDB.deleteDatabase("__scramjet");
-          } catch (e) {
-            // ignore cleanup errors
-          }
-        }
-        return {};
-      }
-    })();
+  if (window.$scramjetController && navigator.serviceWorker.controller && currentEpoxyTransport) {
+    if (!scramjetControllerInstance) {
+      scramjetControllerInstance = new window.$scramjetController.Controller({
+        serviceworker: navigator.serviceWorker.controller,
+        transport: currentEpoxyTransport,
+      });
+      await scramjetControllerInstance.wait();
+    }
   }
 
-  const controller = await controllerPromise;
-  return controller;
+  return { scramjet: scramjetControllerInstance || undefined };
+}
+
+export function getScramjetController(): ScramjetController | null {
+  return scramjetControllerInstance;
 }
 
 /** Turns whatever the user typed into a real URL. */

@@ -11,13 +11,13 @@ import {
 import { FROSTED_ICON_SVG } from "./favicons";
 
 export type Settings = {
-  defaultEngine: "auto" | "ultraviolet" | "scramjet";
+  defaultEngine: "scramjet" | "ultraviolet";
   antiDeleado: boolean;
   searchEngine: string;
 };
 
 const DEFAULTS: Settings = {
-  defaultEngine: "auto",
+  defaultEngine: "scramjet",
   antiDeleado: true,
   searchEngine: "https://duckduckgo.com/?q=%s",
 };

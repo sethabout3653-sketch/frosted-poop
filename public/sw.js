@@ -23,7 +23,7 @@ self.addEventListener("fetch", (event) => {
           return await self.$scramjetController.route(event);
         }
       } catch (err) {
-        console.warn("Scramjet SW error", err);
+        /* silent scramjet routing fallback */
       }
 
       return await fetch(event.request);
