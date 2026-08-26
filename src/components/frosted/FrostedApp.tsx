@@ -38,13 +38,19 @@ export function FrostedApp() {
     handleSelectGame(gamesList[randomIndex]);
   };
 
+  const handleHome = () => {
+    setActiveGame(null);
+    setSearchQuery("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   return (
-    <div className="min-h-screen bg-black bg-[linear-gradient(to_right,rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:52px_52px] text-neutral-200 font-sans selection:bg-white selection:text-black">
+    <div className="min-h-screen bg-[#050505] text-neutral-200 font-sans selection:bg-white selection:text-black">
       {/* Navigation Header */}
       <FrostedNavbar
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
-        onHome={() => setActiveGame(null)}
+        onHome={handleHome}
         onRandomGame={handleRandomGame}
         onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
         activeGame={activeGame}

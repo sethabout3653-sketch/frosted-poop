@@ -131,44 +131,45 @@ export function GamesGrid({
                 const isFav = favorites.includes(game.id);
 
                 return (
-                  <motion.div
+                  <div
                     key={"featured-" + game.id}
-                    whileHover={{ y: -4 }}
                     onClick={() => onSelectGame(game)}
-                    className="group relative cursor-pointer overflow-hidden rounded-2xl border border-neutral-800 bg-[#0a0a0a] shadow-lg backdrop-blur-md transition-all hover:border-neutral-600 hover:shadow-[0_0_15px_rgba(255,255,255,0.08)]"
+                    className="group relative cursor-pointer overflow-hidden rounded-2xl border border-neutral-800 bg-[#0a0a0a] shadow-md transition-all duration-200 ease-out hover:-translate-y-1 hover:border-neutral-600 hover:bg-[#111111] will-change-transform"
                   >
                     <div className="relative aspect-[16/10] overflow-hidden bg-black">
                       <img
                         src={gameCover(game)}
                         alt={game.name}
-                        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+                        loading="lazy"
+                        decoding="async"
+                        className="h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-105"
                         onError={(e) => {
                           e.currentTarget.src =
                             "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&auto=format&fit=crop&q=80";
                         }}
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent opacity-80 group-hover:opacity-60 transition-opacity" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent opacity-80 group-hover:opacity-60 transition-opacity duration-200 ease-out" />
 
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           toggleFavorite(game.id);
                         }}
-                        className="absolute right-3 top-3 rounded-xl bg-black/70 p-2 text-neutral-300 backdrop-blur-md hover:text-amber-400 transition-colors"
+                        className="absolute right-3 top-3 rounded-xl bg-black/80 p-2 text-neutral-300 hover:text-amber-400 transition-colors duration-150 ease-out"
                       >
                         <Star
-                          className={`h-4 w-4 ${isFav ? "fill-amber-400 text-amber-400" : ""}`}
+                          className={`h-4 w-4 transition-transform duration-150 ease-out ${isFav ? "fill-amber-400 text-amber-400" : ""}`}
                         />
                       </button>
 
-                      <div className="absolute left-3 top-3 rounded-lg border border-neutral-700 bg-black/80 px-2 py-0.5 text-[10px] font-bold text-white uppercase tracking-wider backdrop-blur-md">
+                      <div className="absolute left-3 top-3 rounded-lg border border-neutral-700 bg-black/90 px-2 py-0.5 text-[10px] font-bold text-white uppercase tracking-wider">
                         Featured
                       </div>
 
-                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 ease-out">
                         <button
                           onClick={() => onSelectGame(game)}
-                          className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-black shadow-lg hover:scale-110 transition-transform"
+                          className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-black shadow-lg hover:scale-110 transition-transform duration-150 ease-out"
                         >
                           <Play className="h-6 w-6 fill-black ml-0.5" />
                         </button>
@@ -176,7 +177,7 @@ export function GamesGrid({
                     </div>
 
                     <div className="p-4">
-                      <h3 className="truncate text-base font-bold text-white group-hover:text-neutral-200 transition-colors">
+                      <h3 className="truncate text-base font-bold text-white group-hover:text-neutral-200 transition-colors duration-150 ease-out">
                         {game.name}
                       </h3>
                       <div className="mt-1 flex items-center justify-between text-xs text-neutral-400">
@@ -189,7 +190,7 @@ export function GamesGrid({
                         )}
                       </div>
                     </div>
-                  </motion.div>
+                  </div>
                 );
               })}
             </div>
@@ -236,66 +237,60 @@ export function GamesGrid({
 
       {/* Game Cards Grid */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-        <AnimatePresence>
-          {filteredGames.map((game) => {
-            const isFav = favorites.includes(game.id);
+        {filteredGames.map((game) => {
+          const isFav = favorites.includes(game.id);
 
-            return (
-              <motion.div
-                key={game.id}
-                layout
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ duration: 0.2 }}
-                onClick={() => onSelectGame(game)}
-                className="group relative cursor-pointer overflow-hidden rounded-2xl border border-neutral-800 bg-[#0a0a0a] shadow-md backdrop-blur-md transition-all hover:border-neutral-600 hover:bg-[#0f0f0f] hover:shadow-[0_0_15px_rgba(255,255,255,0.06)] hover:-translate-y-1"
-              >
-                <div className="relative aspect-[4/3] overflow-hidden bg-black">
-                  <img
-                    src={gameCover(game)}
-                    alt={game.name}
-                    loading="lazy"
-                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
-                    onError={(e) => {
-                      e.currentTarget.src =
-                        "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&auto=format&fit=crop&q=80";
-                    }}
+          return (
+            <div
+              key={game.id}
+              onClick={() => onSelectGame(game)}
+              className="group relative cursor-pointer overflow-hidden rounded-2xl border border-neutral-800 bg-[#0a0a0a] shadow-sm transition-all duration-200 ease-out hover:-translate-y-1 hover:border-neutral-600 hover:bg-[#111111] will-change-transform"
+            >
+              <div className="relative aspect-[4/3] overflow-hidden bg-black">
+                <img
+                  src={gameCover(game)}
+                  alt={game.name}
+                  loading="lazy"
+                  decoding="async"
+                  className="h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-105"
+                  onError={(e) => {
+                    e.currentTarget.src =
+                      "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&auto=format&fit=crop&q=80";
+                  }}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity duration-200 ease-out" />
+
+                {/* Favorite Toggle Button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleFavorite(game.id);
+                  }}
+                  className="absolute right-2 top-2 rounded-lg bg-black/80 p-1.5 text-neutral-300 hover:text-amber-400 transition-colors duration-150 ease-out"
+                >
+                  <Star
+                    className={`h-3.5 w-3.5 transition-transform duration-150 ease-out ${isFav ? "fill-amber-400 text-amber-400" : ""}`}
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity" />
+                </button>
+              </div>
 
-                  {/* Favorite Toggle Button */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleFavorite(game.id);
-                    }}
-                    className="absolute right-2 top-2 rounded-lg bg-black/70 p-1.5 text-neutral-300 backdrop-blur-md hover:text-amber-400 transition-colors"
-                  >
-                    <Star
-                      className={`h-3.5 w-3.5 ${isFav ? "fill-amber-400 text-amber-400" : ""}`}
-                    />
-                  </button>
+              <div className="p-3">
+                <h3 className="truncate text-xs font-semibold text-white group-hover:text-neutral-200 transition-colors duration-150 ease-out">
+                  {game.name}
+                </h3>
+                <div className="mt-1 flex items-center justify-between text-[10px] text-neutral-400">
+                  <span className="capitalize">{game.category || "game"}</span>
+                  {game.rating && (
+                    <span className="flex items-center gap-0.5 text-amber-300">
+                      <Star className="h-2.5 w-2.5 fill-amber-300" />
+                      {game.rating}
+                    </span>
+                  )}
                 </div>
-
-                <div className="p-3">
-                  <h3 className="truncate text-xs font-semibold text-white group-hover:text-neutral-200 transition-colors">
-                    {game.name}
-                  </h3>
-                  <div className="mt-1 flex items-center justify-between text-[10px] text-neutral-400">
-                    <span className="capitalize">{game.category || "game"}</span>
-                    {game.rating && (
-                      <span className="flex items-center gap-0.5 text-amber-300">
-                        <Star className="h-2.5 w-2.5 fill-amber-300" />
-                        {game.rating}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

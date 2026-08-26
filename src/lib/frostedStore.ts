@@ -1,5 +1,20 @@
 import { useState, useEffect } from "react";
-import { IXL_FAVICON, FROSTED_ICON_SVG } from "./favicons";
+import {
+  IXL_FAVICON,
+  CLASSROOM_FAVICON,
+  DRIVE_FAVICON,
+  DOCS_FAVICON,
+  SLIDES_FAVICON,
+  CANVAS_FAVICON,
+  SCHOOLOGY_FAVICON,
+  CLEVER_FAVICON,
+  DESMOS_FAVICON,
+  KHAN_FAVICON,
+  WIKIPEDIA_FAVICON,
+  QUIZLET_FAVICON,
+  GEOGEBRA_FAVICON,
+  FROSTED_ICON_SVG,
+} from "./favicons";
 
 export type CloakPreset =
   | "none"
@@ -33,51 +48,51 @@ export const CLOAK_PRESETS: Record<CloakPreset, CloakConfig> = {
   },
   classroom: {
     title: "Classes - Google Classroom",
-    icon: "https://ssl.gstatic.com/classroom/favicon.png",
+    icon: CLASSROOM_FAVICON,
   },
   docs: {
     title: "Google Docs",
-    icon: "https://ssl.gstatic.com/docs/documents/images/kix-favicon7.ico",
+    icon: DOCS_FAVICON,
   },
   canvas: {
     title: "Dashboard - Canvas LMS",
-    icon: "https://du11hjcvx0uqb.cloudfront.net/br/v9.54.0/images/favicon.ico",
+    icon: CANVAS_FAVICON,
   },
   drive: {
     title: "My Drive - Google Drive",
-    icon: "https://ssl.gstatic.com/images/branding/product/1x/drive_2020q4_32dp.png",
+    icon: DRIVE_FAVICON,
   },
   slides: {
     title: "Google Slides",
-    icon: "https://ssl.gstatic.com/docs/presentations/images/favicon5.ico",
+    icon: SLIDES_FAVICON,
   },
   desmos: {
     title: "Desmos | Graphing Calculator",
-    icon: "https://www.desmos.com/favicon.ico",
+    icon: DESMOS_FAVICON,
   },
   wikipedia: {
     title: "Wikipedia, the free encyclopedia",
-    icon: "https://en.wikipedia.org/static/favicon/wikipedia.ico",
+    icon: WIKIPEDIA_FAVICON,
   },
   khan: {
     title: "Khan Academy | Free Online Courses, Lessons & Practice",
-    icon: "https://www.khanacademy.org/favicon.ico",
+    icon: KHAN_FAVICON,
   },
   quizlet: {
     title: "Flashcards & learning tools | Quizlet",
-    icon: "https://quizlet.com/favicon.ico",
+    icon: QUIZLET_FAVICON,
   },
   schoology: {
     title: "Home | Schoology",
-    icon: "https://www.schoology.com/favicon.ico",
+    icon: SCHOOLOGY_FAVICON,
   },
   clever: {
     title: "Clever | Portal",
-    icon: "https://assets.clever.com/assets/p-favicon.ico",
+    icon: CLEVER_FAVICON,
   },
   geogebra: {
     title: "GeoGebra | Classic Graphing",
-    icon: "https://www.geogebra.org/favicon.ico",
+    icon: GEOGEBRA_FAVICON,
   },
 };
 
@@ -163,13 +178,27 @@ export function applyCloak(preset: CloakPreset) {
   const cfg = CLOAK_PRESETS[preset] || CLOAK_PRESETS.none;
   document.title = cfg.title;
 
-  let link = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
-  if (!link) {
-    link = document.createElement("link");
-    link.rel = "icon";
-    document.head.appendChild(link);
+  // Remove existing icon elements to force the browser to update immediately
+  const existingIcons = document.querySelectorAll("link[rel*='icon']");
+  existingIcons.forEach((el) => el.remove());
+
+  const isSvg = cfg.icon.startsWith("data:image/svg+xml");
+  const isPng = cfg.icon.includes("s2/favicons") || cfg.icon.endsWith(".png");
+
+  const link = document.createElement("link");
+  link.rel = "icon";
+  if (isSvg) {
+    link.type = "image/svg+xml";
+  } else if (isPng) {
+    link.type = "image/png";
   }
   link.href = cfg.icon;
+  document.head.appendChild(link);
+
+  const shortcutLink = document.createElement("link");
+  shortcutLink.rel = "shortcut icon";
+  shortcutLink.href = cfg.icon;
+  document.head.appendChild(shortcutLink);
 }
 
 export function useFrostedStore() {

@@ -56,6 +56,7 @@ export function FrostedSettingsModal({ isOpen, onClose, currentCloak, onSelectCl
                     <img
                       src={preset.icon}
                       alt={preset.title}
+                      referrerPolicy="no-referrer"
                       className="h-5 w-5 shrink-0 rounded object-contain"
                       onError={(e) => {
                         e.currentTarget.style.display = "none";

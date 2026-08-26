@@ -33,7 +33,7 @@ export function FrostedNavbar({
   }, []);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-neutral-900 bg-black/90 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-neutral-900 bg-[#0a0a0a]/95">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
         {/* Logo & Brand (Original Frosted Wordmark) */}
         <button

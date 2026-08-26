@@ -21,8 +21,9 @@ export const FROSTED_ICON_SVG = `data:image/svg+xml,${encodeURIComponent(
 `.trim(),
 )}`;
 
-export const IXL_FAVICON = "https://www.ixl.com/ixl-favicon.png";
-export const CLASSROOM_FAVICON = "https://ssl.gstatic.com/classroom/favicon.png";
+// Official product favicons for tab cloaking presets
+// Using direct official gstatic / vector icons so Google Classroom, Drive, Docs, and Slides show their real icons instead of generic Google 'G' logo
+export const CLASSROOM_FAVICON = "https://ssl.gstatic.com/classroom/ic_product_classroom_32.png";
 export const DRIVE_FAVICON =
   "https://ssl.gstatic.com/images/branding/product/1x/drive_2020q4_32dp.png";
 export const DOCS_FAVICON =
@@ -30,12 +31,16 @@ export const DOCS_FAVICON =
 export const SLIDES_FAVICON =
   "https://ssl.gstatic.com/images/branding/product/1x/slides_2020q4_32dp.png";
 export const GOOGLE_FAVICON = "https://www.google.com/favicon.ico";
-export const CANVAS_FAVICON = "https://www.google.com/s2/favicons?domain=instructure.com&sz=128";
-export const SCHOOLOGY_FAVICON = "https://www.google.com/s2/favicons?domain=schoology.com&sz=128";
-export const CLEVER_FAVICON = "https://www.google.com/s2/favicons?domain=clever.com&sz=128";
-export const EDPUZZLE_FAVICON = "https://www.google.com/s2/favicons?domain=edpuzzle.com&sz=128";
-export const DESMOS_FAVICON = "https://www.google.com/s2/favicons?domain=desmos.com&sz=128";
-export const KHAN_FAVICON = "https://www.google.com/s2/favicons?domain=khanacademy.org&sz=128";
+
+export const IXL_FAVICON = "https://www.google.com/s2/favicons?domain=ixl.com&sz=128";
+export const CANVAS_FAVICON = "https://du11hjcvx0uqb.cloudfront.net/br/v9.54.0/images/favicon.ico";
+export const SCHOOLOGY_FAVICON = "https://www.schoology.com/favicon.ico";
+export const CLEVER_FAVICON = "https://assets.clever.com/assets/p-favicon.ico";
+export const DESMOS_FAVICON = "https://www.desmos.com/favicon.ico";
+export const KHAN_FAVICON = "https://www.khanacademy.org/favicon.ico";
+export const WIKIPEDIA_FAVICON = "https://en.wikipedia.org/static/favicon/wikipedia.ico";
+export const QUIZLET_FAVICON = "https://quizlet.com/favicon.ico";
+export const GEOGEBRA_FAVICON = "https://www.geogebra.org/favicon.ico";
 
 /**
  * Returns a high-res real favicon URL for any domain or full URL using Google's Favicon CDN
