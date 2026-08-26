@@ -95,9 +95,12 @@ export function FrostedNavbar({
                 const data = await res.json();
                 if (data.url) {
                   window.location.href = data.url;
+                } else if (data.error) {
+                  alert("Checkout Error: " + data.error + "\n\nMake sure STRIPE_SECRET_KEY is set in your Vercel Environment Variables!");
                 }
               } catch (err) {
                 console.error("Failed to start checkout", err);
+                alert("Failed to reach checkout. Check console.");
               }
             }}
             title="Get VIP"

@@ -6,7 +6,7 @@ import { server as wispServer } from "@mercuryworkshop/wisp-js";
 import Stripe from "stripe";
 import gameProxy from "./src/server/gameProxy.js";
 
-// Initialize Stripe gracefully, so it doesn't crash if the key is missing in dev
+// Initialize Stripe gracefully
 let stripeClient: Stripe | null = null;
 function getStripe(): Stripe {
   if (!stripeClient) {
@@ -24,7 +24,7 @@ async function startServer() {
   const PORT = process.env.PORT || 3000;
   const server = http.createServer(app);
 
-  // We need to parse JSON for Stripe endpoints
+  // We need to parse JSON
   app.use(express.json());
 
   // Handle Wisp WebSocket connections for proxying (Render / local / self-hosted)
