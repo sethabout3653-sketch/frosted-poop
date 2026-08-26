@@ -86,6 +86,26 @@ export function FrostedNavbar({
 
         {/* Action Controls */}
         <div className="flex items-center gap-2">
+          <button
+            onClick={async () => {
+              try {
+                const res = await fetch("/api/create-checkout-session", {
+                  method: "POST",
+                });
+                const data = await res.json();
+                if (data.url) {
+                  window.location.href = data.url;
+                }
+              } catch (err) {
+                console.error("Failed to start checkout", err);
+              }
+            }}
+            title="Get VIP"
+            className="smooth-btn flex items-center gap-1.5 rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs font-medium text-yellow-500 hover:border-yellow-500 hover:bg-yellow-500/20 cursor-pointer"
+          >
+            <span>Get VIP</span>
+          </button>
+          
           {activeGame && (
             <button
               onClick={onHome}

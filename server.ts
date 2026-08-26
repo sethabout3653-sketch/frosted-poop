@@ -3,12 +3,29 @@ import path from "path";
 import http from "http";
 import { createServer as createViteServer } from "vite";
 import { server as wispServer } from "@mercuryworkshop/wisp-js";
+import Stripe from "stripe";
 import gameProxy from "./src/server/gameProxy.js";
+
+// Initialize Stripe gracefully, so it doesn't crash if the key is missing in dev
+let stripeClient: Stripe | null = null;
+function getStripe(): Stripe {
+  if (!stripeClient) {
+    const key = process.env.STRIPE_SECRET_KEY;
+    if (!key) {
+      throw new Error("STRIPE_SECRET_KEY environment variable is required");
+    }
+    stripeClient = new Stripe(key);
+  }
+  return stripeClient;
+}
 
 async function startServer() {
   const app = express();
   const PORT = process.env.PORT || 3000;
   const server = http.createServer(app);
+
+  // We need to parse JSON for Stripe endpoints
+  app.use(express.json());
 
   // Handle Wisp WebSocket connections for proxying (Render / local / self-hosted)
   server.on("upgrade", (req, socket, head) => {
@@ -19,6 +36,37 @@ async function startServer() {
 
   // Attach game proxy routes
   app.use("/api/public", gameProxy);
+
+  // Stripe VIP Checkout API Route
+  app.post("/api/create-checkout-session", async (req, res) => {
+    try {
+      const stripe = getStripe();
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        line_items: [
+          {
+            price_data: {
+              currency: "usd",
+              product_data: {
+                name: "VIP Access",
+                description: "Unlock exclusive VIP features.",
+              },
+              unit_amount: 100, // $1.00 USD
+            },
+            quantity: 1,
+          },
+        ],
+        mode: "payment",
+        success_url: `${req.protocol}://${req.get("host")}/?vip=success`,
+        cancel_url: `${req.protocol}://${req.get("host")}/`,
+      });
+
+      res.json({ id: session.id, url: session.url });
+    } catch (error: any) {
+      console.error("Stripe Checkout Error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
 
   // Helper to extract target origin from a Scramjet/UV proxy referer header
   function extractProxyTargetOrigin(referer?: string): string | null {
