@@ -13,7 +13,6 @@ import {
   Sparkles,
   Search,
 } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
 import { gameCover, type Game, type GameCategory } from "@/lib/games";
 
 interface Props {
@@ -134,7 +133,7 @@ export function GamesGrid({
                   <div
                     key={"featured-" + game.id}
                     onClick={() => onSelectGame(game)}
-                    className="group relative cursor-pointer overflow-hidden rounded-2xl border border-neutral-800 bg-[#0a0a0a] shadow-md transition-all duration-200 ease-out hover:-translate-y-1 hover:border-neutral-600 hover:bg-[#111111] will-change-transform"
+                    className="chromebook-card group relative cursor-pointer overflow-hidden rounded-2xl border border-neutral-800 bg-[#0a0a0a] shadow-md hover:-translate-y-1.5 hover:border-neutral-600 hover:bg-[#111111] hover:shadow-[0_10px_25px_-5px_rgba(0,0,0,0.6)]"
                   >
                     <div className="relative aspect-[16/10] overflow-hidden bg-black">
                       <img
@@ -244,7 +243,7 @@ export function GamesGrid({
             <div
               key={game.id}
               onClick={() => onSelectGame(game)}
-              className="group relative cursor-pointer overflow-hidden rounded-2xl border border-neutral-800 bg-[#0a0a0a] shadow-sm transition-all duration-200 ease-out hover:-translate-y-1 hover:border-neutral-600 hover:bg-[#111111] will-change-transform"
+              className="chromebook-card group relative cursor-pointer overflow-hidden rounded-2xl border border-neutral-800 bg-[#0a0a0a] shadow-sm hover:-translate-y-1 hover:border-neutral-600 hover:bg-[#111111] hover:shadow-[0_8px_20px_-4px_rgba(0,0,0,0.5)]"
             >
               <div className="relative aspect-[4/3] overflow-hidden bg-black">
                 <img

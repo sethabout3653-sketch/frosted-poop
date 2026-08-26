@@ -45,6 +45,28 @@ export function GamePlayer({
     return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
 
+  // Auto-focus iframe on mount/change so Chromebook keyboard controls (WASD/Arrows) work instantly without clicking
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      iframeRef.current?.focus();
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [game]);
+
+  // Clean up iframe memory on unmount to free Chromebook WebGL/CPU resources
+  useEffect(() => {
+    const currentIframe = iframeRef.current;
+    return () => {
+      if (currentIframe) {
+        try {
+          currentIframe.src = "about:blank";
+        } catch {
+          // ignore potential cross-origin cleanup error
+        }
+      }
+    };
+  }, []);
+
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
       containerRef.current?.requestFullscreen?.();
@@ -71,8 +93,8 @@ export function GamePlayer({
   return (
     <div className="min-h-screen bg-black text-white flex flex-col font-sans">
       {/* Top Floating Controls Bar */}
-      <div className="sticky top-0 z-30 border-b border-neutral-900 bg-black/90 backdrop-blur-md px-4 py-3">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
+      <div className="sticky top-0 z-30 border-b border-neutral-900 bg-[#0a0a0a]">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3">
           {/* Back button & Title */}
           <div className="flex items-center gap-3 min-w-0">
             <button
@@ -164,7 +186,7 @@ export function GamePlayer({
       <div className="border-t border-neutral-900 bg-black/90 px-4 py-8">
         <div className="mx-auto max-w-6xl space-y-8">
           {/* Controls & Hints */}
-          <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-neutral-800 bg-[#0a0a0a] p-4 backdrop-blur-md">
+          <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-neutral-800 bg-[#0a0a0a] p-4">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-neutral-800 bg-black text-neutral-300">
                 <Keyboard className="h-5 w-5" />

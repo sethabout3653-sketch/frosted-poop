@@ -222,5 +222,27 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    text-rendering: optimizeSpeed;
+    -webkit-font-smoothing: antialiased;
   }
+}
+
+/* Chromebook GPU & Render Optimizations with Silky Smooth Easing */
+.chromebook-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 200px;
+  transform: translateZ(0);
+  will-change: transform;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+              background-color 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }

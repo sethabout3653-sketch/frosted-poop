@@ -12,8 +12,8 @@ export function FrostedSettingsModal({ isOpen, onClose, currentCloak, onSelectCl
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md animate-in fade-in duration-200 font-sans">
-      <div className="w-full max-w-xl max-h-[85vh] flex flex-col overflow-hidden rounded-2xl border border-neutral-800 bg-[#0a0a0a] shadow-2xl backdrop-blur-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 animate-in fade-in duration-150 font-sans">
+      <div className="w-full max-w-xl max-h-[85vh] flex flex-col overflow-hidden rounded-2xl border border-neutral-800 bg-[#0d0d0d] shadow-2xl">
         <div className="flex items-center justify-between border-b border-neutral-800 px-6 py-4 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-neutral-800 bg-black text-white">
