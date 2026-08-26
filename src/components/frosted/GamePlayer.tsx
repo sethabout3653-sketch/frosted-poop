@@ -225,15 +225,6 @@ export function GamePlayer({
           ref={containerRef}
           className="relative w-full max-w-6xl aspect-[16/9] overflow-hidden rounded-2xl border border-neutral-800 bg-black shadow-2xl"
         >
-          {iframeLoading && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/90 backdrop-blur-sm animate-in fade-in duration-150">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-neutral-800 bg-neutral-900 text-white mb-3 shadow-lg">
-                <RotateCw className="h-6 w-6 animate-spin text-neutral-300" />
-              </div>
-              <p className="text-sm font-semibold text-white">Loading {game.name}...</p>
-              <p className="text-xs text-neutral-400 mt-1">Preparing high-speed proxy assets</p>
-            </div>
-          )}
 
           <iframe
             ref={iframeRef}
