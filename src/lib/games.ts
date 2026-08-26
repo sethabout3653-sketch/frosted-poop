@@ -121,6 +121,7 @@ function assignCategory(name: string): GameCategory {
 }
 
 export const FEATURED_GAME_IDS = [
+  "soundboard",
   "slope",
   "1v1lol",
   "retrobowl",
@@ -134,12 +135,23 @@ export const FEATURED_GAME_IDS = [
 ];
 
 export async function fetchGames(): Promise<Game[]> {
+  const customGame: Game = {
+    id: "soundboard",
+    name: "Soundboard",
+    directory: "https://MyInstants.com",
+    image: "https://play-lh.googleusercontent.com/QbPwdx7u46tJLd6SBJ6cCPajEKgiA620fYNSZb1VsdlKIBPs4m6itZRDmu9SWPo8vbV77H1H42cNefPDtoYM",
+    category: "popular",
+    featured: true,
+    plays: 99999,
+    rating: 5.0,
+  };
+
   try {
     const res = await fetch(GN_ZONES_URL);
     if (res.ok) {
       const rawData = await res.json();
       if (Array.isArray(rawData)) {
-        return rawData
+        const fetchedGames = rawData
           .filter(
             (item: Record<string, unknown>) =>
               item && typeof item.id === "number" && item.id >= 0 && item.url && item.name,
@@ -171,11 +183,12 @@ export async function fetchGames(): Promise<Game[]> {
               rating: Number((4.5 + Math.random() * 0.4).toFixed(1)),
             };
           });
+        return [customGame, ...fetchedGames];
       }
     }
   } catch (err) {
     console.error("Failed to fetch gn-math games:", err);
   }
 
-  return [];
+  return [customGame];
 }
