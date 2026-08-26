@@ -10,7 +10,8 @@ import {
   Check,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { gameEntry, gameCover, type Game } from "@/lib/games";
+import { gameCover, type Game } from "@/lib/games";
+import { loadGameSource, type GameLoadResult } from "@/lib/gameLoader";
 
 interface Props {
   game: Game;
@@ -36,11 +37,40 @@ export function GamePlayer({
   const [isReloading, setIsReloading] = useState(false);
   const [showKeybinds, setShowKeybinds] = useState(false);
   const [iframeLoading, setIframeLoading] = useState(true);
+  const [activeSrc, setActiveSrc] = useState<string>("");
+  const currentBlobUrlRef = useRef<string | null>(null);
 
   const isFav = favorites.includes(game.id);
 
+  // Load and sanitize game HTML with multi-tier fallback (Vercel & static host compatible)
   useEffect(() => {
+    let cancelled = false;
     setIframeLoading(true);
+
+    // Clean up previous blob URL to prevent memory leaks
+    if (currentBlobUrlRef.current) {
+      URL.revokeObjectURL(currentBlobUrlRef.current);
+      currentBlobUrlRef.current = null;
+    }
+
+    loadGameSource(game.directory).then((result: GameLoadResult) => {
+      if (cancelled) {
+        if (result.blobUrl) URL.revokeObjectURL(result.blobUrl);
+        return;
+      }
+      if (result.blobUrl) {
+        currentBlobUrlRef.current = result.blobUrl;
+      }
+      setActiveSrc(result.src);
+    });
+
+    return () => {
+      cancelled = true;
+      if (currentBlobUrlRef.current) {
+        URL.revokeObjectURL(currentBlobUrlRef.current);
+        currentBlobUrlRef.current = null;
+      }
+    };
   }, [game.id, game.directory]);
 
   useEffect(() => {
@@ -57,7 +87,7 @@ export function GamePlayer({
       iframeRef.current?.focus();
     }, 100);
     return () => clearTimeout(timer);
-  }, [game]);
+  }, [game, activeSrc]);
 
   // Clean up iframe memory on unmount to free Chromebook WebGL/CPU resources
   useEffect(() => {
@@ -84,10 +114,20 @@ export function GamePlayer({
   const handleReload = () => {
     setIsReloading(true);
     setIframeLoading(true);
-    if (iframeRef.current) {
-      iframeRef.current.src = gameEntry(game.directory);
+    if (currentBlobUrlRef.current) {
+      URL.revokeObjectURL(currentBlobUrlRef.current);
+      currentBlobUrlRef.current = null;
     }
-    setTimeout(() => setIsReloading(false), 600);
+    loadGameSource(game.directory).then((result) => {
+      if (result.blobUrl) {
+        currentBlobUrlRef.current = result.blobUrl;
+      }
+      setActiveSrc(result.src);
+      if (iframeRef.current) {
+        iframeRef.current.src = result.src;
+      }
+      setTimeout(() => setIsReloading(false), 500);
+    });
   };
 
   const handleShare = () => {
@@ -197,7 +237,7 @@ export function GamePlayer({
 
           <iframe
             ref={iframeRef}
-            src={gameEntry(game.directory)}
+            src={activeSrc || undefined}
             title={game.name}
             onLoad={() => setIframeLoading(false)}
             className="h-full w-full border-0 bg-black"
