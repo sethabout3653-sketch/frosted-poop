@@ -33,9 +33,15 @@ export function GamePlayer({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isReloading, setIsReloading] = useState(false);
   const [showKeybinds, setShowKeybinds] = useState(false);
+  const [iframeLoading, setIframeLoading] = useState(true);
 
   const isFav = favorites.includes(game.id);
+
+  useEffect(() => {
+    setIframeLoading(true);
+  }, [game.id, game.directory]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -76,9 +82,12 @@ export function GamePlayer({
   };
 
   const handleReload = () => {
+    setIsReloading(true);
+    setIframeLoading(true);
     if (iframeRef.current) {
       iframeRef.current.src = gameEntry(game.directory);
     }
+    setTimeout(() => setIsReloading(false), 600);
   };
 
   const handleShare = () => {
@@ -91,7 +100,7 @@ export function GamePlayer({
   const relatedGames = allGames.filter((g) => g.id !== game.id).slice(0, 6);
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col font-sans">
+    <div className="min-h-screen bg-black text-white flex flex-col font-sans animate-in fade-in duration-200">
       {/* Top Floating Controls Bar */}
       <div className="sticky top-0 z-30 border-b border-neutral-900 bg-[#0a0a0a]">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3">
@@ -99,7 +108,7 @@ export function GamePlayer({
           <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={onBack}
-              className="flex items-center gap-1.5 rounded-xl border border-neutral-800 bg-black px-3 py-1.5 text-xs font-semibold text-neutral-300 hover:border-neutral-700 hover:text-white transition-all cursor-pointer"
+              className="smooth-btn flex items-center gap-1.5 rounded-xl border border-neutral-800 bg-[#0d0d0d] px-3 py-1.5 text-xs font-semibold text-neutral-300 hover:border-neutral-600 hover:text-white cursor-pointer"
             >
               <ArrowLeft className="h-4 w-4" />
               <span>Library</span>
@@ -120,31 +129,35 @@ export function GamePlayer({
             <button
               onClick={() => toggleFavorite(game.id)}
               title={isFav ? "Remove Favorite" : "Add Favorite"}
-              className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition-all cursor-pointer ${
+              className={`smooth-btn flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium cursor-pointer ${
                 isFav
-                  ? "border-amber-400/40 bg-amber-400/10 text-amber-300"
-                  : "border-neutral-800 bg-black text-neutral-300 hover:border-neutral-700 hover:text-white"
+                  ? "border-amber-400/40 bg-amber-400/10 text-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.15)]"
+                  : "border-neutral-800 bg-[#0d0d0d] text-neutral-300 hover:border-neutral-700 hover:text-white"
               }`}
             >
-              <Star className={`h-3.5 w-3.5 ${isFav ? "fill-amber-300" : ""}`} />
+              <Star
+                className={`h-3.5 w-3.5 transition-transform duration-200 ${isFav ? "fill-amber-300 scale-110" : ""}`}
+              />
               <span className="hidden sm:inline">{isFav ? "Favorited" : "Favorite"}</span>
             </button>
 
             <button
               onClick={handleReload}
               title="Reload Game (R)"
-              className="rounded-xl border border-neutral-800 bg-black p-2 text-neutral-300 hover:border-neutral-700 hover:text-white transition-all cursor-pointer"
+              className="smooth-btn rounded-xl border border-neutral-800 bg-[#0d0d0d] p-2 text-neutral-300 hover:border-neutral-600 hover:text-white cursor-pointer"
             >
-              <RotateCw className="h-4 w-4" />
+              <RotateCw
+                className={`h-4 w-4 transition-transform duration-500 ease-out ${isReloading ? "rotate-360" : ""}`}
+              />
             </button>
 
             <button
               onClick={handleShare}
               title="Copy Share Link"
-              className="rounded-xl border border-neutral-800 bg-black p-2 text-neutral-300 hover:border-neutral-700 hover:text-white transition-all cursor-pointer"
+              className="smooth-btn rounded-xl border border-neutral-800 bg-[#0d0d0d] p-2 text-neutral-300 hover:border-neutral-600 hover:text-white cursor-pointer"
             >
               {copied ? (
-                <Check className="h-4 w-4 text-emerald-400" />
+                <Check className="h-4 w-4 text-emerald-400 animate-in zoom-in-50 duration-150" />
               ) : (
                 <Share2 className="h-4 w-4" />
               )}
@@ -153,7 +166,7 @@ export function GamePlayer({
             <button
               onClick={toggleFullscreen}
               title={isFullscreen ? "Exit Fullscreen" : "Fullscreen (F)"}
-              className="flex items-center gap-1.5 rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white hover:border-neutral-500 transition-all cursor-pointer"
+              className="smooth-btn flex items-center gap-1.5 rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white hover:border-neutral-500 cursor-pointer"
             >
               {isFullscreen ? (
                 <Minimize2 className="h-3.5 w-3.5" />
@@ -172,10 +185,21 @@ export function GamePlayer({
           ref={containerRef}
           className="relative w-full max-w-6xl aspect-[16/9] overflow-hidden rounded-2xl border border-neutral-800 bg-black shadow-2xl"
         >
+          {iframeLoading && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/90 backdrop-blur-sm animate-in fade-in duration-150">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-neutral-800 bg-neutral-900 text-white mb-3 shadow-lg">
+                <RotateCw className="h-6 w-6 animate-spin text-neutral-300" />
+              </div>
+              <p className="text-sm font-semibold text-white">Loading {game.name}...</p>
+              <p className="text-xs text-neutral-400 mt-1">Preparing high-speed proxy assets</p>
+            </div>
+          )}
+
           <iframe
             ref={iframeRef}
             src={gameEntry(game.directory)}
             title={game.name}
+            onLoad={() => setIframeLoading(false)}
             className="h-full w-full border-0 bg-black"
             allow="fullscreen; autoplay; gamepad; pointer-lock; clipboard-write; encrypted-media"
           />
@@ -183,10 +207,10 @@ export function GamePlayer({
       </div>
 
       {/* Below-Player Info & Recommendations */}
-      <div className="border-t border-neutral-900 bg-black/90 px-4 py-8">
+      <div className="border-t border-neutral-900 bg-[#070707] px-4 py-8">
         <div className="mx-auto max-w-6xl space-y-8">
           {/* Controls & Hints */}
-          <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-neutral-800 bg-[#0a0a0a] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-neutral-800 bg-[#0d0d0d] p-4">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-neutral-800 bg-black text-neutral-300">
                 <Keyboard className="h-5 w-5" />
@@ -199,13 +223,13 @@ export function GamePlayer({
 
             <button
               onClick={() => setShowKeybinds(!showKeybinds)}
-              className="text-xs font-medium text-neutral-300 hover:text-white hover:underline cursor-pointer"
+              className="smooth-btn rounded-lg border border-neutral-800 bg-black px-3 py-1.5 text-xs font-medium text-neutral-300 hover:border-neutral-700 hover:text-white cursor-pointer"
             >
               {showKeybinds ? "Hide Controls Guide" : "View Controls Guide"}
             </button>
 
             {showKeybinds && (
-              <div className="w-full border-t border-neutral-800 pt-3 mt-2 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs text-neutral-300">
+              <div className="w-full border-t border-neutral-800 pt-3 mt-2 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs text-neutral-300 animate-in fade-in duration-150">
                 <div>
                   <kbd className="rounded border border-neutral-800 bg-black px-1.5 py-0.5 font-mono text-white">
                     W A S D / Arrows
@@ -243,20 +267,22 @@ export function GamePlayer({
                   <button
                     key={g.id}
                     onClick={() => onSelectGame(g)}
-                    className="group text-left overflow-hidden rounded-xl border border-neutral-800 bg-[#0a0a0a] p-2 transition-all hover:border-neutral-600 hover:bg-neutral-900/80 cursor-pointer"
+                    className="chromebook-card group text-left overflow-hidden rounded-xl border border-neutral-800 bg-[#0d0d0d] p-2 hover:border-neutral-600 hover:bg-[#121212] cursor-pointer"
                   >
                     <div className="relative aspect-square overflow-hidden rounded-lg bg-black">
                       <img
                         src={gameCover(g)}
                         alt={g.name}
-                        className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                        loading="lazy"
+                        decoding="async"
+                        className="smooth-image h-full w-full object-cover group-hover:scale-105"
                         onError={(e) => {
                           e.currentTarget.src =
                             "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&auto=format&fit=crop&q=80";
                         }}
                       />
                     </div>
-                    <p className="truncate mt-2 text-xs font-semibold text-white group-hover:text-neutral-200">
+                    <p className="truncate mt-2 text-xs font-semibold text-white group-hover:text-neutral-100 transition-colors duration-200">
                       {g.name}
                     </p>
                   </button>

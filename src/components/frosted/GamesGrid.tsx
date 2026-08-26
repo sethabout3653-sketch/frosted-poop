@@ -95,10 +95,10 @@ export function GamesGrid({
             <button
               key={cat.id}
               onClick={() => setActiveCategory(cat.id)}
-              className={`flex shrink-0 items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-medium transition-all cursor-pointer ${
+              className={`smooth-btn flex shrink-0 items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-medium cursor-pointer ${
                 isActive
-                  ? "border-neutral-600 bg-neutral-900 text-white shadow-[0_0_12px_rgba(255,255,255,0.08)]"
-                  : "border-neutral-800 bg-[#0a0a0a] text-neutral-400 hover:border-neutral-700 hover:bg-neutral-900/60 hover:text-neutral-200"
+                  ? "border-neutral-500 bg-neutral-900 text-white shadow-[0_0_15px_rgba(255,255,255,0.08)]"
+                  : "border-neutral-800 bg-[#0d0d0d] text-neutral-400 hover:border-neutral-700 hover:bg-neutral-900/60 hover:text-neutral-200"
               }`}
             >
               {cat.icon}
@@ -141,23 +141,23 @@ export function GamesGrid({
                         alt={game.name}
                         loading="lazy"
                         decoding="async"
-                        className="h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-105"
+                        className="smooth-image h-full w-full object-cover group-hover:scale-105"
                         onError={(e) => {
                           e.currentTarget.src =
                             "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&auto=format&fit=crop&q=80";
                         }}
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent opacity-80 group-hover:opacity-60 transition-opacity duration-200 ease-out" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent opacity-80 group-hover:opacity-60 transition-opacity duration-300 ease-out" />
 
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           toggleFavorite(game.id);
                         }}
-                        className="absolute right-3 top-3 rounded-xl bg-black/80 p-2 text-neutral-300 hover:text-amber-400 transition-colors duration-150 ease-out"
+                        className="smooth-btn absolute right-3 top-3 rounded-xl bg-black/80 p-2 text-neutral-300 hover:text-amber-400"
                       >
                         <Star
-                          className={`h-4 w-4 transition-transform duration-150 ease-out ${isFav ? "fill-amber-400 text-amber-400" : ""}`}
+                          className={`h-4 w-4 transition-transform duration-200 ${isFav ? "fill-amber-400 text-amber-400 scale-110" : ""}`}
                         />
                       </button>
 
@@ -165,18 +165,15 @@ export function GamesGrid({
                         Featured
                       </div>
 
-                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 ease-out">
-                        <button
-                          onClick={() => onSelectGame(game)}
-                          className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-black shadow-lg hover:scale-110 transition-transform duration-150 ease-out"
-                        >
+                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 ease-out pointer-events-none">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-black shadow-lg transform transition-transform duration-200 group-hover:scale-105">
                           <Play className="h-6 w-6 fill-black ml-0.5" />
-                        </button>
+                        </div>
                       </div>
                     </div>
 
                     <div className="p-4">
-                      <h3 className="truncate text-base font-bold text-white group-hover:text-neutral-200 transition-colors duration-150 ease-out">
+                      <h3 className="truncate text-base font-bold text-white group-hover:text-neutral-100 transition-colors duration-200">
                         {game.name}
                       </h3>
                       <div className="mt-1 flex items-center justify-between text-xs text-neutral-400">
@@ -211,7 +208,7 @@ export function GamesGrid({
           {Array.from({ length: 18 }).map((_, i) => (
             <div
               key={i}
-              className="aspect-[4/5] animate-pulse rounded-2xl border border-neutral-800 bg-[#0a0a0a]"
+              className="aspect-[4/5] animate-pulse rounded-2xl border border-neutral-800 bg-[#0d0d0d]"
             />
           ))}
         </div>
@@ -219,7 +216,7 @@ export function GamesGrid({
 
       {/* Empty States */}
       {!isLoading && filteredGames.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
+        <div className="flex flex-col items-center justify-center py-20 text-center animate-in fade-in duration-200">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-black border border-neutral-800 text-neutral-500 mb-4">
             <Search className="h-8 w-8" />
           </div>
@@ -251,13 +248,13 @@ export function GamesGrid({
                   alt={game.name}
                   loading="lazy"
                   decoding="async"
-                  className="h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-105"
+                  className="smooth-image h-full w-full object-cover group-hover:scale-105"
                   onError={(e) => {
                     e.currentTarget.src =
                       "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&auto=format&fit=crop&q=80";
                   }}
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity duration-200 ease-out" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity duration-300 ease-out" />
 
                 {/* Favorite Toggle Button */}
                 <button
@@ -265,16 +262,16 @@ export function GamesGrid({
                     e.stopPropagation();
                     toggleFavorite(game.id);
                   }}
-                  className="absolute right-2 top-2 rounded-lg bg-black/80 p-1.5 text-neutral-300 hover:text-amber-400 transition-colors duration-150 ease-out"
+                  className="smooth-btn absolute right-2 top-2 rounded-lg bg-black/80 p-1.5 text-neutral-300 hover:text-amber-400"
                 >
                   <Star
-                    className={`h-3.5 w-3.5 transition-transform duration-150 ease-out ${isFav ? "fill-amber-400 text-amber-400" : ""}`}
+                    className={`h-3.5 w-3.5 transition-transform duration-200 ${isFav ? "fill-amber-400 text-amber-400 scale-110" : ""}`}
                   />
                 </button>
               </div>
 
               <div className="p-3">
-                <h3 className="truncate text-xs font-semibold text-white group-hover:text-neutral-200 transition-colors duration-150 ease-out">
+                <h3 className="truncate text-xs font-semibold text-white group-hover:text-neutral-100 transition-colors duration-200">
                   {game.name}
                 </h3>
                 <div className="mt-1 flex items-center justify-between text-[10px] text-neutral-400">
