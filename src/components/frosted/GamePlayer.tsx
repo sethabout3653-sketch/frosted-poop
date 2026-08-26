@@ -5,7 +5,6 @@ import {
   RotateCw,
   Star,
   Share2,
-  Shield,
   Keyboard,
   Sparkles,
   Check,
@@ -20,7 +19,6 @@ interface Props {
   allGames: Game[];
   favorites: (number | string)[];
   toggleFavorite: (id: number | string) => void;
-  onPanic: () => void;
 }
 
 export function GamePlayer({
@@ -30,7 +28,6 @@ export function GamePlayer({
   allGames,
   favorites,
   toggleFavorite,
-  onPanic,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -143,14 +140,6 @@ export function GamePlayer({
               )}
               <span className="hidden sm:inline">Fullscreen</span>
             </button>
-
-            <button
-              onClick={onPanic}
-              title="Panic Key (Esc)"
-              className="rounded-xl border border-neutral-800 bg-neutral-900 p-2 text-neutral-300 hover:border-neutral-600 hover:text-white transition-all cursor-pointer"
-            >
-              <Shield className="h-4 w-4" />
-            </button>
           </div>
         </div>
       </div>
@@ -182,9 +171,7 @@ export function GamePlayer({
               </div>
               <div>
                 <h3 className="text-sm font-semibold text-white">Player Keyboard Shortcuts</h3>
-                <p className="text-xs text-neutral-400">
-                  Esc = Panic Stealth, F = Fullscreen, R = Reload
-                </p>
+                <p className="text-xs text-neutral-400">F = Fullscreen, R = Reload</p>
               </div>
             </div>
 
@@ -196,7 +183,7 @@ export function GamePlayer({
             </button>
 
             {showKeybinds && (
-              <div className="w-full border-t border-neutral-800 pt-3 mt-2 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-neutral-300">
+              <div className="w-full border-t border-neutral-800 pt-3 mt-2 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs text-neutral-300">
                 <div>
                   <kbd className="rounded border border-neutral-800 bg-black px-1.5 py-0.5 font-mono text-white">
                     W A S D / Arrows
@@ -208,12 +195,6 @@ export function GamePlayer({
                     Space
                   </kbd>
                   <p className="text-[10px] text-neutral-400 mt-1">Jump / Action</p>
-                </div>
-                <div>
-                  <kbd className="rounded border border-neutral-800 bg-black px-1.5 py-0.5 font-mono text-white">
-                    Esc
-                  </kbd>
-                  <p className="text-[10px] text-neutral-400 mt-1">Instant Panic Screen</p>
                 </div>
                 <div>
                   <kbd className="rounded border border-neutral-800 bg-black px-1.5 py-0.5 font-mono text-white">

@@ -1,4 +1,4 @@
-import { Search, Shuffle, Plus, SlidersHorizontal, Shield, Gamepad2 } from "lucide-react";
+import { Search, Shuffle, SlidersHorizontal, Gamepad2 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { Game } from "@/lib/games";
 
@@ -7,9 +7,7 @@ interface Props {
   onSearchChange: (q: string) => void;
   onHome: () => void;
   onRandomGame: () => void;
-  onOpenCustomModal: () => void;
   onOpenSettingsModal: () => void;
-  onPanic: () => void;
   activeGame: Game | null;
 }
 
@@ -18,9 +16,7 @@ export function FrostedNavbar({
   onSearchChange,
   onHome,
   onRandomGame,
-  onOpenCustomModal,
   onOpenSettingsModal,
-  onPanic,
   activeGame,
 }: Props) {
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -91,24 +87,6 @@ export function FrostedNavbar({
           >
             <Shuffle className="h-3.5 w-3.5 text-neutral-400" />
             <span className="hidden sm:inline">Random</span>
-          </button>
-
-          <button
-            onClick={onOpenCustomModal}
-            title="Play Custom Game Link"
-            className="flex items-center gap-1.5 rounded-xl border border-neutral-800 bg-black px-3 py-2 text-xs font-medium text-neutral-300 hover:border-neutral-700 hover:text-white hover:bg-neutral-900/80 transition-all cursor-pointer"
-          >
-            <Plus className="h-3.5 w-3.5 text-neutral-400" />
-            <span className="hidden sm:inline">Add Game</span>
-          </button>
-
-          <button
-            onClick={onPanic}
-            title="Panic Button (Esc)"
-            className="flex items-center gap-1.5 rounded-xl border border-neutral-800 bg-neutral-900/90 px-3 py-2 text-xs font-medium text-neutral-300 hover:border-neutral-600 hover:text-white transition-all cursor-pointer"
-          >
-            <Shield className="h-3.5 w-3.5 text-neutral-400" />
-            <span className="hidden sm:inline">Panic</span>
           </button>
 
           <button

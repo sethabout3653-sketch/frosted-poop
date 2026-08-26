@@ -1,7 +1,21 @@
 import { useState, useEffect } from "react";
 import { IXL_FAVICON, FROSTED_ICON_SVG } from "./favicons";
 
-export type CloakPreset = "none" | "ixl" | "classroom" | "docs" | "canvas";
+export type CloakPreset =
+  | "none"
+  | "ixl"
+  | "classroom"
+  | "docs"
+  | "canvas"
+  | "drive"
+  | "slides"
+  | "desmos"
+  | "wikipedia"
+  | "khan"
+  | "quizlet"
+  | "schoology"
+  | "clever"
+  | "geogebra";
 
 export interface CloakConfig {
   title: string;
@@ -28,6 +42,42 @@ export const CLOAK_PRESETS: Record<CloakPreset, CloakConfig> = {
   canvas: {
     title: "Dashboard - Canvas LMS",
     icon: "https://du11hjcvx0uqb.cloudfront.net/br/v9.54.0/images/favicon.ico",
+  },
+  drive: {
+    title: "My Drive - Google Drive",
+    icon: "https://ssl.gstatic.com/images/branding/product/1x/drive_2020q4_32dp.png",
+  },
+  slides: {
+    title: "Google Slides",
+    icon: "https://ssl.gstatic.com/docs/presentations/images/favicon5.ico",
+  },
+  desmos: {
+    title: "Desmos | Graphing Calculator",
+    icon: "https://www.desmos.com/favicon.ico",
+  },
+  wikipedia: {
+    title: "Wikipedia, the free encyclopedia",
+    icon: "https://en.wikipedia.org/static/favicon/wikipedia.ico",
+  },
+  khan: {
+    title: "Khan Academy | Free Online Courses, Lessons & Practice",
+    icon: "https://www.khanacademy.org/favicon.ico",
+  },
+  quizlet: {
+    title: "Flashcards & learning tools | Quizlet",
+    icon: "https://quizlet.com/favicon.ico",
+  },
+  schoology: {
+    title: "Home | Schoology",
+    icon: "https://www.schoology.com/favicon.ico",
+  },
+  clever: {
+    title: "Clever | Portal",
+    icon: "https://assets.clever.com/assets/p-favicon.ico",
+  },
+  geogebra: {
+    title: "GeoGebra | Classic Graphing",
+    icon: "https://www.geogebra.org/favicon.ico",
   },
 };
 

@@ -1,19 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchGames, type Game } from "@/lib/games";
 import { useFrostedStore } from "@/lib/frostedStore";
 import { FrostedNavbar } from "./FrostedNavbar";
 import { GamesGrid } from "./GamesGrid";
 import { GamePlayer } from "./GamePlayer";
-import { CustomGameModal } from "./CustomGameModal";
 import { FrostedSettingsModal } from "./FrostedSettingsModal";
-import { PanicDisguise } from "./PanicDisguise";
 
 export function FrostedApp() {
   const [activeGame, setActiveGame] = useState<Game | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [isPanicActive, setIsPanicActive] = useState(false);
-  const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
   const { favorites, toggleFavorite, recentlyPlayed, recordPlay, cloak, updateCloak } =
@@ -24,18 +20,6 @@ export function FrostedApp() {
     queryFn: fetchGames,
     staleTime: 1000 * 60 * 30,
   });
-
-  // Panic hotkey handler (Esc key)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setIsPanicActive((prev) => !prev);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
 
   const handleSelectGame = (game: Game) => {
     setActiveGame(game);
@@ -54,10 +38,6 @@ export function FrostedApp() {
     handleSelectGame(gamesList[randomIndex]);
   };
 
-  if (isPanicActive) {
-    return <PanicDisguise onUnlock={() => setIsPanicActive(false)} />;
-  }
-
   return (
     <div className="min-h-screen bg-black bg-[linear-gradient(to_right,rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:52px_52px] text-neutral-200 font-sans selection:bg-white selection:text-black">
       {/* Navigation Header */}
@@ -66,9 +46,7 @@ export function FrostedApp() {
         onSearchChange={setSearchQuery}
         onHome={() => setActiveGame(null)}
         onRandomGame={handleRandomGame}
-        onOpenCustomModal={() => setIsCustomModalOpen(true)}
         onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
-        onPanic={() => setIsPanicActive(true)}
         activeGame={activeGame}
       />
 
@@ -82,7 +60,6 @@ export function FrostedApp() {
             allGames={gamesList}
             favorites={favorites}
             toggleFavorite={toggleFavorite}
-            onPanic={() => setIsPanicActive(true)}
           />
         ) : (
           <GamesGrid
@@ -98,12 +75,6 @@ export function FrostedApp() {
       </main>
 
       {/* Modals */}
-      <CustomGameModal
-        isOpen={isCustomModalOpen}
-        onClose={() => setIsCustomModalOpen(false)}
-        onLaunchCustom={handleSelectGame}
-      />
-
       <FrostedSettingsModal
         isOpen={isSettingsModalOpen}
         onClose={() => setIsSettingsModalOpen(false)}
