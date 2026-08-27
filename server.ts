@@ -1,9 +1,11 @@
 import express from "express";
 import path from "path";
 import http from "http";
+import { WebSocketServer } from "ws";
 import { createServer as createViteServer } from "vite";
 import { server as wispServer } from "@mercuryworkshop/wisp-js";
 import gameProxy from "./src/server/gameProxy.js";
+import { chatRouter, setupChatWebSocket } from "./src/server/chatServer.js";
 
 async function startServer() {
   const app = express();
@@ -11,17 +13,27 @@ async function startServer() {
   const server = http.createServer(app);
 
   // We need to parse JSON
-  app.use(express.json());
+  app.use(express.json({ limit: "25mb" }));
 
-  // Handle Wisp WebSocket connections for proxying (Render / local / self-hosted)
+  // Initialize Chat WebSocket Server
+  const chatWss = new WebSocketServer({ noServer: true });
+  setupChatWebSocket(chatWss);
+
+  // Handle WebSocket Upgrade events
   server.on("upgrade", (req, socket, head) => {
-    if (req.url && (req.url.startsWith("/wisp") || req.url.startsWith("/wisp/"))) {
+    const url = req.url || "";
+    if (url.startsWith("/wisp") || url.startsWith("/wisp/")) {
       wispServer.routeRequest(req, socket, head);
+    } else if (url.startsWith("/ws/chat") || url.startsWith("/ws/chat/")) {
+      chatWss.handleUpgrade(req, socket, head, (ws) => {
+        chatWss.emit("connection", ws, req);
+      });
     }
   });
 
-  // Attach game proxy routes
+  // Attach API routes
   app.use("/api/public", gameProxy);
+  app.use("/api/chat", chatRouter);
 
   // Prevent internal site relative requests or unintercepted proxy requests from recursively serving the React index.html app
   app.use((req, res, next) => {

@@ -7,6 +7,8 @@ import { GamesGrid } from "./GamesGrid";
 import { GamePlayer } from "./GamePlayer";
 import { FrostedSettingsModal } from "./FrostedSettingsModal";
 import { VerificationGate } from "./VerificationGate";
+import { DiscordChat, type VoiceStateInfo } from "@/components/chat/DiscordChat";
+import { VoiceOverlayWidget } from "@/components/chat/VoiceOverlayWidget";
 
 export function FrostedApp() {
   const [isVerified, setIsVerified] = useState<boolean>(() => {
@@ -23,6 +25,8 @@ export function FrostedApp() {
   const [activeGame, setActiveGame] = useState<Game | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isChatActive, setIsChatActive] = useState(false);
+  const [voiceState, setVoiceState] = useState<VoiceStateInfo | null>(null);
 
   const { favorites, toggleFavorite, recentlyPlayed, recordPlay, cloak, updateCloak } =
     useFrostedStore();
@@ -44,6 +48,7 @@ export function FrostedApp() {
   });
 
   const handleSelectGame = (game: Game) => {
+    setIsChatActive(false);
     setActiveGame(game);
     recordPlay({
       id: game.id,
@@ -56,11 +61,13 @@ export function FrostedApp() {
 
   const handleRandomGame = () => {
     if (gamesList.length === 0) return;
+    setIsChatActive(false);
     const randomIndex = Math.floor(Math.random() * gamesList.length);
     handleSelectGame(gamesList[randomIndex]);
   };
 
   const handleHome = () => {
+    setIsChatActive(false);
     setActiveGame(null);
     setSearchQuery("");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -71,7 +78,7 @@ export function FrostedApp() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050505] text-neutral-200 font-sans selection:bg-white selection:text-black">
+    <div className="min-h-screen bg-[#050505] text-neutral-200 font-sans selection:bg-white selection:text-black overflow-x-hidden relative">
       {/* Navigation Header */}
       <FrostedNavbar
         searchQuery={searchQuery}
@@ -79,32 +86,65 @@ export function FrostedApp() {
         onHome={handleHome}
         onRandomGame={handleRandomGame}
         onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
+        onOpenChat={() => {
+          setActiveGame(null);
+          setIsChatActive(!isChatActive);
+        }}
         activeGame={activeGame}
+        isChatActive={isChatActive}
       />
 
-      {/* Main View: Player or Library Grid */}
-      <main>
-        {activeGame ? (
-          <GamePlayer
-            game={activeGame}
-            onBack={() => setActiveGame(null)}
-            onSelectGame={handleSelectGame}
-            allGames={gamesList}
-            favorites={favorites}
-            toggleFavorite={toggleFavorite}
-          />
-        ) : (
-          <GamesGrid
-            games={gamesList}
-            isLoading={isLoading}
-            searchQuery={searchQuery}
-            onSelectGame={handleSelectGame}
-            favorites={favorites}
-            toggleFavorite={toggleFavorite}
-            recentlyPlayed={recentlyPlayed}
-          />
-        )}
-      </main>
+      {/* Persistent Discord Chat Container (keeps WebSocket & Voice Peer Connections active) */}
+      <div className={isChatActive ? "block" : "hidden"}>
+        <DiscordChat
+          onReturnToGames={() => setIsChatActive(false)}
+          onVoiceStateChange={setVoiceState}
+        />
+      </div>
+
+      {/* Main View: Game Player or Library Grid when Chat view is inactive */}
+      {!isChatActive && (
+        <main>
+          {activeGame ? (
+            <GamePlayer
+              game={activeGame}
+              onBack={() => setActiveGame(null)}
+              onSelectGame={handleSelectGame}
+              allGames={gamesList}
+              favorites={favorites}
+              toggleFavorite={toggleFavorite}
+            />
+          ) : (
+            <GamesGrid
+              games={gamesList}
+              isLoading={isLoading}
+              searchQuery={searchQuery}
+              onSelectGame={handleSelectGame}
+              favorites={favorites}
+              toggleFavorite={toggleFavorite}
+              recentlyPlayed={recentlyPlayed}
+            />
+          )}
+        </main>
+      )}
+
+      {/* Floating In-Game Voice Overlay Widget */}
+      {!isChatActive && voiceState?.currentVoiceChannelId && (
+        <VoiceOverlayWidget
+          channelName={voiceState.channelName || "Voice Lounge"}
+          isMuted={voiceState.isMuted}
+          isDeafened={voiceState.isDeafened}
+          isSelfSpeaking={voiceState.isSelfSpeaking}
+          occupantCount={voiceState.occupantCount}
+          onToggleMute={voiceState.toggleMute}
+          onToggleDeafen={voiceState.toggleDeafen}
+          onLeaveVoice={voiceState.leaveVoice}
+          onOpenChat={() => {
+            setActiveGame(null);
+            setIsChatActive(true);
+          }}
+        />
+      )}
 
       {/* Modals */}
       <FrostedSettingsModal
