@@ -433,13 +433,8 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           rGain.gain.value = isDeafened ? 0 : outputGainRef.current;
           remoteGainNodesRef.current[peerId] = rGain;
 
-          const rCompressor = rCtx.createDynamicsCompressor();
-          rCompressor.threshold.setValueAtTime(-24, rCtx.currentTime);
-          rCompressor.ratio.setValueAtTime(4, rCtx.currentTime);
-
           rSource.connect(rGain);
-          rGain.connect(rCompressor);
-          rCompressor.connect(rCtx.destination);
+          rGain.connect(rCtx.destination);
         } catch (webaudioErr) {
           console.warn("WebAudio remote setup note:", webaudioErr);
         }
@@ -902,11 +897,11 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     try {
       cleanupVoice();
 
-      // High-Fidelity Audio Constraints
+      // High-Fidelity Uncompressed Audio Constraints
       const audioConstraints: MediaTrackConstraints = {
         echoCancellation: true,
         noiseSuppression: false,
-        autoGainControl: true,
+        autoGainControl: false,
         channelCount: 1,
         sampleRate: 48000,
       };
@@ -919,7 +914,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       }
       rawStreamRef.current = stream;
 
-      // Studio Gain & Compression Pipeline
+      // Studio Gain Pipeline (Uncompressed Dynamic Audio Output)
       try {
         const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
         if (AudioCtx) {
@@ -931,33 +926,24 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
 
           const rawSource = actx.createMediaStreamSource(stream);
 
-          // 1. Microphone Hardware Gain Amplifier
+          // 1. Microphone Hardware Gain Amplifier (Direct Uncompressed Stream)
           const micGainNode = actx.createGain();
           micGainNode.gain.value = isMuted || isDeafened ? 0 : micGain;
           micGainNodeRef.current = micGainNode;
 
-          // 2. Dynamic Compressor to prevent clipping & level voice volume
-          const micCompressor = actx.createDynamicsCompressor();
-          micCompressor.threshold.setValueAtTime(-24, actx.currentTime);
-          micCompressor.knee.setValueAtTime(30, actx.currentTime);
-          micCompressor.ratio.setValueAtTime(5, actx.currentTime);
-          micCompressor.attack.setValueAtTime(0.003, actx.currentTime);
-          micCompressor.release.setValueAtTime(0.25, actx.currentTime);
-
-          // 3. WebRTC Destination Stream
+          // 2. WebRTC Destination Stream (Raw Uncompressed Dynamic Output)
           const destination = actx.createMediaStreamDestination();
 
           rawSource.connect(micGainNode);
-          micGainNode.connect(micCompressor);
-          micCompressor.connect(destination);
+          micGainNode.connect(destination);
 
           processedStreamRef.current = destination.stream;
 
-          // 4. Visual Audio Meter
+          // 3. Visual Audio Meter (Direct Uncompressed Tap)
           const analyser = actx.createAnalyser();
           analyser.fftSize = 512;
           analyser.smoothingTimeConstant = 0.3;
-          micCompressor.connect(analyser);
+          micGainNode.connect(analyser);
           analyserRef.current = analyser;
 
           const dataArray = new Uint8Array(analyser.frequencyBinCount);
