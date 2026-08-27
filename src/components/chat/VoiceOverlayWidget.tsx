@@ -88,7 +88,7 @@ export function VoiceOverlayWidget({
         {/* Expand Chat Screen */}
         <button
           onClick={onOpenChat}
-          title="Open Full Discord Chat"
+          title="Open Full Frosted Chat"
           className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-black hover:bg-neutral-200 transition-all cursor-pointer ml-1"
         >
           <MessageSquare className="h-4 w-4" />

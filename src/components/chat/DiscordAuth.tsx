@@ -87,7 +87,13 @@ export function DiscordAuth({ onLoginSuccess }: Props) {
         body: JSON.stringify(bodyPayload),
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        throw new Error(res.ok ? "Server returned an invalid response" : "Server error. Please try again.");
+      }
 
       if (!res.ok) {
         throw new Error(data.error || "Authentication failed");

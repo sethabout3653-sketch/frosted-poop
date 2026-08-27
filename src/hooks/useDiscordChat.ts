@@ -33,8 +33,15 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     try {
       const res = await fetch(`/api/chat/messages/${channelId}`);
       if (res.ok) {
-        const msgs: ChatMessage[] = await res.json();
-        setMessages(msgs);
+        const text = await res.text();
+        try {
+          const msgs: ChatMessage[] = JSON.parse(text);
+          if (Array.isArray(msgs)) {
+            setMessages(msgs);
+          }
+        } catch (e) {
+          console.error("Fetch messages parse error:", e);
+        }
       }
     } catch (err) {
       console.error("Fetch messages error:", err);

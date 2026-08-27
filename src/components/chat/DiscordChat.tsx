@@ -46,8 +46,19 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
         });
 
         if (res.ok) {
-          const data = await res.json();
-          setCurrentUser(data.user);
+          const text = await res.text();
+          try {
+            const data = JSON.parse(text);
+            if (data && data.user) {
+              setCurrentUser(data.user);
+            } else {
+              localStorage.removeItem("discord_chat_token");
+              setToken(null);
+            }
+          } catch {
+            localStorage.removeItem("discord_chat_token");
+            setToken(null);
+          }
         } else {
           // Token invalid
           localStorage.removeItem("discord_chat_token");
