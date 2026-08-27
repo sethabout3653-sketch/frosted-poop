@@ -6,12 +6,13 @@ interface Props {
 }
 
 export function VerificationGate({ onVerified }: Props) {
-  // Check if env variable VITE_RECAPTCHA_SITE_KEY is provided
-  const envSiteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY || "";
+  // Check if env variable VITE_RECAPTCHA_SITE_KEY is provided or fallback to user provided key
+  const DEFAULT_KEY = "6LdIbpstAAAAAOiww_nKfOaSB1a7oixnhFw4g5hl";
+  const envSiteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY || DEFAULT_KEY;
   const [customSiteKey, setCustomSiteKey] = useState<string>(() => {
     return localStorage.getItem("custom_recaptcha_site_key") || envSiteKey;
   });
-  const [showKeyInput, setShowKeyInput] = useState<boolean>(!envSiteKey && !customSiteKey);
+  const [showKeyInput, setShowKeyInput] = useState<boolean>(false);
 
   const [status, setStatus] = useState<"idle" | "checking" | "verified" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string>("");
