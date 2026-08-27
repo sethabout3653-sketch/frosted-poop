@@ -1,4 +1,4 @@
-import { Gamepad2, Compass, Plus, MessageSquare } from "lucide-react";
+import { Gamepad2, MessageSquare } from "lucide-react";
 
 interface Props {
   onReturnToGames: () => void;
@@ -29,21 +29,6 @@ export function DiscordServerBar({ onReturnToGames }: Props) {
         <MessageSquare className="h-5 w-5" />
         {/* Left active indicator pill */}
         <div className="absolute left-0 h-9 w-1 rounded-r bg-white" />
-      </button>
-
-      {/* Additional Guild Icons */}
-      <button
-        title="Explore Public Channels"
-        className="group relative flex h-12 w-12 items-center justify-center rounded-2xl bg-[#141414] border border-neutral-800 text-neutral-400 transition-all hover:rounded-xl hover:bg-neutral-800 hover:text-white cursor-pointer"
-      >
-        <Compass className="h-5 w-5" />
-      </button>
-
-      <button
-        title="Create Server"
-        className="group relative flex h-12 w-12 items-center justify-center rounded-2xl bg-[#141414] border border-neutral-800 text-neutral-400 transition-all hover:rounded-xl hover:bg-neutral-800 hover:text-white cursor-pointer"
-      >
-        <Plus className="h-5 w-5" />
       </button>
     </div>
   );

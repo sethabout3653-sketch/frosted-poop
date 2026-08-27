@@ -338,7 +338,19 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     try {
       // 1. Capture local audio first
       cleanupVoice();
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+          },
+        });
+      } catch (e) {
+        console.warn("High-fidelity audio constraints failed, falling back to basic audio:", e);
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
       localStreamRef.current = stream;
 
       // Ensure initial mute state is applied
