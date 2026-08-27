@@ -1,6 +1,7 @@
 import express from "express";
 import Stripe from "stripe";
 import gameProxy from "../src/server/gameProxy";
+import { chatRouter } from "../src/server/chatServer";
 
 // Initialize Stripe gracefully
 let stripeClient: Stripe | null = null;
@@ -16,7 +17,8 @@ function getStripe(): Stripe {
 }
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "25mb" }));
+app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
 app.post("/api/create-checkout-session", async (req, res) => {
   try {
@@ -48,6 +50,7 @@ app.post("/api/create-checkout-session", async (req, res) => {
   }
 });
 
+app.use("/api/chat", chatRouter);
 app.use("/api/public", gameProxy);
 app.use("/public", gameProxy);
 app.use(gameProxy);

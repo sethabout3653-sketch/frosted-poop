@@ -32,9 +32,10 @@ export interface ChatMessage {
   reactions: Record<string, string[]>; // emoji -> array of usernames
 }
 
-const users = new Map<string, UserRecord>(); // userId -> UserRecord
-const usernameToUser = new Map<string, UserRecord>(); // username -> UserRecord
-const sessions = new Map<string, string>(); // token -> userId
+const g = global as any;
+const users = g.users || (g.users = new Map<string, UserRecord>()); // userId -> UserRecord
+const usernameToUser = g.usernameToUser || (g.usernameToUser = new Map<string, UserRecord>()); // username -> UserRecord
+const sessions = g.sessions || (g.sessions = new Map<string, string>()); // token -> userId
 
 // Pre-seeded channels
 export const CHANNELS = [
@@ -42,11 +43,11 @@ export const CHANNELS = [
   { id: "general-voice", name: "General Voice", type: "voice", topic: "General Voice Chat Room" },
 ];
 
-const messages = new Map<string, ChatMessage[]>(); // channelId -> array of ChatMessage
+const messages = g.messages || (g.messages = new Map<string, ChatMessage[]>()); // channelId -> array of ChatMessage
 
 // Real-Time Polling structures
-const typingStates = new Map<string, Map<string, number>>(); // channelId -> Map<username, lastSeenTyping>
-const signalQueue = new Map<string, Array<{ senderId: string; signalData: any }>>(); // targetUserId -> Array of signals
+const typingStates = g.typingStates || (g.typingStates = new Map<string, Map<string, number>>()); // channelId -> Map<username, lastSeenTyping>
+const signalQueue = g.signalQueue || (g.signalQueue = new Map<string, Array<{ senderId: string; signalData: any }>>()); // targetUserId -> Array of signals
 
 // Initialize default channels with welcome messages
 const seedWelcomeMessages = () => {
