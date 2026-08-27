@@ -54,6 +54,11 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     }
   }, [activeChannelId, fetchChannelMessages]);
 
+  const activeChannelIdRef = useRef(activeChannelId);
+  useEffect(() => {
+    activeChannelIdRef.current = activeChannelId;
+  }, [activeChannelId]);
+
   // Main WebSocket Lifecycle Connection
   useEffect(() => {
     if (!token) return;
@@ -84,7 +89,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           const newMsg: ChatMessage = payload;
           setMessages((prev) => {
             if (prev.some((m) => m.id === newMsg.id)) return prev;
-            if (newMsg.channelId === activeChannelId) {
+            if (newMsg.channelId === activeChannelIdRef.current) {
               return [...prev, newMsg];
             }
             return prev;
@@ -93,7 +98,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
 
         if (type === "reaction_updated") {
           const { channelId, messageId, reactions } = payload;
-          if (channelId === activeChannelId) {
+          if (channelId === activeChannelIdRef.current) {
             setMessages((prev) =>
               prev.map((m) => (m.id === messageId ? { ...m, reactions } : m))
             );
@@ -185,7 +190,8 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       ws.close();
       cleanupVoiceSession();
     };
-  }, [token, activeChannelId, onLogout]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, onLogout]);
 
   // --- WebRTC Peer-to-Peer Real Audio Engine ---
 

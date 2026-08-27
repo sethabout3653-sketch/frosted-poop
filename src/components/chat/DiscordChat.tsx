@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { User } from "@/types/chat";
 import { useDiscordChat } from "@/hooks/useDiscordChat";
 import { DiscordAuth } from "./DiscordAuth";
@@ -79,11 +79,11 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
     setCurrentUser(user);
   };
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     localStorage.removeItem("discord_chat_token");
     setToken(null);
     setCurrentUser(null);
-  };
+  }, []);
 
   const {
     channels,
@@ -124,6 +124,7 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
         toggleDeafen,
       });
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     currentVoiceChannelId,
     channels,
@@ -131,10 +132,6 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
     isMuted,
     isDeafened,
     isSelfSpeaking,
-    leaveVoiceChannel,
-    toggleMute,
-    toggleDeafen,
-    onVoiceStateChange,
   ]);
 
   if (isVerifyingAuth) {

@@ -9,7 +9,7 @@ import { chatRouter, setupChatWebSocket } from "./src/server/chatServer.js";
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT || 3000;
+  const PORT = 3000;
   const server = http.createServer(app);
 
   // We need to parse JSON and urlencoded requests
