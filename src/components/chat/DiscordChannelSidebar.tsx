@@ -67,7 +67,9 @@ export function DiscordChannelSidebar({
       <div className="flex h-12 items-center justify-between border-b border-neutral-800 px-4 font-bold text-white shadow-sm bg-[#0d0d0d]">
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-4 w-4 text-white" />
-          <span className="truncate text-xs font-black uppercase tracking-wider">Frosted Community</span>
+          <span className="truncate text-xs font-black uppercase tracking-wider">
+            Frosted Community
+          </span>
         </div>
         <ChevronDown className="h-4 w-4 text-neutral-400" />
       </div>
@@ -118,7 +120,9 @@ export function DiscordChannelSidebar({
                         : "text-neutral-400 hover:bg-[#161616] hover:text-white"
                     }`}
                   >
-                    <Hash className={`h-4 w-4 ${isActive ? "text-black" : "text-neutral-500 group-hover:text-white"}`} />
+                    <Hash
+                      className={`h-4 w-4 ${isActive ? "text-black" : "text-neutral-500 group-hover:text-white"}`}
+                    />
                     <span className="truncate">{ch.name}</span>
                   </button>
                 );
@@ -152,11 +156,13 @@ export function DiscordChannelSidebar({
                         isSuspended
                           ? "opacity-40 cursor-not-allowed text-neutral-600"
                           : isUserInThisVoice
-                          ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 font-semibold cursor-pointer"
-                          : "text-neutral-400 hover:bg-[#161616] hover:text-white cursor-pointer"
+                            ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 font-semibold cursor-pointer"
+                            : "text-neutral-400 hover:bg-[#161616] hover:text-white cursor-pointer"
                       }`}
                     >
-                      <Volume2 className={`h-4 w-4 ${isSuspended ? "text-neutral-600" : isUserInThisVoice ? "text-emerald-400" : "text-neutral-500 group-hover:text-white"}`} />
+                      <Volume2
+                        className={`h-4 w-4 ${isSuspended ? "text-neutral-600" : isUserInThisVoice ? "text-emerald-400" : "text-neutral-500 group-hover:text-white"}`}
+                      />
                       <span className="truncate flex-1 text-left">{ch.name}</span>
                     </button>
 
@@ -174,7 +180,9 @@ export function DiscordChannelSidebar({
                             >
                               {occ.username.substring(0, 1)}
                             </div>
-                            <span className="truncate flex-1 font-medium">{occ.displayName || occ.username}</span>
+                            <span className="truncate flex-1 font-medium">
+                              {occ.displayName || occ.username}
+                            </span>
                             <div className="flex items-center gap-0.5 shrink-0 opacity-85">
                               {occ.isMuted && <MicOff className="h-3 w-3 text-rose-400" />}
                               {occ.isDeafened && <Headphones className="h-3 w-3 text-amber-400" />}
@@ -196,14 +204,20 @@ export function DiscordChannelSidebar({
         <div className="flex flex-col gap-1.5 border-t border-red-900/40 bg-red-950/15 p-2.5 mx-1 rounded-t-lg shadow-inner select-none animate-in slide-in-from-bottom duration-300">
           <div className="flex items-center gap-1.5 text-red-400">
             <ShieldAlert className="h-4 w-4 shrink-0 animate-pulse text-red-500" />
-            <span className="text-[11px] font-black uppercase tracking-wider text-red-300">Voice Suspended</span>
+            <span className="text-[11px] font-black uppercase tracking-wider text-red-300">
+              Voice Suspended
+            </span>
           </div>
           <p className="text-[10px] text-neutral-400 leading-normal">
             Microphone flagged for inappropriate content. Voice channels are locked.
           </p>
           <div className="flex items-center justify-between bg-red-950/30 border border-red-800/30 rounded p-1.5 mt-1">
-            <span className="text-[10px] text-red-300 font-bold uppercase tracking-wider font-semibold">Restoring In</span>
-            <span className="text-xs font-black text-white bg-red-800/40 px-2 py-0.5 rounded animate-pulse">{suspensionTimeLeft}s</span>
+            <span className="text-[10px] text-red-300 font-bold uppercase tracking-wider font-semibold">
+              Restoring In
+            </span>
+            <span className="text-xs font-black text-white bg-red-800/40 px-2 py-0.5 rounded animate-pulse">
+              {suspensionTimeLeft}s
+            </span>
           </div>
         </div>
       ) : (

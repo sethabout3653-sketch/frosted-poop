@@ -276,7 +276,11 @@ export function prepareGameHtml(rawHtml: string, filename: string): string {
 // Loads a game source asynchronously with multi-tier fallback
 export async function loadGameSource(directory: string): Promise<GameLoadResult> {
   // If already an absolute URL or proxy URL, return directly
-  if (directory.startsWith("http://") || directory.startsWith("https://") || directory.startsWith("/~/")) {
+  if (
+    directory.startsWith("http://") ||
+    directory.startsWith("https://") ||
+    directory.startsWith("/~/")
+  ) {
     return { type: "url", src: directory };
   }
 

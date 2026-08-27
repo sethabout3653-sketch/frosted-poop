@@ -230,7 +230,6 @@ export function GamePlayer({
           ref={containerRef}
           className="relative w-full max-w-6xl aspect-[16/9] overflow-hidden rounded-2xl border border-neutral-800 bg-black shadow-2xl"
         >
-
           <iframe
             ref={iframeRef}
             src={activeSrc || undefined}

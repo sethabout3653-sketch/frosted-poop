@@ -1,5 +1,11 @@
 import React, { useState } from "react";
-import { User as UserIcon, MessageSquare, ArrowRight, ShieldCheck, AlertCircle } from "lucide-react";
+import {
+  User as UserIcon,
+  MessageSquare,
+  ArrowRight,
+  ShieldCheck,
+  AlertCircle,
+} from "lucide-react";
 import type { User } from "@/types/chat";
 
 interface Props {
@@ -81,9 +87,7 @@ export function DiscordAuth({ onLoginSuccess }: Props) {
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.15)]">
             <MessageSquare className="h-7 w-7" />
           </div>
-          <h1 className="text-2xl font-black tracking-tight text-white mb-1.5">
-            Join Chat
-          </h1>
+          <h1 className="text-2xl font-black tracking-tight text-white mb-1.5">Join Chat</h1>
           <p className="text-xs text-neutral-400">
             Choose a username and an avatar color to jump in.
           </p>
@@ -128,7 +132,9 @@ export function DiscordAuth({ onLoginSuccess }: Props) {
                   onClick={() => setAvatarColor(c)}
                   style={{ backgroundColor: c }}
                   className={`h-7 w-7 rounded-full border-2 transition-transform cursor-pointer ${
-                    avatarColor === c ? "border-white scale-110 shadow-md ring-2 ring-white/50" : "border-transparent opacity-70 hover:opacity-100"
+                    avatarColor === c
+                      ? "border-white scale-110 shadow-md ring-2 ring-white/50"
+                      : "border-transparent opacity-70 hover:opacity-100"
                   }`}
                 />
               ))}
@@ -160,4 +166,3 @@ export function DiscordAuth({ onLoginSuccess }: Props) {
     </div>
   );
 }
-

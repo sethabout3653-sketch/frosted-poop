@@ -108,7 +108,9 @@ export function FrostedNavbar({
                 : "border-neutral-800 bg-[#0d0d0d] text-neutral-300 hover:border-white hover:text-white"
             }`}
           >
-            <MessageSquare className={`h-3.5 w-3.5 ${isChatActive ? "text-black" : "text-white"}`} />
+            <MessageSquare
+              className={`h-3.5 w-3.5 ${isChatActive ? "text-black" : "text-white"}`}
+            />
             <span className="hidden sm:inline font-bold">Frosted Chat</span>
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>

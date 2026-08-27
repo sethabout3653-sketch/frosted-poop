@@ -142,7 +142,8 @@ export async function fetchGames(): Promise<Game[]> {
     id: "soundboard",
     name: "Soundboard",
     directory: "https://MyInstants.com",
-    image: "https://play-lh.googleusercontent.com/QbPwdx7u46tJLd6SBJ6cCPajEKgiA620fYNSZb1VsdlKIBPs4m6itZRDmu9SWPo8vbV77H1H42cNefPDtoYM",
+    image:
+      "https://play-lh.googleusercontent.com/QbPwdx7u46tJLd6SBJ6cCPajEKgiA620fYNSZb1VsdlKIBPs4m6itZRDmu9SWPo8vbV77H1H42cNefPDtoYM",
     category: "popular",
     featured: true,
     plays: 99999,

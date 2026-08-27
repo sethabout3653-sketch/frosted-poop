@@ -6,7 +6,8 @@ interface Props {
 }
 
 export function VerificationGate({ onVerified }: Props) {
-  const SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY || "6LdIbpstAAAAAOiww_nKfOaSB1a7oixnhFw4g5hl";
+  const SITE_KEY =
+    import.meta.env.VITE_RECAPTCHA_SITE_KEY || "6LdIbpstAAAAAOiww_nKfOaSB1a7oixnhFw4g5hl";
 
   const [status, setStatus] = useState<"idle" | "checking" | "verified" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string>("");
@@ -102,7 +103,8 @@ export function VerificationGate({ onVerified }: Props) {
             Verification Required
           </h1>
           <p className="text-xs text-neutral-400 max-w-xs mx-auto leading-relaxed">
-            Complete Google reCAPTCHA below to access the library. Once verified, you won't need to do this again.
+            Complete Google reCAPTCHA below to access the library. Once verified, you won't need to
+            do this again.
           </p>
         </div>
 
@@ -156,7 +158,7 @@ declare global {
           callback?: (token: string) => void;
           "expired-callback"?: () => void;
           "error-callback"?: () => void;
-        }
+        },
       ) => number;
       reset: (widgetId?: number) => void;
     };

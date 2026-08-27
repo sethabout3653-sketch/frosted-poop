@@ -3,19 +3,19 @@ import { randomBytes } from "crypto";
 import fs from "fs";
 import path from "path";
 import { initializeApp } from "firebase/app";
-import { 
-  getFirestore, 
-  doc, 
-  getDoc, 
-  setDoc, 
-  getDocs, 
-  collection, 
-  query, 
-  where, 
-  deleteDoc, 
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  setDoc,
+  getDocs,
+  collection,
+  query,
+  where,
+  deleteDoc,
   updateDoc,
   orderBy,
-  limit
+  limit,
 } from "firebase/firestore";
 import { GoogleGenAI, Type } from "@google/genai";
 
@@ -80,12 +80,12 @@ const seedWelcomeMessages = async () => {
     const msgsRef = collection(db, "messages");
     const q = query(msgsRef, limit(1));
     const snapshot = await getDocs(q);
-    
+
     if (snapshot.empty) {
       const systemId = "system-bot";
       const now = Date.now();
       const msgId = "msg-welcome-1";
-      
+
       const welcomeMsg: ChatMessage = {
         id: msgId,
         channelId: "general",
@@ -97,7 +97,7 @@ const seedWelcomeMessages = async () => {
         timestamp: now - 3600000,
         reactions: { "👋": ["FrostedBot"] },
       };
-      
+
       await setDoc(doc(db, "messages", msgId), welcomeMsg);
     }
   } catch (err) {
@@ -202,7 +202,7 @@ chatRouter.get("/me", async (req, res) => {
 
     await updateDoc(doc(db, "users", userId), {
       lastSeen: user.lastSeen,
-      status: user.status
+      status: user.status,
     });
 
     return res.json({ token, user });
@@ -217,10 +217,15 @@ chatRouter.get("/messages/:channelId", async (req, res) => {
   try {
     const { channelId } = req.params;
     const msgsRef = collection(db, "messages");
-    const q = query(msgsRef, where("channelId", "==", channelId), orderBy("timestamp", "asc"), limit(100));
+    const q = query(
+      msgsRef,
+      where("channelId", "==", channelId),
+      orderBy("timestamp", "asc"),
+      limit(100),
+    );
     const snapshot = await getDocs(q);
     const msgs: ChatMessage[] = [];
-    snapshot.forEach(doc => {
+    snapshot.forEach((doc) => {
       msgs.push(doc.data() as ChatMessage);
     });
     return res.json(msgs);
@@ -235,7 +240,7 @@ chatRouter.get("/state", async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     const token = authHeader?.replace("Bearer ", "");
-    
+
     let currentUserId: string | null = null;
     if (token) {
       const sessionDoc = await getDoc(doc(db, "sessions", token));
@@ -243,7 +248,7 @@ chatRouter.get("/state", async (req, res) => {
         currentUserId = sessionDoc.data().userId;
         await updateDoc(doc(db, "users", currentUserId), {
           lastSeen: Date.now(),
-          status: "online"
+          status: "online",
         });
       }
     }
@@ -253,7 +258,7 @@ chatRouter.get("/state", async (req, res) => {
     // Retrieve all users from Firestore
     const usersSnapshot = await getDocs(collection(db, "users"));
     const allUsers: UserRecord[] = [];
-    
+
     // Cleanup offline/timed out users (timeout threshold: 12 seconds for serverless tolerance)
     for (const d of usersSnapshot.docs) {
       const u = d.data() as UserRecord;
@@ -263,7 +268,7 @@ chatRouter.get("/state", async (req, res) => {
           u.currentVoiceChannelId = null;
           await updateDoc(doc(db, "users", u.id), {
             status: "offline",
-            currentVoiceChannelId: null
+            currentVoiceChannelId: null,
           });
         }
       }
@@ -272,15 +277,15 @@ chatRouter.get("/state", async (req, res) => {
 
     // Get active online users
     const onlineUsers = allUsers
-      .filter(u => u.status === "online")
+      .filter((u) => u.status === "online")
       .map(({ lastSeen, ...safe }) => safe);
 
     // Retrieve latest messages
     const msgsSnapshot = await getDocs(
-      query(collection(db, "messages"), orderBy("timestamp", "asc"), limit(100))
+      query(collection(db, "messages"), orderBy("timestamp", "asc"), limit(100)),
     );
     const allMessages: Record<string, ChatMessage[]> = {};
-    msgsSnapshot.forEach(d => {
+    msgsSnapshot.forEach((d) => {
       const m = d.data() as ChatMessage;
       if (!allMessages[m.channelId]) {
         allMessages[m.channelId] = [];
@@ -291,7 +296,7 @@ chatRouter.get("/state", async (req, res) => {
     // Retrieve typing statuses
     const typingSnapshot = await getDocs(collection(db, "typing"));
     const typing: Record<string, string[]> = {};
-    typingSnapshot.forEach(d => {
+    typingSnapshot.forEach((d) => {
       const channelId = d.id;
       const data = d.data() || {};
       const usersMap = data.users || {};
@@ -323,19 +328,24 @@ chatRouter.get("/state", async (req, res) => {
     }
 
     // Retrieve signals queued for this client
-    let rtcSignals: Array<{ senderId: string; signalData: any }> = [];
+    const rtcSignals: Array<{ senderId: string; signalData: any }> = [];
     if (currentUserId) {
-      const signalsQuery = query(collection(db, "signals"), where("targetUserId", "==", currentUserId));
+      const signalsQuery = query(
+        collection(db, "signals"),
+        where("targetUserId", "==", currentUserId),
+      );
       const signalsSnapshot = await getDocs(signalsQuery);
-      
-      signalsSnapshot.forEach(d => {
+
+      signalsSnapshot.forEach((d) => {
         const s = d.data();
         rtcSignals.push({
           senderId: s.senderId,
           signalData: typeof s.signalData === "string" ? JSON.parse(s.signalData) : s.signalData,
         });
         // Consume signals on retrieval
-        deleteDoc(doc(db, "signals", d.id)).catch(e => console.error("Signal consumption delete error:", e));
+        deleteDoc(doc(db, "signals", d.id)).catch((e) =>
+          console.error("Signal consumption delete error:", e),
+        );
       });
     }
 
@@ -507,7 +517,7 @@ chatRouter.post("/typing", async (req, res) => {
 
     const typingDocRef = doc(db, "typing", channelId);
     const typingDoc = await getDoc(typingDocRef);
-    let usersMap = typingDoc.exists() ? typingDoc.data().users || {} : {};
+    const usersMap = typingDoc.exists() ? typingDoc.data().users || {} : {};
 
     if (isTyping) {
       usersMap[user.username] = Date.now();
@@ -557,8 +567,9 @@ chatRouter.post("/voice/state", async (req, res) => {
     user.lastSeen = Date.now();
 
     const { currentVoiceChannelId, isMuted, isDeafened, isSpeaking } = req.body;
-    
-    user.currentVoiceChannelId = currentVoiceChannelId !== undefined ? currentVoiceChannelId : user.currentVoiceChannelId;
+
+    user.currentVoiceChannelId =
+      currentVoiceChannelId !== undefined ? currentVoiceChannelId : user.currentVoiceChannelId;
     user.isMuted = isMuted !== undefined ? !!isMuted : user.isMuted;
     user.isDeafened = isDeafened !== undefined ? !!isDeafened : user.isDeafened;
     user.isSpeaking = isSpeaking !== undefined ? !!isSpeaking : user.isSpeaking;
@@ -605,7 +616,7 @@ chatRouter.post("/signal", async (req, res) => {
       targetUserId: targetPeerId,
       senderId: user.id,
       signalData: typeof signalData === "object" ? JSON.stringify(signalData) : signalData,
-      createdAt: Date.now()
+      createdAt: Date.now(),
     });
 
     return res.json({ success: true });
@@ -624,21 +635,47 @@ function getAi() {
       apiKey: process.env.GEMINI_API_KEY || "dummy",
       httpOptions: {
         headers: {
-          'User-Agent': 'aistudio-build',
-        }
-      }
+          "User-Agent": "aistudio-build",
+        },
+      },
     });
   }
   return aiInstance;
 }
 
+import { isInappropriateContent } from "../lib/moderation";
+
 const ADULT_KEYWORDS = [
-  "porn", "pornhub", "xvideos", "xhamster", "redtube", "youporn", "chaturbate",
-  "onlyfans", "hentai", "rule34", "brazzers", "phub", "pussy", "cock", "anal", 
-  "vagina", "blowjob", "milf", "tits", "sex", "naked", "erotic", "orgasm"
+  "porn",
+  "pornhub",
+  "xvideos",
+  "xhamster",
+  "redtube",
+  "youporn",
+  "chaturbate",
+  "onlyfans",
+  "hentai",
+  "rule34",
+  "brazzers",
+  "phub",
+  "pussy",
+  "cock",
+  "anal",
+  "vagina",
+  "blowjob",
+  "milf",
+  "tits",
+  "sex",
+  "naked",
+  "erotic",
+  "orgasm",
 ];
 
 function isLocalAdultCheck(urlStr: string): { isAdult: boolean; reason: string } | null {
+  if (isInappropriateContent(urlStr)) {
+    return { isAdult: true, reason: "URL contains explicit or inappropriate language" };
+  }
+
   try {
     let checkUrl = urlStr;
     if (!/^https?:\/\//i.test(checkUrl)) {
@@ -647,9 +684,15 @@ function isLocalAdultCheck(urlStr: string): { isAdult: boolean; reason: string }
     const parsed = new URL(checkUrl);
     const domain = parsed.hostname.toLowerCase();
     const pathname = parsed.pathname.toLowerCase();
-    
+
     for (const kw of ADULT_KEYWORDS) {
-      if (domain.includes(kw) || pathname.includes("/" + kw) || pathname.includes("-" + kw) || pathname.includes(kw + "-") || pathname.includes(kw + "/")) {
+      if (
+        domain.includes(kw) ||
+        pathname.includes("/" + kw) ||
+        pathname.includes("-" + kw) ||
+        pathname.includes(kw + "-") ||
+        pathname.includes(kw + "/")
+      ) {
         return { isAdult: true, reason: `URL matched forbidden adult domain/keyword: ${kw}` };
       }
     }
@@ -659,7 +702,9 @@ function isLocalAdultCheck(urlStr: string): { isAdult: boolean; reason: string }
   return null;
 }
 
-async function scrapeUrlMetadata(urlStr: string): Promise<{ title: string; meta: string; sample: string }> {
+async function scrapeUrlMetadata(
+  urlStr: string,
+): Promise<{ title: string; meta: string; sample: string }> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 4000); // 4 second timeout
@@ -667,8 +712,9 @@ async function scrapeUrlMetadata(urlStr: string): Promise<{ title: string; meta:
     const response = await fetch(urlStr, {
       signal: controller.signal,
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      }
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      },
     });
     clearTimeout(timeoutId);
 
@@ -684,13 +730,15 @@ async function scrapeUrlMetadata(urlStr: string): Promise<{ title: string; meta:
 
     // Extract meta tags
     const metaTags: string[] = [];
-    const metaRegex = /<meta\s+[^>]*name=["'](description|keywords)["'][^>]*content=["']([\s\S]*?)["'][^>]*>/gi;
+    const metaRegex =
+      /<meta\s+[^>]*name=["'](description|keywords)["'][^>]*content=["']([\s\S]*?)["'][^>]*>/gi;
     let match;
     while ((match = metaRegex.exec(html)) !== null) {
       metaTags.push(`${match[1]}: ${match[2]}`);
     }
 
-    const propertyRegex = /<meta\s+[^>]*property=["']og:(title|description)["'][^>]*content=["']([\s\S]*?)["'][^>]*>/gi;
+    const propertyRegex =
+      /<meta\s+[^>]*property=["']og:(title|description)["'][^>]*content=["']([\s\S]*?)["'][^>]*>/gi;
     while ((match = propertyRegex.exec(html)) !== null) {
       metaTags.push(`og:${match[1]}: ${match[2]}`);
     }
@@ -710,11 +758,15 @@ async function scrapeUrlMetadata(urlStr: string): Promise<{ title: string; meta:
     return {
       title,
       meta: metaTags.slice(0, 10).join("\n"),
-      sample
+      sample,
     };
   } catch (err: any) {
     console.error("Failed to scrape site metadata for:", urlStr, err?.message || err);
-    return { title: "", meta: "", sample: `Unreachable or failed to fetch: ${err?.message || err}` };
+    return {
+      title: "",
+      meta: "",
+      sample: `Unreachable or failed to fetch: ${err?.message || err}`,
+    };
   }
 }
 
@@ -763,7 +815,7 @@ chatRouter.post("/moderate-link", async (req, res) => {
 
     // Call Gemini to classify
     const ai = getAi();
-    
+
     const userContent = `URL: ${normalizedUrl}
 Domain: ${domain}
 Scraped Title: ${scraped.title}
@@ -798,8 +850,13 @@ ${scraped.sample}`;
     }
 
     if (classification.isAdult) {
-      console.warn(`Blocked link to adult content: ${normalizedUrl}. Reason: ${classification.reason}`);
-      return res.json({ allowed: false, reason: classification.reason || "Adult content detected" });
+      console.warn(
+        `Blocked link to adult content: ${normalizedUrl}. Reason: ${classification.reason}`,
+      );
+      return res.json({
+        allowed: false,
+        reason: classification.reason || "Adult content detected",
+      });
     }
 
     return res.json({ allowed: true });

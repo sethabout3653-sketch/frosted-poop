@@ -53,9 +53,7 @@ export function DiscordUserList({ users, currentUserId }: Props) {
                       </span>
                     ) : null}
                   </div>
-                  <div className="text-[10px] text-neutral-500 truncate">
-                    Online
-                  </div>
+                  <div className="text-[10px] text-neutral-500 truncate">Online</div>
                 </div>
               </div>
             );
@@ -87,9 +85,7 @@ export function DiscordUserList({ users, currentUserId }: Props) {
                 </div>
 
                 <div className="truncate">
-                  <div className="truncate text-xs font-medium text-neutral-300">
-                    {u.username}
-                  </div>
+                  <div className="truncate text-xs font-medium text-neutral-300">{u.username}</div>
                   <div className="text-[10px] text-neutral-500">Offline</div>
                 </div>
               </div>

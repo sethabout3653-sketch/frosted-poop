@@ -2,98 +2,36 @@
 
 // Roots that should trigger a block if they appear ANYWHERE in a word (e.g. "fucking" -> "fuck")
 const BLOCKED_ROOTS = [
-  "fuck",
-  "fck",
-  "shit",
-  "sht",
-  "bitch",
-  "btch",
-  "cunt",
-  "cnt",
-  "dick",
-  "dck",
-  "pussy",
-  "pssy",
-  "cock",
-  "bastard",
-  "slut",
-  "whore",
-  "nigger",
-  "nigga",
-  "nigg",
-  "faggot",
-  "fag",
-  "dyke",
-  "tranny",
-  "shemale",
-  "retard",
-  "kike",
-  "spic",
-  "chink",
-  "gook",
-  "wetback",
-  "blowjob",
-  "clitoris",
-  "clit",
-  "hentai",
-  "porn",
-  "orgasm",
-  "milf",
-  "dilf",
-  "cumshot",
-  "cumming",
-  "vibrator",
-  "dildo",
-  "masturbate",
-  "masturbation",
-  "handjob",
-  "rimjob",
-  "rape",
-  "raping",
-  "rapist",
-  "pedophile",
-  "pedo",
+  "fuck", "fck", "shit", "sht", "bitch", "btch", "cunt", "cnt", "dick", "dck", 
+  "pussy", "pssy", "cock", "bastard", "slut", "whore", "nigger", "nigga", "nigg", 
+  "faggot", "fag", "dyke", "tranny", "shemale", "retard", "kike", "spic", "chink", 
+  "gook", "wetback", "blowjob", "clitoris", "clit", "hentai", "porn", "orgasm", 
+  "milf", "dilf", "cumshot", "cumming", "vibrator", "dildo", "masturbate", 
+  "masturbation", "handjob", "rimjob", "rape", "raping", "rapist", "pedophile", 
+  "pedo", "motherfucker", "cocksucker", "wanker", "twat", "tosser", "prick", "skank",
+  "tard", "cripple", "mongoloid", "midget", "beaner", "cracker", "honky", "coon", 
+  "wop", "dago", "gypsy", "pikey", "raghead", "towelhead", "cameljockey", "slope", 
+  "jap", "zipperhead", "squaw", "halfbreed", "mutt", "cholo", "homo", "queer", 
+  "lesbo", "carpetmuncher", "fudgepacker", "pillowbiter", "sodomite", "incest", 
+  "bestiality", "necrophilia", "snuff", "scat", "felching", "bukkake", "goatse", 
+  "tubgirl", "lemonparty", "meatspin", "bluewaffle", "smut", "snatch", "pecker",
+  "schlong", "jerkoff", "jackoff", "titfuck", "tittyfuck", "titties", "boobs",
+  "cameltoe", "chode", "cuck", "cuckold", "cum", "ejaculate", "fellatio", "foreskin",
+  "glans", "incel", "jizz", "labia", "nude", "nudity", "paedo", "phallus", "queef",
+  "scrotum", "semen", "smegma", "sperm", "testicle", "vulva"
 ];
 
 // Exact terms that must match as a standalone word (or with a plural 's') to avoid false positives (e.g. "class" or "assessment")
 const EXACT_BLOCKED = [
-  "ass",
-  "asses",
-  "asshole",
-  "assholes",
-  "asswipe",
-  "piss",
-  "pisses",
-  "pissed",
-  "pissing",
-  "pisser",
-  "sex",
-  "sexy",
-  "naked",
-  "nude",
-  "boobs",
-  "boob",
-  "tits",
-  "titties",
-  "anal",
-  "anus",
-  "cum",
-  "cums",
-  "semen",
-  "sperm",
-  "penis",
-  "vagina",
-  "erotic",
-  "rape",
-  "twat",
-  "prick",
-  "douche",
-  "douchebag",
-  "wanker",
-  "bollocks",
-  "bugger",
-  "goddamn",
-  "dammit",
+  "ass", "asses", "asshole", "assholes", "asswipe", "piss", "pisses", "pissed", 
+  "pissing", "pisser", "sex", "sexy", "naked", "nude", "boobs", "boob", "tits", 
+  "titties", "anal", "anus", "cum", "cums", "semen", "sperm", "penis", "vagina", 
+  "erotic", "rape", "twat", "prick", "douche", "douchebag", "wanker", "bollocks", 
+  "bugger", "goddamn", "dammit", "hell", "crap", "crappy", "damn", "damned", "slutty",
+  "whoreish", "bitchy", "shitty", "shite", "shat", "cunt", "cunts", "dicks", "pussies",
+  "cocks", "cocky", "fags", "faggots", "niggas", "niggers", "chinks", "spics", "kikes",
+  "gooks", "wetbacks", "retards", "dykes", "trannies", "shemales", "milfs", "dilfs",
+  "hooker", "escort", "stripper"
 ];
 
 /**
@@ -159,7 +97,7 @@ export function isInappropriateContent(text: string): boolean {
     "!": "i",
     "|": "i",
     "0": "o",
-    "$": "s",
+    $: "s",
     "5": "s",
     "7": "t",
     "+": "t",
@@ -178,38 +116,50 @@ export function isInappropriateContent(text: string): boolean {
 
     // Strip remaining non-alphanumeric
     const stripped = mapped.replace(/[^a-z0-9]/g, "");
+    if (!stripped) continue;
 
-    // Collapse consecutive identical characters (e.g. "fuuuuuck" -> "fuck")
-    let collapsed = "";
-    for (let i = 0; i < stripped.length; i++) {
-      if (i === 0 || stripped[i] !== stripped[i - 1]) {
-        collapsed += stripped[i];
+    // Check exact matches (handles standard spelling and repeated letters)
+    let isExactMatch = EXACT_BLOCKED.includes(stripped);
+    if (!isExactMatch) {
+      for (const exact of EXACT_BLOCKED) {
+        const regexStr =
+          "^" +
+          exact
+            .split("")
+            .map((c) => c + "+")
+            .join("") +
+          "$";
+        const regex = new RegExp(regexStr, "i");
+        if (regex.test(stripped)) {
+          isExactMatch = true;
+          break;
+        }
       }
     }
+    if (isExactMatch) return true;
 
-    if (!collapsed) continue;
-
-    // A. Check exact matches for safe-word sensitive roots
-    if (EXACT_BLOCKED.includes(collapsed)) {
-      return true;
-    }
-
-    // B. Check substring match for highly explicit roots
+    // Check substring matches for highly explicit roots
+    let isRootMatch = false;
     for (const root of BLOCKED_ROOTS) {
-      if (collapsed.includes(root)) {
-        return true;
+      if (stripped.includes(root)) {
+        isRootMatch = true;
+        break;
+      }
+      const regexStr = root
+        .split("")
+        .map((c) => c + "+")
+        .join("");
+      const regex = new RegExp(regexStr, "i");
+      if (regex.test(stripped)) {
+        isRootMatch = true;
+        break;
       }
     }
+    if (isRootMatch) return true;
   }
 
   // 6. Check for inappropriate multi-word phrases directly
-  const phrases = [
-    "dirty joke",
-    "18+ joke",
-    "sexual joke",
-    "make love",
-    "send nudes",
-  ];
+  const phrases = ["dirty joke", "18+ joke", "sexual joke", "make love", "send nudes"];
   for (const phrase of phrases) {
     if (cleanText.includes(phrase)) {
       return true;

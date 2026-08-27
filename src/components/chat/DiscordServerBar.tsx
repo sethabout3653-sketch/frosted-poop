@@ -33,4 +33,3 @@ export function DiscordServerBar({ onReturnToGames }: Props) {
     </div>
   );
 }
-

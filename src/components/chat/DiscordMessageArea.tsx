@@ -28,7 +28,8 @@ interface Props {
 const EMOJIS = ["👍", "❤️", "🔥", "🚀", "🎉", "🎮", "😂", "😎"];
 
 function renderMessageContentWithLinks(content: string, msgId: string) {
-  const urlRegex = /((?:https?:\/\/|www\.)[^\s]+|\b[a-zA-Z0-9-]+\.(?:com|org|net|gov|edu|mil|co|io|me|us|info|biz|tv|cc|xyz|club|link|adult|sex|porn|pro|online|site|net)\b[^\s]*)/gi;
+  const urlRegex =
+    /((?:https?:\/\/|www\.)[^\s]+|\b[a-zA-Z0-9-]+\.(?:com|org|net|gov|edu|mil|co|io|me|us|info|biz|tv|cc|xyz|club|link|adult|sex|porn|pro|online|site|net)\b[^\s]*)/gi;
   const parts = content.split(urlRegex);
   if (parts.length <= 1) return content;
 
@@ -103,7 +104,8 @@ export function DiscordMessageArea({
     }
 
     // Extract links
-    const urlRegex = /((?:https?:\/\/|www\.)[^\s]+|\b[a-zA-Z0-9-]+\.(?:com|org|net|gov|edu|mil|co|io|me|us|info|biz|tv|cc|xyz|club|link|adult|sex|porn|pro|online|site|net)\b[^\s]*)/gi;
+    const urlRegex =
+      /((?:https?:\/\/|www\.)[^\s]+|\b[a-zA-Z0-9-]+\.(?:com|org|net|gov|edu|mil|co|io|me|us|info|biz|tv|cc|xyz|club|link|adult|sex|porn|pro|online|site|net)\b[^\s]*)/gi;
     const urls = trimmedInput.match(urlRegex) || [];
 
     if (urls.length > 0) {
@@ -115,9 +117,9 @@ export function DiscordMessageArea({
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "Authorization": `Bearer ${localStorage.getItem("discord_chat_token") || ""}`
+              Authorization: `Bearer ${localStorage.getItem("discord_chat_token") || ""}`,
             },
-            body: JSON.stringify({ url })
+            body: JSON.stringify({ url }),
           });
 
           if (checkRes.ok) {
@@ -177,7 +179,9 @@ export function DiscordMessageArea({
           {activeChannel?.topic && (
             <>
               <div className="h-4 w-[1px] bg-neutral-800" />
-              <span className="text-xs text-neutral-400 truncate font-normal">{activeChannel.topic}</span>
+              <span className="text-xs text-neutral-400 truncate font-normal">
+                {activeChannel.topic}
+              </span>
             </>
           )}
         </div>
@@ -200,7 +204,9 @@ export function DiscordMessageArea({
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#141414] border border-neutral-800 text-white mb-3 shadow-sm">
             <Hash className="h-7 w-7" />
           </div>
-          <h2 className="text-2xl font-black text-white tracking-tight">Welcome to #{activeChannel?.name}!</h2>
+          <h2 className="text-2xl font-black text-white tracking-tight">
+            Welcome to #{activeChannel?.name}!
+          </h2>
           <p className="text-xs text-neutral-400 mt-1">
             This is the start of the #{activeChannel?.name} channel.
           </p>
@@ -209,8 +215,12 @@ export function DiscordMessageArea({
         {/* Message Items */}
         {messages.map((msg, index) => {
           const prevMsg = messages[index - 1];
-          const isCompact = prevMsg && prevMsg.userId === msg.userId && msg.timestamp - prevMsg.timestamp < 300000;
-          const formattedTime = new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+          const isCompact =
+            prevMsg && prevMsg.userId === msg.userId && msg.timestamp - prevMsg.timestamp < 300000;
+          const formattedTime = new Date(msg.timestamp).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
 
           return (
             <div
@@ -237,10 +247,10 @@ export function DiscordMessageArea({
               <div className="flex-1 min-w-0">
                 {!isCompact && (
                   <div className="flex items-baseline gap-2 mb-0.5">
-                    <span className="font-bold text-white text-xs select-none">
-                      {msg.username}
+                    <span className="font-bold text-white text-xs select-none">{msg.username}</span>
+                    <span className="text-[10px] text-neutral-500 font-medium">
+                      {formattedTime}
                     </span>
-                    <span className="text-[10px] text-neutral-500 font-medium">{formattedTime}</span>
                   </div>
                 )}
 
@@ -254,7 +264,8 @@ export function DiscordMessageArea({
                 {/* Attachment Preview */}
                 {msg.attachmentUrl && (
                   <div className="mt-2 max-w-sm overflow-hidden rounded-xl border border-neutral-800 bg-[#121212] p-1.5">
-                    {msg.attachmentUrl.startsWith("data:image") || msg.attachmentUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
+                    {msg.attachmentUrl.startsWith("data:image") ||
+                    msg.attachmentUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
                       <img
                         src={msg.attachmentUrl}
                         alt={msg.attachmentName || "Attachment"}
@@ -342,9 +353,9 @@ export function DiscordMessageArea({
         {errorText && (
           <div className="mb-2 rounded-lg bg-red-950/80 border border-red-800 p-2.5 text-xs text-red-200 animate-bounce flex items-center justify-between shadow-md">
             <span className="font-semibold">{errorText}</span>
-            <button 
-              type="button" 
-              onClick={() => setErrorText(null)} 
+            <button
+              type="button"
+              onClick={() => setErrorText(null)}
               className="text-red-400 hover:text-white cursor-pointer ml-2"
             >
               <X className="h-3 w-3" />
@@ -396,7 +407,11 @@ export function DiscordMessageArea({
               value={inputText}
               onChange={handleInputChange}
               disabled={isCheckingLinks}
-              placeholder={isCheckingLinks ? "Verifying link safety..." : `Message #${activeChannel?.name || "channel"}...`}
+              placeholder={
+                isCheckingLinks
+                  ? "Verifying link safety..."
+                  : `Message #${activeChannel?.name || "channel"}...`
+              }
               className="flex-1 bg-transparent text-xs text-white placeholder-neutral-500 outline-none disabled:opacity-50"
             />
 

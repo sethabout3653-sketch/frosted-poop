@@ -94,9 +94,7 @@ export function FrostedApp() {
 
       {/* Persistent Discord Chat Container (keeps WebSocket active) */}
       <div className={isChatActive ? "block" : "hidden"}>
-        <DiscordChat
-          onReturnToGames={() => setIsChatActive(false)}
-        />
+        <DiscordChat onReturnToGames={() => setIsChatActive(false)} />
       </div>
 
       {/* Main View: Game Player or Library Grid when Chat view is inactive */}

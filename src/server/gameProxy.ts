@@ -58,7 +58,9 @@ function setCachedAsset(key: string, buffer: Buffer, mime: string, encoding?: st
 }
 
 // Helper for fetching CDN assets with GitHub raw fallback
-async function fetchGNAsset(subPath: string): Promise<{ response: Response; urlUsed: string } | null> {
+async function fetchGNAsset(
+  subPath: string,
+): Promise<{ response: Response; urlUsed: string } | null> {
   const urlsToTry = [
     `https://cdn.jsdelivr.net/gh/${subPath}`,
     `https://raw.githubusercontent.com/${subPath.replace("@", "/")}`,
@@ -215,14 +217,21 @@ function getMimeType(cleanPath: string, defaultContentType: string | null): stri
 }
 
 // Serve asset helper supporting standard features, Caching, and Range Requests (HTTP 206) for smooth audio/video playback
-function serveAsset(req: any, res: any, buffer: Buffer, rawPath: string, contentType: string | null, isCompressedGzip = false) {
+function serveAsset(
+  req: any,
+  res: any,
+  buffer: Buffer,
+  rawPath: string,
+  contentType: string | null,
+  isCompressedGzip = false,
+) {
   const mime = getMimeType(rawPath, contentType);
 
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
   res.setHeader(
     "Access-Control-Expose-Headers",
-    "Content-Length, Content-Type, Accept-Ranges, ETag"
+    "Content-Length, Content-Type, Accept-Ranges, ETag",
   );
   res.setHeader("Accept-Ranges", "bytes");
 
@@ -310,7 +319,7 @@ router.get("/gn/*", async (req, res) => {
 
     let response: Response | null = null;
     let cleanPathNoQuery = rawPath.split("?")[0] || "";
-    let isHtmlType = false;
+    const isHtmlType = false;
 
     if (rawPath.startsWith("cdn/")) {
       const cdnSubPath = rawPath.replace(/^cdn\//, "");

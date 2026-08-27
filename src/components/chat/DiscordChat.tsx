@@ -168,9 +168,7 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
       />
 
       {/* 4. Right Online Members List */}
-      {showUserList && (
-        <DiscordUserList users={onlineUsers} currentUserId={currentUser.id} />
-      )}
+      {showUserList && <DiscordUserList users={onlineUsers} currentUserId={currentUser.id} />}
     </div>
   );
 }

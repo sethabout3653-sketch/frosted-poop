@@ -123,47 +123,50 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   };
 
   // Helper to create a new Peer Connection
-  const createPeerConnection = useCallback((peerId: string): RTCPeerConnection => {
-    const pc = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-    });
-
-    pcsRef.current[peerId] = pc;
-
-    // Attach local audio track if available
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach((track) => {
-        pc.addTrack(track, localStreamRef.current!);
+  const createPeerConnection = useCallback(
+    (peerId: string): RTCPeerConnection => {
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
       });
-    }
 
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        sendSignal(peerId, event.candidate);
+      pcsRef.current[peerId] = pc;
+
+      // Attach local audio track if available
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((track) => {
+          pc.addTrack(track, localStreamRef.current!);
+        });
       }
-    };
 
-    pc.ontrack = (event) => {
-      const [remoteStream] = event.streams;
-      let audio = remoteAudiosRef.current[peerId];
-      if (!audio) {
-        audio = document.createElement("audio");
-        audio.autoplay = true;
-        document.body.appendChild(audio);
-        remoteAudiosRef.current[peerId] = audio;
-      }
-      audio.srcObject = remoteStream;
-      audio.muted = isDeafened;
-    };
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          sendSignal(peerId, event.candidate);
+        }
+      };
 
-    pc.onconnectionstatechange = () => {
-      if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
-        cleanupPeer(peerId);
-      }
-    };
+      pc.ontrack = (event) => {
+        const [remoteStream] = event.streams;
+        let audio = remoteAudiosRef.current[peerId];
+        if (!audio) {
+          audio = document.createElement("audio");
+          audio.autoplay = true;
+          document.body.appendChild(audio);
+          remoteAudiosRef.current[peerId] = audio;
+        }
+        audio.srcObject = remoteStream;
+        audio.muted = isDeafened;
+      };
 
-    return pc;
-  }, [isDeafened]);
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
+          cleanupPeer(peerId);
+        }
+      };
+
+      return pc;
+    },
+    [isDeafened],
+  );
 
   const cleanupPeer = (peerId: string) => {
     if (pcsRef.current[peerId]) {
@@ -178,27 +181,30 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   };
 
   // Process incoming signaling messages
-  const handleIncomingSignal = useCallback(async (senderId: string, signalData: any) => {
-    let pc = pcsRef.current[senderId];
-    if (!pc) {
-      pc = createPeerConnection(senderId);
-    }
-
-    try {
-      if (signalData.type === "offer") {
-        await pc.setRemoteDescription(new RTCSessionDescription(signalData));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        await sendSignal(senderId, answer);
-      } else if (signalData.type === "answer") {
-        await pc.setRemoteDescription(new RTCSessionDescription(signalData));
-      } else if (signalData.candidate) {
-        await pc.addIceCandidate(new RTCIceCandidate(signalData));
+  const handleIncomingSignal = useCallback(
+    async (senderId: string, signalData: any) => {
+      let pc = pcsRef.current[senderId];
+      if (!pc) {
+        pc = createPeerConnection(senderId);
       }
-    } catch (err) {
-      console.error("Error processing RTC signal:", err);
-    }
-  }, [createPeerConnection]);
+
+      try {
+        if (signalData.type === "offer") {
+          await pc.setRemoteDescription(new RTCSessionDescription(signalData));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          await sendSignal(senderId, answer);
+        } else if (signalData.type === "answer") {
+          await pc.setRemoteDescription(new RTCSessionDescription(signalData));
+        } else if (signalData.candidate) {
+          await pc.addIceCandidate(new RTCIceCandidate(signalData));
+        }
+      } catch (err) {
+        console.error("Error processing RTC signal:", err);
+      }
+    },
+    [createPeerConnection],
+  );
 
   // Main Polling Synchronization Loop
   const fetchSyncState = useCallback(async () => {
@@ -213,10 +219,10 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       }
       if (res.ok) {
         const data = await res.json();
-        
+
         setChannels(data.channels || []);
         if (data.users) setOnlineUsers(data.users);
-        
+
         // Update messages for current active text channel
         if (data.messages && data.messages[activeChannelIdRef.current]) {
           setMessages(data.messages[activeChannelIdRef.current]);
@@ -301,7 +307,12 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ channelId: activeChannelId, content, attachmentUrl, attachmentName }),
+        body: JSON.stringify({
+          channelId: activeChannelId,
+          content,
+          attachmentUrl,
+          attachmentName,
+        }),
       });
       if (res.ok) {
         const newMsg = await res.json();
@@ -326,7 +337,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       if (res.ok) {
         const data = await res.json();
         setMessages((prev) =>
-          prev.map((m) => (m.id === messageId ? { ...m, reactions: data.reactions } : m))
+          prev.map((m) => (m.id === messageId ? { ...m, reactions: data.reactions } : m)),
         );
       }
     } catch (e) {
@@ -354,7 +365,9 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
 
   const joinVoiceChannel = async (voiceChannelId: string) => {
     if (isSuspended) {
-      setVoiceError(`You are suspended from voice channels for ${suspensionTimeLeft} more seconds due to inappropriate content.`);
+      setVoiceError(
+        `You are suspended from voice channels for ${suspensionTimeLeft} more seconds due to inappropriate content.`,
+      );
       return;
     }
     if (!token || !currentUser) return;
@@ -404,7 +417,8 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       }
     } catch (err: any) {
       console.error("Voice join failed (check browser permissions):", err);
-      let errMsg = "Microphone access blocked. Please allow mic permission in your browser or iframe settings.";
+      let errMsg =
+        "Microphone access blocked. Please allow mic permission in your browser or iframe settings.";
       if (err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError") {
         errMsg = "Permission denied. Please grant microphone access to use voice chat.";
       } else if (err?.name === "NotFoundError" || err?.name === "DevicesNotFoundError") {
@@ -443,14 +457,15 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
 
   // Speech Recognition hook for live voice moderation
   useEffect(() => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       console.warn("SpeechRecognition is not supported in this browser.");
       return;
     }
 
     let rec: any = null;
-    let shouldBeRunning = !!currentVoiceChannelId && !isSuspended && !isMuted;
+    const shouldBeRunning = !!currentVoiceChannelId && !isSuspended && !isMuted;
 
     if (shouldBeRunning) {
       rec = new SpeechRecognition();
