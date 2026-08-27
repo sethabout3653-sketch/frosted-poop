@@ -149,6 +149,7 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
     isSuspended,
     suspensionTimeLeft,
     sendMessage,
+    deleteMessage,
     toggleReaction,
     sendTyping,
     joinVoiceChannel,
@@ -210,6 +211,7 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
         currentUser={currentUser}
         typingUsers={typingUsers}
         onSendMessage={sendMessage}
+        onDeleteMessage={deleteMessage}
         onToggleReaction={toggleReaction}
         onSendTyping={sendTyping}
         onToggleUserList={() => setShowUserList(!showUserList)}

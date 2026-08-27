@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { User, Channel, ChatMessage, VoiceUser } from "@/types/chat";
-import { isInappropriateContent } from "../lib/moderation";
 import { notificationManager } from "../lib/notifications";
 import { db } from "../lib/firebaseClient";
 import {
@@ -28,6 +27,40 @@ const DEFAULT_CHANNELS: Channel[] = [
   { id: "general-voice", name: "General Voice", type: "voice", topic: "General Voice Chat Room" },
 ];
 
+/**
+ * Optimizes WebRTC SDP to prevent Opus audio from cutting off.
+ * Sets usedtx=0 (disables discontinuous transmission / silence cut-offs),
+ * enables high bitrate (128kbps), forward error correction (useinbandfec=1),
+ * and constant bitrate (cbr=1) for pristine uninterrupted microphone audio.
+ */
+function optimizeOpusSdp(sdp: string): string {
+  return sdp.replace(/a=fmtp:(\d+) (.*)/g, (match, pt, params) => {
+    if (sdp.includes(`a=rtpmap:${pt} opus/48000`)) {
+      let newParams = params;
+      // Disable DTX so sentences and word ends never cut out
+      if (newParams.includes("usedtx=")) {
+        newParams = newParams.replace(/usedtx=\d+/g, "usedtx=0");
+      } else {
+        newParams += ";usedtx=0";
+      }
+      // Max average bitrate for crystal-clear microphone audio
+      if (newParams.includes("maxaveragebitrate=")) {
+        newParams = newParams.replace(/maxaveragebitrate=\d+/g, "maxaveragebitrate=128000");
+      } else {
+        newParams += ";maxaveragebitrate=128000";
+      }
+      if (!newParams.includes("useinbandfec=")) {
+        newParams += ";useinbandfec=1";
+      }
+      if (!newParams.includes("cbr=")) {
+        newParams += ";cbr=1";
+      }
+      return `a=fmtp:${pt} ${newParams}`;
+    }
+    return match;
+  });
+}
+
 export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const [isConnected, setIsConnected] = useState(true);
   const [channels, setChannels] = useState<Channel[]>(DEFAULT_CHANNELS);
@@ -52,6 +85,9 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
 
   // Audio & WebRTC Refs
   const localStreamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animFrameRef = useRef<number | null>(null);
   const pcsRef = useRef<Record<string, RTCPeerConnection>>({});
   const remoteAudiosRef = useRef<Record<string, HTMLAudioElement>>({});
   const activeChannelIdRef = useRef(activeChannelId);
@@ -118,6 +154,16 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   }, [isDeafened]);
 
   const cleanupVoice = useCallback(() => {
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
+
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
@@ -147,7 +193,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     if (!currentUserRef.current) return;
     try {
       const signalId = `sig_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      // Direct Firestore signaling document
       await setDoc(doc(db, "signals", signalId), {
         id: signalId,
         senderId: currentUserRef.current.id,
@@ -156,7 +201,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
         timestamp: Date.now(),
       });
     } catch {
-      // Fallback via HTTP API
       try {
         await fetch("/api/chat/signal", {
           method: "POST",
@@ -171,14 +215,27 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const createPeerConnection = useCallback(
     (peerId: string): RTCPeerConnection => {
       const pc = new RTCPeerConnection({
-        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" },
+          { urls: "stun:stun2.l.google.com:19302" },
+        ],
       });
 
       pcsRef.current[peerId] = pc;
 
       if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach((track) => {
-          pc.addTrack(track, localStreamRef.current!);
+        localStreamRef.current.getAudioTracks().forEach((track) => {
+          const sender = pc.addTrack(track, localStreamRef.current!);
+          try {
+            const params = sender.getParameters();
+            if (params.encodings && params.encodings.length > 0) {
+              params.encodings[0].maxBitrate = 128000;
+              params.encodings[0].priority = "high";
+              params.encodings[0].networkPriority = "high";
+              sender.setParameters(params);
+            }
+          } catch {}
         });
       }
 
@@ -194,11 +251,20 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
         if (!audio) {
           audio = document.createElement("audio");
           audio.autoplay = true;
+          (audio as any).playsInline = true;
+          audio.volume = 1.0;
           document.body.appendChild(audio);
           remoteAudiosRef.current[peerId] = audio;
         }
         audio.srcObject = remoteStream;
         audio.muted = isDeafened;
+        audio.play().catch(() => {
+          const resumeAudio = () => {
+            audio.play().catch(() => {});
+            window.removeEventListener("click", resumeAudio);
+          };
+          window.addEventListener("click", resumeAudio);
+        });
       };
 
       pc.onconnectionstatechange = () => {
@@ -232,6 +298,9 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
         if (signalData.type === "offer") {
           await pc.setRemoteDescription(new RTCSessionDescription(signalData));
           const answer = await pc.createAnswer();
+          if (answer.sdp) {
+            answer.sdp = optimizeOpusSdp(answer.sdp);
+          }
           await pc.setLocalDescription(answer);
           await sendSignal(senderId, answer);
         } else if (signalData.type === "answer") {
@@ -363,6 +432,9 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
               if (currentUserRef.current && currentUserRef.current.id > peerId) {
                 pc.createOffer({ offerToReceiveAudio: true })
                   .then(async (offer) => {
+                    if (offer.sdp) {
+                      offer.sdp = optimizeOpusSdp(offer.sdp);
+                    }
                     await pc.setLocalDescription(offer);
                     await sendSignal(peerId, offer);
                   })
@@ -407,7 +479,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
             try {
               const signalPayload = JSON.parse(data.signalData);
               await handleIncomingSignal(data.senderId, signalPayload);
-              // Clean up processed signal
               deleteDoc(doc(db, "signals", change.doc.id)).catch(() => {});
             } catch (e) {
               console.warn("Signal process error:", e);
@@ -429,7 +500,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           status: "online",
         });
       } catch {
-        // Document might need initial setDoc
         try {
           await setDoc(
             doc(db, "users", currentUserRef.current.id),
@@ -484,9 +554,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           });
         });
         setMessages(msgs);
-      } catch {
-        // Fallback to in-memory filter
-      }
+      } catch {}
     }
     loadChannelMessages();
   }, [activeChannelId]);
@@ -510,17 +578,14 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       reactions: {},
     };
 
-    // Optimistic UI update
     setMessages((prev) => [...prev, newMsg]);
 
-    // 1. Direct Cloud Firestore write (instant real-time broadcast)
     try {
       await setDoc(doc(db, "messages", msgId), newMsg);
     } catch (fsErr) {
       console.warn("Firestore write note:", fsErr);
     }
 
-    // 2. Also notify backend API if available
     if (token) {
       try {
         await fetch("/api/chat/message", {
@@ -540,11 +605,20 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     }
   };
 
+  const deleteMessage = async (messageId: string) => {
+    // Optimistic delete
+    setMessages((prev) => prev.filter((m) => m.id !== messageId));
+    try {
+      await deleteDoc(doc(db, "messages", messageId));
+    } catch (err) {
+      console.warn("Delete message error:", err);
+    }
+  };
+
   const toggleReaction = async (messageId: string, emoji: string) => {
     if (!currentUser) return;
     const username = currentUser.username;
 
-    // Optimistic UI update
     setMessages((prev) =>
       prev.map((m) => {
         if (m.id !== messageId) return m;
@@ -563,7 +637,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       })
     );
 
-    // Update on Firestore
     try {
       const msgRef = doc(db, "messages", messageId);
       const targetMsg = messages.find((m) => m.id === messageId);
@@ -611,15 +684,22 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
 
     try {
       cleanupVoice();
+
+      // High-Fidelity Unclipped Audio Capture Constraints
+      // - echoCancellation: true prevents acoustic feedback loops that trigger browser ducking
+      // - noiseSuppression: false prevents aggressive noise gates from cutting off speech ends or quiet words
+      // - autoGainControl: true normalizes soft voice so it remains loud and clear
+      const audioConstraints: MediaTrackConstraints = {
+        echoCancellation: true,
+        noiseSuppression: false,
+        autoGainControl: true,
+        channelCount: 1,
+        sampleRate: 48000,
+      };
+
       let stream: MediaStream;
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: false,
-            noiseSuppression: false,
-            autoGainControl: false,
-          },
-        });
+        stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
       } catch {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       }
@@ -628,6 +708,49 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       stream.getAudioTracks().forEach((track) => {
         track.enabled = !isMuted && !isDeafened;
       });
+
+      // Voice Activity & Speaking Meter using Web Audio API
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          const actx = new AudioCtx();
+          audioContextRef.current = actx;
+          const source = actx.createMediaStreamSource(stream);
+          const analyser = actx.createAnalyser();
+          analyser.fftSize = 512;
+          analyser.smoothingTimeConstant = 0.4;
+          source.connect(analyser);
+          analyserRef.current = analyser;
+
+          const dataArray = new Uint8Array(analyser.frequencyBinCount);
+          let speakingHangover = 0;
+
+          const checkSpeaking = () => {
+            if (!analyserRef.current) return;
+            analyserRef.current.getByteFrequencyData(dataArray);
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+              sum += dataArray[i];
+            }
+            const average = sum / dataArray.length;
+
+            if (average > 12) {
+              speakingHangover = 15; // ~250ms hangover so speaking ring doesn't flicker
+              setIsSelfSpeaking(true);
+            } else if (speakingHangover > 0) {
+              speakingHangover--;
+              setIsSelfSpeaking(true);
+            } else {
+              setIsSelfSpeaking(false);
+            }
+
+            animFrameRef.current = requestAnimationFrame(checkSpeaking);
+          };
+          checkSpeaking();
+        }
+      } catch (audioErr) {
+        console.warn("Audio meter setup note:", audioErr);
+      }
 
       // Voice presence update in Firestore
       await updateDoc(doc(db, "users", currentUser.id), {
@@ -653,7 +776,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
 
       setCurrentVoiceChannelId(voiceChannelId);
     } catch (err: any) {
-      console.error("Microphone access denied or error:", err);
+      console.error("Microphone access error:", err);
       setVoiceError(err.message || "Failed to access microphone.");
     }
   };
@@ -703,6 +826,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     voiceStates,
     currentVoiceChannelId,
     voiceError,
+    setVoiceError,
     isMuted,
     isDeafened,
     isSelfSpeaking,
@@ -711,6 +835,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     notificationPermission,
     requestNotificationPermission,
     sendMessage,
+    deleteMessage,
     toggleReaction,
     sendTyping,
     joinVoiceChannel,

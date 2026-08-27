@@ -12,6 +12,7 @@ import {
   Bell,
   BellRing,
   BellOff,
+  Trash2,
 } from "lucide-react";
 import type { Channel, ChatMessage, User } from "@/types/chat";
 import { isInappropriateContent } from "../../lib/moderation";
@@ -23,6 +24,7 @@ interface Props {
   currentUser: User | null;
   typingUsers: string[];
   onSendMessage: (content: string, attachmentUrl?: string, attachmentName?: string) => void;
+  onDeleteMessage?: (messageId: string) => void;
   onToggleReaction: (messageId: string, emoji: string) => void;
   onSendTyping: (isTyping: boolean) => void;
   onToggleUserList: () => void;
@@ -68,6 +70,7 @@ export function DiscordMessageArea({
   currentUser,
   typingUsers,
   onSendMessage,
+  onDeleteMessage,
   onToggleReaction,
   onSendTyping,
   onToggleUserList,
@@ -386,9 +389,21 @@ export function DiscordMessageArea({
                   <button
                     onClick={() => setShowEmojiPicker(showEmojiPicker === msg.id ? null : msg.id)}
                     className="opacity-0 group-hover:opacity-100 flex items-center justify-center h-6 w-6 rounded-lg bg-[#141414] border border-neutral-800 text-neutral-400 hover:text-white transition-opacity cursor-pointer"
+                    title="Add Reaction"
                   >
                     <Smile className="h-3.5 w-3.5" />
                   </button>
+
+                  {/* Delete message button */}
+                  {onDeleteMessage && (currentUser?.id === msg.userId || currentUser?.username === msg.username) && (
+                    <button
+                      onClick={() => onDeleteMessage(msg.id)}
+                      className="opacity-0 group-hover:opacity-100 flex items-center justify-center h-6 w-6 rounded-lg bg-[#141414] border border-neutral-800 text-neutral-400 hover:text-rose-400 hover:border-rose-500/30 transition-opacity cursor-pointer"
+                      title="Delete Message"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
 
                 {/* Quick Emoji Picker Popover */}
