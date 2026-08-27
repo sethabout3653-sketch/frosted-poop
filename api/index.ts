@@ -1,7 +1,7 @@
 import express from "express";
 import Stripe from "stripe";
-import gameProxy from "../src/server/gameProxy";
-import { chatRouter } from "../src/server/chatServer";
+import gameProxy from "../src/server/gameProxy.js";
+import { chatRouter } from "../src/server/chatServer.js";
 
 // Initialize Stripe gracefully
 let stripeClient: Stripe | null = null;
