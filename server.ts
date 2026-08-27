@@ -14,6 +14,11 @@ async function startServer() {
   app.use(express.json({ limit: "25mb" }));
   app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
+  // Health check route
+  app.get(["/api/health", "/health"], (_req, res) => {
+    res.json({ status: "ok", timestamp: Date.now() });
+  });
+
   // Attach API routes
   app.use("/api/public", gameProxy);
   app.use("/api/chat", chatRouter);

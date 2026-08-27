@@ -332,19 +332,25 @@ router.get("/gn/*", async (req, res) => {
       try {
         const r = await fetch(ghUrl, { redirect: "follow" });
         if (r.ok) response = r;
-      } catch {}
+      } catch (err) {
+        console.warn("Proxy gh fallback error:", err);
+      }
       cleanPathNoQuery = ghSubPath.split("?")[0] || "";
     } else if (rawPath.startsWith("http:/") || rawPath.startsWith("https:/")) {
       const fullUrl = rawPath.replace(/^(https?:)\/*/, "$1//");
       try {
         const r = await fetch(fullUrl, { redirect: "follow" });
         if (r.ok) response = r;
-      } catch {}
+      } catch (err) {
+        console.warn("Proxy fullUrl error:", err);
+      }
     } else if (rawPath.startsWith("http://") || rawPath.startsWith("https://")) {
       try {
         const r = await fetch(rawPath, { redirect: "follow" });
         if (r.ok) response = r;
-      } catch {}
+      } catch (err) {
+        console.warn("Proxy rawPath error:", err);
+      }
     } else {
       const cleanGamePath = rawPath.replace(/^game\//, "");
       cleanPathNoQuery = cleanGamePath.split("?")[0] || "";

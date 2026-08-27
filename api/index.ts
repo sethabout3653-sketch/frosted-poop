@@ -1,7 +1,7 @@
 import express from "express";
 import Stripe from "stripe";
-import gameProxy from "../src/server/gameProxy.js";
-import { chatRouter } from "../src/server/chatServer.js";
+import gameProxy from "../src/server/gameProxy";
+import { chatRouter } from "../src/server/chatServer";
 
 // Initialize Stripe gracefully
 let stripeClient: Stripe | null = null;
@@ -39,16 +39,6 @@ app.use((req, res, next) => {
 });
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
-// Normalize request URLs across different Vercel serverless routing behaviors
-app.use((req, _res, next) => {
-  // If Vercel rewrote URL or passed x-matched-path / originalUrl
-  const matchedPath = (req.headers["x-matched-path"] as string) || (req.headers["x-now-route-matches"] as string);
-  if (matchedPath && (req.url === "/api" || req.url === "/api/index" || req.url === "/api/index.ts")) {
-    req.url = matchedPath;
-  }
-  next();
-});
-
 // Health check endpoint
 app.get(["/api/health", "/health"], (_req, res) => {
   res.json({ status: "ok", timestamp: Date.now(), runtime: "vercel-serverless" });
@@ -85,7 +75,7 @@ app.post(["/api/create-checkout-session", "/create-checkout-session"], async (re
   }
 });
 
-// Mount Chat Router at all possible Vercel request paths
+// Mount Chat Router at all possible paths
 app.use("/api/chat", chatRouter);
 app.use("/chat", chatRouter);
 
@@ -93,6 +83,9 @@ app.use("/chat", chatRouter);
 app.use("/api/public", gameProxy);
 app.use("/public", gameProxy);
 app.use(gameProxy);
+
+// If request reached here and has a direct chat route (e.g. /join, /state, /me)
+app.use(chatRouter);
 
 // Fallback error handler for Vercel functions
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -103,4 +96,6 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
   });
 });
 
-export default app;
+export default function handler(req: any, res: any) {
+  return app(req, res);
+}

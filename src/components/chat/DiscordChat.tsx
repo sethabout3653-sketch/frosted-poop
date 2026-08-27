@@ -67,12 +67,15 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
             setToken(null);
           }
         } else {
-          // Token invalid
+          // Token invalid or session expired
           localStorage.removeItem("discord_chat_token");
           setToken(null);
         }
-      } catch (err) {
-        console.error("Auth verify error:", err);
+      } catch (err: any) {
+        console.warn("Auth verify notice:", err?.message || err);
+        // On network failure or invalid session state, clear token so login form displays cleanly
+        localStorage.removeItem("discord_chat_token");
+        setToken(null);
       } finally {
         setIsVerifyingAuth(false);
       }

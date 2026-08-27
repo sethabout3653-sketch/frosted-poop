@@ -74,6 +74,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const currentUserRef = useRef(currentUser);
   const knownMessageIdsRef = useRef<Set<string>>(new Set());
   const initialLoadDoneRef = useRef(false);
+  const isPollingInProgressRef = useRef(false);
 
   useEffect(() => {
     activeChannelIdRef.current = activeChannelId;
@@ -234,14 +235,21 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
 
   // Main Polling Synchronization Loop
   const fetchSyncState = useCallback(async () => {
-    if (!tokenRef.current) return;
+    if (!tokenRef.current || isPollingInProgressRef.current) return;
+    isPollingInProgressRef.current = true;
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 9000);
+
     try {
       let res = await fetch("/api/chat/state", {
         headers: { Authorization: `Bearer ${tokenRef.current}` },
+        signal: controller.signal,
       });
       if (res.status === 404) {
         res = await fetch("/chat/state", {
           headers: { Authorization: `Bearer ${tokenRef.current}` },
+          signal: controller.signal,
         });
       }
       if (res.status === 401) {
@@ -330,7 +338,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
             .filter((o: any) => o.userId !== currentUserRef.current!.id)
             .map((o: any) => o.userId);
 
-          // 1. Initiate connections to new occupants (Tie-breaker: we initiate if our ID is lexicographically greater)
+          // 1. Initiate connections to new occupants
           for (const peerId of activePeerIds) {
             if (!pcsRef.current[peerId]) {
               const pc = createPeerConnection(peerId);
@@ -341,7 +349,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
                   await pc.setLocalDescription(offer);
                   await sendSignal(peerId, offer);
                 } catch (e) {
-                  console.error("Failed to create offer:", e);
+                  console.warn("Failed to create offer:", e);
                 }
               }
             }
@@ -355,19 +363,24 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           });
         }
       }
-    } catch (err) {
-      console.error("HTTP Sync Poll error:", err);
+    } catch (err: any) {
+      if (err?.name !== "AbortError") {
+        console.warn("Chat background sync notice:", err?.message || err);
+      }
+    } finally {
+      window.clearTimeout(timeoutId);
+      isPollingInProgressRef.current = false;
     }
   }, [currentVoiceChannelId, handleIncomingSignal, createPeerConnection, onLogout]);
 
-  // Run synchronization poll every 1.5 seconds (high-responsiveness serverless alternative)
+  // Run synchronization poll every 2 seconds
   useEffect(() => {
     if (!token) return;
     fetchSyncState();
 
     const timer = window.setInterval(() => {
       fetchSyncState();
-    }, 1500);
+    }, 2000);
 
     return () => {
       window.clearInterval(timer);

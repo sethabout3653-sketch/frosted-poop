@@ -2,7 +2,7 @@ import { Router } from "express";
 import { randomBytes } from "crypto";
 import fs from "fs";
 import path from "path";
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import {
   getFirestore,
   doc,
@@ -47,8 +47,8 @@ try {
   console.warn("Using embedded default Firebase configuration:", e);
 }
 
-// Initialize Firebase App & Firestore Database
-const app = initializeApp(firebaseConfig);
+// Initialize Firebase App & Firestore Database safely for serverless environments
+const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || "(default)");
 
 export interface UserRecord {
@@ -213,6 +213,29 @@ chatRouter.get("/messages/:channelId", async (req, res) => {
   }
 });
 
+// In-memory fast session cache to avoid redundant database reads per poll
+const sessionMemoryCache = new Map<string, { userId: string; cachedAt: number }>();
+const userLastSeenWriteCache = new Map<string, number>();
+
+async function resolveUserIdFromToken(token: string): Promise<string | null> {
+  if (!token) return null;
+  const cached = sessionMemoryCache.get(token);
+  if (cached && Date.now() - cached.cachedAt < 60000) {
+    return cached.userId;
+  }
+  try {
+    const sessionDoc = await getDoc(doc(db, "sessions", token));
+    if (sessionDoc.exists()) {
+      const uid = sessionDoc.data().userId;
+      sessionMemoryCache.set(token, { userId: uid, cachedAt: Date.now() });
+      return uid;
+    }
+  } catch (e) {
+    console.warn("Session lookup error:", e);
+  }
+  return null;
+}
+
 // GET /api/chat/state
 chatRouter.get("/state", async (req, res) => {
   try {
@@ -221,47 +244,51 @@ chatRouter.get("/state", async (req, res) => {
 
     let currentUserId: string | null = null;
     if (token) {
-      const sessionDoc = await getDoc(doc(db, "sessions", token));
-      if (sessionDoc.exists()) {
-        currentUserId = sessionDoc.data().userId;
-        await updateDoc(doc(db, "users", currentUserId), {
-          lastSeen: Date.now(),
-          status: "online",
-        });
+      currentUserId = await resolveUserIdFromToken(token);
+      if (currentUserId) {
+        const lastWrite = userLastSeenWriteCache.get(currentUserId) || 0;
+        const now = Date.now();
+        // Debounce lastSeen write to at most once per 6 seconds to prevent Firestore saturation
+        if (now - lastWrite > 6000) {
+          userLastSeenWriteCache.set(currentUserId, now);
+          updateDoc(doc(db, "users", currentUserId), {
+            lastSeen: now,
+            status: "online",
+          }).catch((err) => console.warn("Background lastSeen update warning:", err));
+        }
       }
     }
 
     const now = Date.now();
 
-    // Retrieve all users from Firestore
-    const usersSnapshot = await getDocs(collection(db, "users"));
-    const allUsers: UserRecord[] = [];
+    // Fetch all collections in parallel
+    const [usersSnapshot, msgsSnapshot, typingSnapshot, signalsSnapshot] = await Promise.all([
+      getDocs(collection(db, "users")),
+      getDocs(query(collection(db, "messages"), orderBy("timestamp", "asc"), limit(100))),
+      getDocs(collection(db, "typing")),
+      currentUserId
+        ? getDocs(query(collection(db, "signals"), where("targetUserId", "==", currentUserId)))
+        : Promise.resolve({ docs: [], forEach: () => {} } as any),
+    ]);
 
-    // Cleanup offline/timed out users (timeout threshold: 12 seconds for serverless tolerance)
-    for (const d of usersSnapshot.docs) {
+    const allUsers: UserRecord[] = [];
+    usersSnapshot.forEach((d) => {
       const u = d.data() as UserRecord;
-      if (now - u.lastSeen > 12000) {
-        if (u.status !== "offline" || u.currentVoiceChannelId !== null) {
-          u.status = "offline";
-          u.currentVoiceChannelId = null;
-          await updateDoc(doc(db, "users", u.id), {
-            status: "offline",
-            currentVoiceChannelId: null,
-          });
-        }
+      // Mark as offline dynamically if lastSeen is older than 18 seconds
+      const isOnline = now - (u.lastSeen || 0) <= 18000;
+      if (!isOnline) {
+        u.status = "offline";
+        u.currentVoiceChannelId = null;
       }
       allUsers.push(u);
-    }
+    });
 
-    // Get active online users
+    // Active online users
     const onlineUsers = allUsers
       .filter((u) => u.status === "online")
       .map(({ lastSeen, ...safe }) => safe);
 
-    // Retrieve latest messages
-    const msgsSnapshot = await getDocs(
-      query(collection(db, "messages"), orderBy("timestamp", "asc"), limit(100)),
-    );
+    // Messages mapped by channel
     const allMessages: Record<string, ChatMessage[]> = {};
     msgsSnapshot.forEach((d) => {
       const m = d.data() as ChatMessage;
@@ -271,8 +298,7 @@ chatRouter.get("/state", async (req, res) => {
       allMessages[m.channelId].push(m);
     });
 
-    // Retrieve typing statuses
-    const typingSnapshot = await getDocs(collection(db, "typing"));
+    // Typing statuses
     const typing: Record<string, string[]> = {};
     typingSnapshot.forEach((d) => {
       const channelId = d.id;
@@ -286,7 +312,7 @@ chatRouter.get("/state", async (req, res) => {
       }
     });
 
-    // Compile voice channel states
+    // Voice channel occupants
     const voiceStates: Record<string, any[]> = {};
     for (const u of allUsers) {
       if (u.status === "online" && u.currentVoiceChannelId) {
@@ -305,24 +331,17 @@ chatRouter.get("/state", async (req, res) => {
       }
     }
 
-    // Retrieve signals queued for this client
+    // Signals for the requesting user
     const rtcSignals: Array<{ senderId: string; signalData: any }> = [];
-    if (currentUserId) {
-      const signalsQuery = query(
-        collection(db, "signals"),
-        where("targetUserId", "==", currentUserId),
-      );
-      const signalsSnapshot = await getDocs(signalsQuery);
-
-      signalsSnapshot.forEach((d) => {
+    if (signalsSnapshot && signalsSnapshot.docs) {
+      signalsSnapshot.docs.forEach((d: any) => {
         const s = d.data();
         rtcSignals.push({
           senderId: s.senderId,
           signalData: typeof s.signalData === "string" ? JSON.parse(s.signalData) : s.signalData,
         });
-        // Consume signals on retrieval
         deleteDoc(doc(db, "signals", d.id)).catch((e) =>
-          console.error("Signal consumption delete error:", e),
+          console.warn("Signal delete error:", e),
         );
       });
     }
