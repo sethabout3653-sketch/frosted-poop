@@ -74,39 +74,6 @@ export const CHANNELS = [
   { id: "general-voice", name: "General Voice", type: "voice", topic: "General Voice Chat Room" },
 ];
 
-// Initialize default channels with welcome messages if collection is empty
-const seedWelcomeMessages = async () => {
-  try {
-    const msgsRef = collection(db, "messages");
-    const q = query(msgsRef, limit(1));
-    const snapshot = await getDocs(q);
-
-    if (snapshot.empty) {
-      const systemId = "system-bot";
-      const now = Date.now();
-      const msgId = "msg-welcome-1";
-
-      const welcomeMsg: ChatMessage = {
-        id: msgId,
-        channelId: "general",
-        userId: systemId,
-        username: "FrostedBot",
-        displayName: "Frosted Bot",
-        avatarColor: "#ffffff",
-        content: "Welcome to Frosted Chat! 🎉 Enter a username to chat with everyone.",
-        timestamp: now - 3600000,
-        reactions: { "👋": ["FrostedBot"] },
-      };
-
-      await setDoc(doc(db, "messages", msgId), welcomeMsg);
-    }
-  } catch (err) {
-    console.error("Failed to seed welcome message:", err);
-  }
-};
-
-seedWelcomeMessages();
-
 const AVATAR_COLORS = [
   "#5865f2", // Discord Blurple
   "#57f287", // Green
