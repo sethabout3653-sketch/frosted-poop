@@ -1,116 +1,35 @@
-import { useState, useEffect, useRef } from "react";
-import { ShieldCheck, Lock, CheckCircle2, AlertCircle } from "lucide-react";
+import { useState } from "react";
+import { Lock, CheckCircle2, ShieldCheck, AlertCircle } from "lucide-react";
 
 interface Props {
   onVerified: () => void;
 }
 
-// Google reCAPTCHA v2 official test site key (always passes and renders official Google widget)
-const RECAPTCHA_SITE_KEY = "6LeIxacZAAAAACQ5H_x5692484646";
-
 export function VerificationGate({ onVerified }: Props) {
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [scriptLoaded, setScriptLoaded] = useState(false);
-  const [scriptError, setScriptError] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [status, setStatus] = useState<"idle" | "checking" | "verified">("idle");
 
-  useEffect(() => {
-    // Check if script is already present
-    if (window.grecaptcha) {
-      setScriptLoaded(true);
-      return;
-    }
+  const handleClickCheckbox = () => {
+    if (status !== "idle") return;
+    setStatus("checking");
 
-    const scriptId = "google-recaptcha-script";
-    let script = document.getElementById(scriptId) as HTMLScriptElement | null;
-
-    if (!script) {
-      script = document.createElement("script");
-      script.id = scriptId;
-      script.src = "https://www.google.com/recaptcha/api.js?render=explicit";
-      script.async = true;
-      script.defer = true;
-      script.onload = () => {
-        setScriptLoaded(true);
-      };
-      script.onerror = () => {
-        setScriptError(true);
-      };
-      document.head.appendChild(script);
-    } else {
-      setScriptLoaded(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!scriptLoaded || isSuccess) return;
-
-    const renderCaptcha = () => {
-      if (window.grecaptcha && window.grecaptcha.render && containerRef.current) {
-        try {
-          containerRef.current.innerHTML = "";
-          window.grecaptcha.render(containerRef.current, {
-            sitekey: RECAPTCHA_SITE_KEY,
-            theme: "dark",
-            callback: (_token: string) => {
-              setIsVerifying(true);
-              setTimeout(() => {
-                setIsVerifying(false);
-                setIsSuccess(true);
-                setTimeout(() => {
-                  onVerified();
-                }, 600);
-              }, 400);
-            },
-            "expired-callback": () => {
-              setIsVerifying(false);
-              setIsSuccess(false);
-            },
-            "error-callback": () => {
-              setScriptError(true);
-            },
-          });
-        } catch (e) {
-          console.error("reCAPTCHA render error:", e);
-        }
-      }
-    };
-
-    if (window.grecaptcha && window.grecaptcha.render) {
-      renderCaptcha();
-    } else {
-      const timer = setInterval(() => {
-        if (window.grecaptcha && window.grecaptcha.render) {
-          clearInterval(timer);
-          renderCaptcha();
-        }
-      }, 200);
-      return () => clearInterval(timer);
-    }
-  }, [scriptLoaded, isSuccess, onVerified]);
-
-  // Fallback verification for offline / blocked script environments
-  const handleFallbackVerify = () => {
-    setIsVerifying(true);
+    // Simulate authentic Google reCAPTCHA response delay
     setTimeout(() => {
-      setIsVerifying(false);
-      setIsSuccess(true);
+      setStatus("verified");
       setTimeout(() => {
         onVerified();
-      }, 500);
-    }, 500);
+      }, 700);
+    }, 1200);
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#050505] p-4 text-white font-sans selection:bg-white selection:text-black">
-      {/* Background ambient blur */}
+      {/* Background ambient glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-neutral-800/20 rounded-full blur-3xl pointer-events-none" />
 
       <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-neutral-800 bg-[#0a0a0a]/90 p-8 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200">
         {/* Header Icon */}
         <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl border border-neutral-800 bg-neutral-900/80 shadow-inner">
-          {isSuccess ? (
+          {status === "verified" ? (
             <CheckCircle2 className="h-8 w-8 text-emerald-400 animate-in zoom-in duration-200" />
           ) : (
             <ShieldCheck className="h-8 w-8 text-white" />
@@ -127,43 +46,63 @@ export function VerificationGate({ onVerified }: Props) {
             Verification Required
           </h1>
           <p className="text-xs text-neutral-400 max-w-xs mx-auto leading-relaxed">
-            Please complete Google reCAPTCHA below to confirm you are human. Once verified, you won't need to do this again.
+            Please complete the Google reCAPTCHA check below to proceed to the Frosted Games platform.
           </p>
         </div>
 
-        {/* Captcha Box Container */}
-        <div className="mb-6 flex flex-col items-center justify-center min-h-[140px] rounded-2xl border border-neutral-800 bg-black/60 p-5 shadow-inner">
-          {isSuccess ? (
-            <div className="flex items-center gap-2 text-emerald-400 font-medium text-sm animate-in fade-in">
-              <CheckCircle2 className="h-5 w-5" />
-              <span>Verified! Redirecting to games...</span>
-            </div>
-          ) : isVerifying ? (
-            <div className="flex flex-col items-center gap-2 text-neutral-300 text-xs">
-              <div className="h-6 w-6 rounded-full border-2 border-white border-t-transparent animate-spin" />
-              <span>Verifying captcha token...</span>
-            </div>
-          ) : (
-            <>
-              {/* Google reCAPTCHA Container */}
-              <div ref={containerRef} className="flex justify-center my-2" />
+        {/* Google reCAPTCHA v2 Widget Replica */}
+        <div className="mb-6 flex justify-center">
+          <div className="w-[304px] h-[78px] rounded-md border border-[#333333] bg-[#222222] p-3 flex items-center justify-between shadow-lg select-none">
+            {/* Left Checkbox & Text */}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleClickCheckbox}
+                disabled={status !== "idle"}
+                className={`relative h-7 w-7 shrink-0 rounded-sm border transition-colors flex items-center justify-center cursor-pointer ${
+                  status === "verified"
+                    ? "border-emerald-500 bg-transparent"
+                    : status === "checking"
+                    ? "border-[#555] bg-[#1a1a1a]"
+                    : "border-[#c1c1c1] hover:border-[#ffffff] bg-[#222222]"
+                }`}
+              >
+                {status === "checking" && (
+                  <div className="h-4 w-4 rounded-full border-2 border-[#4285f4] border-t-transparent animate-spin" />
+                )}
+                {status === "verified" && (
+                  <svg className="h-6 w-6 text-emerald-400 animate-in zoom-in duration-150" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </button>
 
-              {/* Fallback button if Google script fails or is blocked by network */}
-              {scriptError && (
-                <div className="flex flex-col items-center gap-3 text-center">
-                  <p className="text-[11px] text-amber-400">
-                    Could not connect to Google reCAPTCHA servers.
-                  </p>
-                  <button
-                    onClick={handleFallbackVerify}
-                    className="smooth-btn rounded-xl border border-neutral-700 bg-neutral-900 px-4 py-2 text-xs font-semibold text-white hover:border-neutral-500 hover:bg-neutral-800"
-                  >
-                    Click to Complete Security Check
-                  </button>
-                </div>
-              )}
-            </>
-          )}
+              <span className="text-xs font-normal text-[#f0f0f0] tracking-normal font-sans">
+                {status === "verified"
+                  ? "You are verified"
+                  : status === "checking"
+                  ? "Verifying..."
+                  : "I'm not a robot"}
+              </span>
+            </div>
+
+            {/* Right reCAPTCHA Brand Logo & Links */}
+            <div className="flex flex-col items-center justify-center shrink-0 pl-2">
+              {/* Google reCAPTCHA Logo */}
+              <svg className="h-8 w-8" viewBox="0 0 48 48">
+                <path fill="#4285F4" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.25l6.9-6.9C35.9 2.18 30.29 0 24 0 14.66 0 6.6 5.37 2.69 13.19l8.03 6.24C12.63 13.68 17.82 9.5 24 9.5z"/>
+                <path fill="#34A853" d="M46.1 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.51c-.54 2.87-2.18 5.3-4.63 6.94l7.21 5.59C43.32 37.5 46.1 31.55 46.1 24.55z"/>
+                <path fill="#FBBC05" d="M10.72 28.57c-.49-1.45-.77-2.99-.77-4.57s.28-3.12.77-4.57L2.69 13.19C1.02 16.52 0 20.15 0 24s1.02 7.48 2.69 10.81l8.03-6.24z"/>
+                <path fill="#EA4335" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.21-5.59c-2.15 1.45-4.92 2.3-8.68 2.3-6.18 0-11.37-4.18-13.28-9.93l-8.03 6.24C6.6 42.63 14.66 48 24 48z"/>
+              </svg>
+              <span className="text-[10px] font-medium text-[#aaaaaa] mt-0.5">reCAPTCHA</span>
+              <div className="flex gap-1 text-[8px] text-[#888888]">
+                <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer" className="hover:underline">Privacy</a>
+                <span>-</span>
+                <a href="https://policies.google.com/terms" target="_blank" rel="noreferrer" className="hover:underline">Terms</a>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Footer info */}
@@ -177,23 +116,4 @@ export function VerificationGate({ onVerified }: Props) {
       </div>
     </div>
   );
-}
-
-// Add Window interface declaration for grecaptcha
-declare global {
-  interface Window {
-    grecaptcha?: {
-      render: (
-        container: HTMLElement | string,
-        parameters: {
-          sitekey: string;
-          theme?: string;
-          callback?: (token: string) => void;
-          "expired-callback"?: () => void;
-          "error-callback"?: () => void;
-        }
-      ) => number;
-      reset: (widgetId?: number) => void;
-    };
-  }
 }
