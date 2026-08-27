@@ -92,11 +92,11 @@ export function DiscordAuth({ onLoginSuccess }: Props) {
       try {
         data = text ? JSON.parse(text) : {};
       } catch {
-        throw new Error(res.ok ? "Server returned an invalid response" : "Server error. Please try again.");
+        data = {};
       }
 
       if (!res.ok) {
-        throw new Error(data.error || "Authentication failed");
+        throw new Error(data.error || (text && !text.startsWith("<") ? text : `Server error (${res.status}). Please try again.`));
       }
 
       // Store credentials & registered status in localStorage to remember site state

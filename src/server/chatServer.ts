@@ -1,6 +1,6 @@
 import { WebSocketServer, WebSocket } from "ws";
 import { Router } from "express";
-import crypto from "crypto";
+import { createHash, randomBytes } from "crypto";
 
 export const chatRouter = Router();
 
@@ -102,7 +102,7 @@ seedWelcomeMessages();
 
 // Simple hash function for passwords
 function hashPassword(password: string): string {
-  return crypto.createHash("sha256").update(password + "frosted_salt_2026").digest("hex");
+  return createHash("sha256").update(password + "frosted_salt_2026").digest("hex");
 }
 
 const AVATAR_COLORS = [
@@ -120,81 +120,91 @@ const AVATAR_COLORS = [
 
 // POST /api/chat/signup
 chatRouter.post("/signup", (req, res) => {
-  const { username, password, displayName, avatarColor } = req.body;
+  try {
+    const { username, password, displayName, avatarColor } = req.body || {};
 
-  if (!username || !password) {
-    return res.status(400).json({ error: "Username and password are required" });
+    if (!username || !password) {
+      return res.status(400).json({ error: "Username and password are required" });
+    }
+
+    const cleanUsername = String(username).trim().toLowerCase();
+    if (cleanUsername.length < 3 || cleanUsername.length > 20) {
+      return res.status(400).json({ error: "Username must be between 3 and 20 characters" });
+    }
+
+    // Password requirements validation
+    const passStr = String(password);
+    const hasMinLength = passStr.length >= 8;
+    const hasUppercase = /[A-Z]/.test(passStr);
+    const hasLowercase = /[a-z]/.test(passStr);
+    const hasNumberOrSpecial = /[0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(passStr);
+
+    if (!hasMinLength || !hasUppercase || !hasLowercase || !hasNumberOrSpecial) {
+      return res.status(400).json({
+        error: "Password must be at least 8 characters long and include uppercase, lowercase, and a number or symbol.",
+      });
+    }
+
+    if (usernameToUser.has(cleanUsername)) {
+      return res.status(409).json({ error: "Username is already taken" });
+    }
+
+    const userId = "usr-" + randomBytes(8).toString("hex");
+    const token = "tok-" + randomBytes(16).toString("hex");
+
+    const newUser: UserRecord = {
+      id: userId,
+      username: cleanUsername,
+      displayName: displayName ? String(displayName).trim() : username,
+      passwordHash: hashPassword(password),
+      avatarColor: avatarColor || AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)],
+      status: "online",
+      currentVoiceChannelId: null,
+      isMuted: false,
+      isDeafened: false,
+      isSpeaking: false,
+      createdAt: Date.now(),
+    };
+
+    users.set(userId, newUser);
+    usernameToUser.set(cleanUsername, newUser);
+    sessions.set(token, userId);
+
+    // Return user without password hash
+    const { passwordHash, ...safeUser } = newUser;
+    return res.json({ token, user: safeUser });
+  } catch (err: any) {
+    console.error("Signup error:", err);
+    return res.status(500).json({ error: err?.message || "Internal server error during registration" });
   }
-
-  const cleanUsername = String(username).trim().toLowerCase();
-  if (cleanUsername.length < 3 || cleanUsername.length > 20) {
-    return res.status(400).json({ error: "Username must be between 3 and 20 characters" });
-  }
-
-  // Password requirements validation
-  const passStr = String(password);
-  const hasMinLength = passStr.length >= 8;
-  const hasUppercase = /[A-Z]/.test(passStr);
-  const hasLowercase = /[a-z]/.test(passStr);
-  const hasNumberOrSpecial = /[0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(passStr);
-
-  if (!hasMinLength || !hasUppercase || !hasLowercase || !hasNumberOrSpecial) {
-    return res.status(400).json({
-      error: "Password must be at least 8 characters long and include uppercase, lowercase, and a number or symbol.",
-    });
-  }
-
-  if (usernameToUser.has(cleanUsername)) {
-    return res.status(409).json({ error: "Username is already taken" });
-  }
-
-  const userId = "usr-" + crypto.randomBytes(8).toString("hex");
-  const token = "tok-" + crypto.randomBytes(16).toString("hex");
-
-  const newUser: UserRecord = {
-    id: userId,
-    username: cleanUsername,
-    displayName: displayName ? String(displayName).trim() : username,
-    passwordHash: hashPassword(password),
-    avatarColor: avatarColor || AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)],
-    status: "online",
-    currentVoiceChannelId: null,
-    isMuted: false,
-    isDeafened: false,
-    isSpeaking: false,
-    createdAt: Date.now(),
-  };
-
-  users.set(userId, newUser);
-  usernameToUser.set(cleanUsername, newUser);
-  sessions.set(token, userId);
-
-  // Return user without password hash
-  const { passwordHash, ...safeUser } = newUser;
-  return res.json({ token, user: safeUser });
 });
 
 // POST /api/chat/login
 chatRouter.post("/login", (req, res) => {
-  const { username, password } = req.body;
+  try {
+    const { username, password } = req.body || {};
 
-  if (!username || !password) {
-    return res.status(400).json({ error: "Username and password are required" });
+    if (!username || !password) {
+      return res.status(400).json({ error: "Username and password are required" });
+    }
+
+    const cleanUsername = String(username).trim().toLowerCase();
+    const user = usernameToUser.get(cleanUsername);
+
+    if (!user || user.passwordHash !== hashPassword(password)) {
+      return res.status(401).json({ error: "Invalid username or password" });
+    }
+
+    const token = "tok-" + randomBytes(16).toString("hex");
+    sessions.set(token, user.id);
+    user.status = "online";
+
+    const { passwordHash, ...safeUser } = user;
+    return res.json({ token, user: safeUser });
+  } catch (err: any) {
+    console.error("Login error:", err);
+    return res.status(500).json({ error: err?.message || "Internal server error during login" });
   }
-
-  const cleanUsername = String(username).trim().toLowerCase();
-  const user = usernameToUser.get(cleanUsername);
-
-  if (!user || user.passwordHash !== hashPassword(password)) {
-    return res.status(401).json({ error: "Invalid username or password" });
-  }
-
-  const token = "tok-" + crypto.randomBytes(16).toString("hex");
-  sessions.set(token, user.id);
-  user.status = "online";
-
-  const { passwordHash, ...safeUser } = user;
-  return res.json({ token, user: safeUser });
 });
 
 // GET /api/chat/me
