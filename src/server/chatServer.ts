@@ -21,19 +21,30 @@ import { GoogleGenAI, Type } from "@google/genai";
 
 export const chatRouter = Router();
 
-// Load firebase-applet-config.json
-let firebaseConfig: any = null;
+// Load firebase-applet-config.json with safe embedded fallback for Vercel/serverless environments
+const DEFAULT_FIREBASE_CONFIG = {
+  projectId: "analog-cathode-kfs6l",
+  appId: "1:630735569759:web:09b818a7611bf40c41acea",
+  apiKey: "AIzaSyCkOwYbegyyClXTd2WTgv60sGPp8o6xj4E",
+  authDomain: "analog-cathode-kfs6l.firebaseapp.com",
+  firestoreDatabaseId: "ai-studio-gamesyeahboyfros-051aea72-6504-4880-9fc5-c07824e713ac",
+  storageBucket: "analog-cathode-kfs6l.firebasestorage.app",
+  messagingSenderId: "630735569759",
+  measurementId: "",
+  oAuthClientId: "630735569759-c7i7hb84frr5ekvspk7qndpn1ldrupn6.apps.googleusercontent.com",
+  recaptchaSiteKey: "",
+};
+
+let firebaseConfig: any = DEFAULT_FIREBASE_CONFIG;
 try {
   const configPath = path.join(process.cwd(), "firebase-applet-config.json");
   if (fs.existsSync(configPath)) {
     firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+  } else if (process.env.FIREBASE_CONFIG) {
+    firebaseConfig = JSON.parse(process.env.FIREBASE_CONFIG);
   }
 } catch (e) {
-  console.error("Failed to load firebase-applet-config.json", e);
-}
-
-if (!firebaseConfig) {
-  throw new Error("firebase-applet-config.json is missing or corrupt!");
+  console.warn("Using embedded default Firebase configuration:", e);
 }
 
 // Initialize Firebase App & Firestore Database

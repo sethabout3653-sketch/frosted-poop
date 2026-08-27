@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchGames, type Game } from "@/lib/games";
 import { useFrostedStore } from "@/lib/frostedStore";
@@ -8,6 +8,7 @@ import { GamePlayer } from "./GamePlayer";
 import { FrostedSettingsModal } from "./FrostedSettingsModal";
 import { VerificationGate } from "./VerificationGate";
 import { DiscordChat } from "@/components/chat/DiscordChat";
+import { notificationManager } from "@/lib/notifications";
 
 export function FrostedApp() {
   const [isVerified, setIsVerified] = useState<boolean>(() => {
@@ -29,6 +30,18 @@ export function FrostedApp() {
   const { favorites, toggleFavorite, recentlyPlayed, recordPlay, cloak, updateCloak } =
     useFrostedStore();
 
+  // Listen for open-chat event when a desktop notification is clicked
+  useEffect(() => {
+    const handleOpenChat = () => {
+      setActiveGame(null);
+      setIsChatActive(true);
+    };
+    window.addEventListener("frosted-open-chat", handleOpenChat);
+    return () => {
+      window.removeEventListener("frosted-open-chat", handleOpenChat);
+    };
+  }, []);
+
   const handleVerify = () => {
     try {
       localStorage.setItem("frosted_verified_permanent", "true");
@@ -36,6 +49,7 @@ export function FrostedApp() {
     } catch {
       /* silent */
     }
+    notificationManager.requestPermission().catch(() => {});
     setIsVerified(true);
   };
 

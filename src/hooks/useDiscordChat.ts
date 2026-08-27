@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { User, Channel, ChatMessage, VoiceUser } from "@/types/chat";
 import { isInappropriateContent } from "../lib/moderation";
+import { notificationManager } from "../lib/notifications";
 
 interface Props {
   token: string | null;
@@ -19,12 +20,35 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const [currentVoiceChannelId, setCurrentVoiceChannelId] = useState<string | null>(null);
   const [voiceError, setVoiceError] = useState<string | null>(null);
 
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(() => {
+    return notificationManager.getPermission();
+  });
+
   const [isMuted, setIsMuted] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
   const [isSelfSpeaking, setIsSelfSpeaking] = useState(false);
 
   const [isSuspended, setIsSuspended] = useState(false);
   const [suspensionTimeLeft, setSuspensionTimeLeft] = useState(0);
+
+  // Automatic notification permission request
+  useEffect(() => {
+    if (notificationManager.isSupported()) {
+      if (Notification.permission === "default") {
+        notificationManager.requestPermission().then((perm) => {
+          setNotificationPermission(perm);
+        });
+      } else {
+        setNotificationPermission(Notification.permission);
+      }
+    }
+  }, []);
+
+  const requestNotificationPermission = useCallback(async () => {
+    const perm = await notificationManager.requestPermission();
+    setNotificationPermission(perm);
+    return perm;
+  }, []);
 
   // Countdown timer for voice suspension
   useEffect(() => {
@@ -48,6 +72,8 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const activeChannelIdRef = useRef(activeChannelId);
   const tokenRef = useRef(token);
   const currentUserRef = useRef(currentUser);
+  const knownMessageIdsRef = useRef<Set<string>>(new Set());
+  const initialLoadDoneRef = useRef(false);
 
   useEffect(() => {
     activeChannelIdRef.current = activeChannelId;
@@ -220,8 +246,53 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       if (res.ok) {
         const data = await res.json();
 
-        setChannels(data.channels || []);
+        const incomingChannels: Channel[] = data.channels || [];
+        setChannels(incomingChannels);
         if (data.users) setOnlineUsers(data.users);
+
+        // Process real notifications across all incoming messages
+        const allChannelMessages: Record<string, ChatMessage[]> = data.messages || {};
+        const channelNameMap = new Map(incomingChannels.map((c) => [c.id, c.name]));
+
+        if (!initialLoadDoneRef.current) {
+          // First fetch - initialize known IDs so we don't alert pre-existing history
+          Object.values(allChannelMessages).forEach((msgs) => {
+            msgs.forEach((m) => knownMessageIdsRef.current.add(m.id));
+          });
+          initialLoadDoneRef.current = true;
+        } else {
+          // Detect new incoming messages
+          Object.entries(allChannelMessages).forEach(([channelId, msgs]) => {
+            msgs.forEach((m) => {
+              if (!knownMessageIdsRef.current.has(m.id)) {
+                knownMessageIdsRef.current.add(m.id);
+
+                const isSelf =
+                  (currentUserRef.current && m.userId === currentUserRef.current.id) ||
+                  (currentUserRef.current && m.username === currentUserRef.current.username);
+
+                if (!isSelf) {
+                  const chName = channelNameMap.get(channelId) || channelId;
+                  const sender = m.displayName || m.username;
+                  const contentPreview =
+                    m.content || (m.attachmentUrl ? "Sent an attachment" : "New message");
+
+                  notificationManager.showNotification({
+                    title: `${sender} in #${chName}`,
+                    body: contentPreview,
+                    tag: `msg-${m.id}`,
+                    onClick: () => {
+                      setActiveChannelId(channelId);
+                      window.dispatchEvent(
+                        new CustomEvent("frosted-open-chat", { detail: { channelId } })
+                      );
+                    },
+                  });
+                }
+              }
+            });
+          });
+        }
 
         // Update messages for current active text channel
         if (data.messages && data.messages[activeChannelIdRef.current]) {
@@ -577,5 +648,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     leaveVoiceChannel,
     toggleMute,
     toggleDeafen,
+    notificationPermission,
+    requestNotificationPermission,
   };
 }

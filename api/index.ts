@@ -17,10 +17,35 @@ function getStripe(): Stripe {
 }
 
 const app = express();
-app.use(express.json({ limit: "25mb" }));
+
+// Enable CORS for all Vercel domains and client environments
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  next();
+});
+
+// JSON and URL-encoded body parsing with large limit for chat media/attachments
+app.use((req, res, next) => {
+  if (req.body && typeof req.body === "object") {
+    next();
+  } else {
+    express.json({ limit: "25mb" })(req, res, next);
+  }
+});
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
-app.post("/api/create-checkout-session", async (req, res) => {
+// Health check endpoint
+app.get(["/api/health", "/health"], (_req, res) => {
+  res.json({ status: "ok", timestamp: Date.now() });
+});
+
+// Stripe checkout session creation
+app.post(["/api/create-checkout-session", "/create-checkout-session"], async (req, res) => {
   try {
     const stripe = getStripe();
     const session = await stripe.checkout.sessions.create({
@@ -46,13 +71,24 @@ app.post("/api/create-checkout-session", async (req, res) => {
     res.json({ id: session.id, url: session.url });
   } catch (error: any) {
     console.error("Stripe Checkout Error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error?.message || "Stripe session failure" });
   }
 });
 
+// Mount chat routes (support both rewritten paths /api/chat and /chat)
 app.use("/api/chat", chatRouter);
+app.use("/chat", chatRouter);
+
+// Mount game proxy routes
 app.use("/api/public", gameProxy);
 app.use("/public", gameProxy);
 app.use(gameProxy);
+
+// Catch-all serverless error handler
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error("Vercel API error:", err);
+  if (res.headersSent) return;
+  res.status(err?.status || 500).json({ error: err?.message || "Internal API Error" });
+});
 
 export default app;

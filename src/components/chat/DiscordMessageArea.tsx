@@ -9,9 +9,13 @@ import {
   Image as ImageIcon,
   X,
   Plus,
+  Bell,
+  BellRing,
+  BellOff,
 } from "lucide-react";
 import type { Channel, ChatMessage, User } from "@/types/chat";
 import { isInappropriateContent } from "../../lib/moderation";
+import { notificationManager } from "../../lib/notifications";
 
 interface Props {
   activeChannel: Channel | undefined;
@@ -23,6 +27,8 @@ interface Props {
   onSendTyping: (isTyping: boolean) => void;
   onToggleUserList: () => void;
   showUserList: boolean;
+  notificationPermission?: NotificationPermission;
+  onRequestNotificationPermission?: () => Promise<NotificationPermission>;
 }
 
 const EMOJIS = ["👍", "❤️", "🔥", "🚀", "🎉", "🎮", "😂", "😎"];
@@ -66,15 +72,42 @@ export function DiscordMessageArea({
   onSendTyping,
   onToggleUserList,
   showUserList,
+  notificationPermission,
+  onRequestNotificationPermission,
 }: Props) {
   const [inputText, setInputText] = useState("");
   const [attachment, setAttachment] = useState<{ url: string; name: string } | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null); // messageId or null for main input
   const [errorText, setErrorText] = useState<string | null>(null);
   const [isCheckingLinks, setIsCheckingLinks] = useState(false);
+  const [notifFeedback, setNotifFeedback] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimerRef = useRef<any>(null);
+
+  const handleNotificationClick = async () => {
+    if (onRequestNotificationPermission) {
+      const res = await onRequestNotificationPermission();
+      if (res === "granted") {
+        notificationManager.showNotification({
+          title: "Frosted Chat Notifications Active",
+          body: "You will now receive alerts for new messages even when outside the app!",
+        });
+        setNotifFeedback("Notifications enabled!");
+        setTimeout(() => setNotifFeedback(null), 3000);
+      } else if (res === "denied") {
+        setNotifFeedback("Notifications blocked by browser. Please enable them in site settings.");
+        setTimeout(() => setNotifFeedback(null), 5000);
+      }
+    } else {
+      notificationManager.showNotification({
+        title: "Frosted Chat Notification Test",
+        body: "Real-time notifications and audio chimes are active!",
+      });
+      setNotifFeedback("Notification test sent!");
+      setTimeout(() => setNotifFeedback(null), 3000);
+    }
+  };
 
   // Auto scroll to bottom when new messages arrive
   useEffect(() => {
@@ -186,16 +219,61 @@ export function DiscordMessageArea({
           )}
         </div>
 
-        <button
-          onClick={onToggleUserList}
-          title="Toggle Member List"
-          className={`flex h-8 w-8 items-center justify-center rounded-lg hover:bg-neutral-800 transition-colors cursor-pointer ${
-            showUserList ? "text-white bg-neutral-800" : "text-neutral-400"
-          }`}
-        >
-          <Users className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Notification Button / Status */}
+          {notificationPermission === "granted" ? (
+            <button
+              onClick={handleNotificationClick}
+              title="Desktop notifications & chimes are active. Click to test!"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 transition cursor-pointer"
+            >
+              <BellRing className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Notifications Active</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleNotificationClick}
+              title="Enable real desktop notifications for new messages"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:bg-amber-500/25 transition cursor-pointer animate-pulse"
+            >
+              <Bell className="h-3.5 w-3.5" />
+              <span>Allow Notifications</span>
+            </button>
+          )}
+
+          {notifFeedback && (
+            <span className="text-[11px] text-neutral-300 hidden md:inline animate-fade-in">
+              {notifFeedback}
+            </span>
+          )}
+
+          <button
+            onClick={onToggleUserList}
+            title="Toggle Member List"
+            className={`flex h-8 w-8 items-center justify-center rounded-lg hover:bg-neutral-800 transition-colors cursor-pointer ${
+              showUserList ? "text-white bg-neutral-800" : "text-neutral-400"
+            }`}
+          >
+            <Users className="h-4 w-4" />
+          </button>
+        </div>
       </div>
+
+      {/* Notification Permission Banner if not enabled */}
+      {notificationPermission === "default" && (
+        <div className="flex items-center justify-between px-4 py-2 bg-gradient-to-r from-neutral-900 via-neutral-900 to-[#141414] border-b border-amber-500/20 text-xs">
+          <div className="flex items-center gap-2 text-neutral-300">
+            <Bell className="h-4 w-4 text-amber-400 shrink-0" />
+            <span>Enable real desktop notifications to get alerted whenever someone messages, even when you're off the app!</span>
+          </div>
+          <button
+            onClick={handleNotificationClick}
+            className="px-3 py-1 bg-amber-500 text-black font-semibold rounded hover:bg-amber-400 transition shrink-0 cursor-pointer"
+          >
+            Enable Now
+          </button>
+        </div>
+      )}
 
       {/* Message History Stream */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">

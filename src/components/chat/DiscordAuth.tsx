@@ -7,6 +7,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import type { User } from "@/types/chat";
+import { notificationManager } from "../../lib/notifications";
 
 interface Props {
   onLoginSuccess: (token: string, user: User) => void;
@@ -35,6 +36,9 @@ export function DiscordAuth({ onLoginSuccess }: Props) {
     e.preventDefault();
     setError(null);
     setLoading(true);
+
+    // Request notification permission during user gesture
+    notificationManager.requestPermission().catch(() => {});
 
     try {
       const res = await fetch("/api/chat/join", {

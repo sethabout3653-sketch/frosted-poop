@@ -108,6 +108,8 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
     leaveVoiceChannel,
     toggleMute,
     toggleDeafen,
+    notificationPermission,
+    requestNotificationPermission,
   } = useDiscordChat({ token, currentUser, onLogout: handleLogout });
 
   if (isVerifyingAuth) {
@@ -165,6 +167,8 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
         onSendTyping={sendTyping}
         onToggleUserList={() => setShowUserList(!showUserList)}
         showUserList={showUserList}
+        notificationPermission={notificationPermission}
+        onRequestNotificationPermission={requestNotificationPermission}
       />
 
       {/* 4. Right Online Members List */}
