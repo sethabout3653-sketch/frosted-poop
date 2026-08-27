@@ -2,6 +2,20 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import type { User, Channel, ChatMessage, VoiceUser } from "@/types/chat";
 import { isInappropriateContent } from "../lib/moderation";
 import { notificationManager } from "../lib/notifications";
+import { db } from "../lib/firebaseClient";
+import {
+  collection,
+  doc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  onSnapshot,
+  query,
+  orderBy,
+  limit,
+  where,
+  getDocs,
+} from "firebase/firestore";
 
 interface Props {
   token: string | null;
@@ -9,9 +23,14 @@ interface Props {
   onLogout: () => void;
 }
 
+const DEFAULT_CHANNELS: Channel[] = [
+  { id: "general", name: "general", type: "text", topic: "General community chat and discussions" },
+  { id: "general-voice", name: "General Voice", type: "voice", topic: "General Voice Chat Room" },
+];
+
 export function useDiscordChat({ token, currentUser, onLogout }: Props) {
-  const [isConnected, setIsConnected] = useState(true); // Always true since we poll HTTP
-  const [channels, setChannels] = useState<Channel[]>([]);
+  const [isConnected, setIsConnected] = useState(true);
+  const [channels, setChannels] = useState<Channel[]>(DEFAULT_CHANNELS);
   const [activeChannelId, setActiveChannelId] = useState<string>("general");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<User[]>([]);
@@ -31,7 +50,24 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const [isSuspended, setIsSuspended] = useState(false);
   const [suspensionTimeLeft, setSuspensionTimeLeft] = useState(0);
 
-  // Automatic notification permission request
+  // Audio & WebRTC Refs
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const pcsRef = useRef<Record<string, RTCPeerConnection>>({});
+  const remoteAudiosRef = useRef<Record<string, HTMLAudioElement>>({});
+  const activeChannelIdRef = useRef(activeChannelId);
+  const currentUserRef = useRef(currentUser);
+  const knownMessageIdsRef = useRef<Set<string>>(new Set());
+  const initialLoadDoneRef = useRef(false);
+
+  useEffect(() => {
+    activeChannelIdRef.current = activeChannelId;
+  }, [activeChannelId]);
+
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
+  // Request notification permissions
   useEffect(() => {
     if (notificationManager.isSupported()) {
       if (Notification.permission === "default") {
@@ -50,7 +86,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     return perm;
   }, []);
 
-  // Countdown timer for voice suspension
+  // Suspension countdown
   useEffect(() => {
     if (isSuspended && suspensionTimeLeft > 0) {
       const timer = window.setInterval(() => {
@@ -66,29 +102,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     }
   }, [isSuspended, suspensionTimeLeft]);
 
-  const localStreamRef = useRef<MediaStream | null>(null);
-  const pcsRef = useRef<Record<string, RTCPeerConnection>>({});
-  const remoteAudiosRef = useRef<Record<string, HTMLAudioElement>>({});
-  const activeChannelIdRef = useRef(activeChannelId);
-  const tokenRef = useRef(token);
-  const currentUserRef = useRef(currentUser);
-  const knownMessageIdsRef = useRef<Set<string>>(new Set());
-  const initialLoadDoneRef = useRef(false);
-  const isPollingInProgressRef = useRef(false);
-
-  useEffect(() => {
-    activeChannelIdRef.current = activeChannelId;
-  }, [activeChannelId]);
-
-  useEffect(() => {
-    tokenRef.current = token;
-  }, [token]);
-
-  useEffect(() => {
-    currentUserRef.current = currentUser;
-  }, [currentUser]);
-
-  // Handle local audio track states (Mute/Deafen)
+  // Audio track states (Mute/Deafen)
   useEffect(() => {
     if (localStreamRef.current) {
       localStreamRef.current.getAudioTracks().forEach((track) => {
@@ -97,32 +111,21 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     }
   }, [isMuted, isDeafened]);
 
-  // Apply deafen state to all active remote audio elements
   useEffect(() => {
     Object.values(remoteAudiosRef.current).forEach((audio) => {
       audio.muted = isDeafened;
     });
   }, [isDeafened]);
 
-  // Clean up all voice resources on unmount
-  useEffect(() => {
-    return () => {
-      cleanupVoice();
-    };
-  }, []);
-
-  const cleanupVoice = () => {
-    // Stop local tracks
+  const cleanupVoice = useCallback(() => {
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
     }
-    // Close PeerConnections
     Object.entries(pcsRef.current).forEach(([peerId, pc]) => {
       pc.close();
     });
     pcsRef.current = {};
-    // Clean up audio elements
     Object.values(remoteAudiosRef.current).forEach((audio) => {
       audio.srcObject = null;
       audio.remove();
@@ -130,26 +133,41 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     remoteAudiosRef.current = {};
     setCurrentVoiceChannelId(null);
     setIsSelfSpeaking(false);
-  };
+  }, []);
 
-  // Helper to send a signaling message to a target peer
-  const sendSignal = async (targetPeerId: string, signalData: any) => {
-    if (!tokenRef.current) return;
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      cleanupVoice();
+    };
+  }, [cleanupVoice]);
+
+  // WebRTC Signal Sender (Direct Cloud Firestore or HTTP API)
+  const sendSignal = useCallback(async (targetPeerId: string, signalData: any) => {
+    if (!currentUserRef.current) return;
     try {
-      await fetch("/api/chat/signal", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${tokenRef.current}`,
-        },
-        body: JSON.stringify({ targetPeerId, signalData }),
+      const signalId = `sig_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      // Direct Firestore signaling document
+      await setDoc(doc(db, "signals", signalId), {
+        id: signalId,
+        senderId: currentUserRef.current.id,
+        targetUserId: targetPeerId,
+        signalData: JSON.stringify(signalData),
+        timestamp: Date.now(),
       });
-    } catch (err) {
-      console.error("Failed to send RTC signal:", err);
+    } catch {
+      // Fallback via HTTP API
+      try {
+        await fetch("/api/chat/signal", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ targetPeerId, signalData }),
+        });
+      } catch {}
     }
-  };
+  }, []);
 
-  // Helper to create a new Peer Connection
+  // WebRTC Peer Connection Factory
   const createPeerConnection = useCallback(
     (peerId: string): RTCPeerConnection => {
       const pc = new RTCPeerConnection({
@@ -158,7 +176,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
 
       pcsRef.current[peerId] = pc;
 
-      // Attach local audio track if available
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((track) => {
           pc.addTrack(track, localStreamRef.current!);
@@ -186,28 +203,24 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
 
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
-          cleanupPeer(peerId);
+          if (pcsRef.current[peerId]) {
+            pcsRef.current[peerId].close();
+            delete pcsRef.current[peerId];
+          }
+          if (remoteAudiosRef.current[peerId]) {
+            remoteAudiosRef.current[peerId].srcObject = null;
+            remoteAudiosRef.current[peerId].remove();
+            delete remoteAudiosRef.current[peerId];
+          }
         }
       };
 
       return pc;
     },
-    [isDeafened],
+    [isDeafened, sendSignal]
   );
 
-  const cleanupPeer = (peerId: string) => {
-    if (pcsRef.current[peerId]) {
-      pcsRef.current[peerId].close();
-      delete pcsRef.current[peerId];
-    }
-    if (remoteAudiosRef.current[peerId]) {
-      remoteAudiosRef.current[peerId].srcObject = null;
-      remoteAudiosRef.current[peerId].remove();
-      delete remoteAudiosRef.current[peerId];
-    }
-  };
-
-  // Process incoming signaling messages
+  // Incoming RTC Signal Handler
   const handleIncomingSignal = useCallback(
     async (senderId: string, signalData: any) => {
       let pc = pcsRef.current[senderId];
@@ -227,245 +240,361 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           await pc.addIceCandidate(new RTCIceCandidate(signalData));
         }
       } catch (err) {
-        console.error("Error processing RTC signal:", err);
+        console.warn("RTC Signal handling:", err);
       }
     },
-    [createPeerConnection],
+    [createPeerConnection, sendSignal]
   );
 
-  // Main Polling Synchronization Loop
-  const fetchSyncState = useCallback(async () => {
-    if (!tokenRef.current || isPollingInProgressRef.current) return;
-    isPollingInProgressRef.current = true;
+  // --- Real-time Cloud Firestore Snapshots (Zero WebSockets) ---
+  useEffect(() => {
+    if (!currentUser) return;
 
-    const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), 9000);
-
-    try {
-      let res: Response | null = null;
-      try {
-        res = await fetch("/api/chat/state", {
-          headers: { Authorization: `Bearer ${tokenRef.current}` },
-          signal: controller.signal,
+    // 1. Listen for Real-Time Messages
+    const qMessages = query(collection(db, "messages"), orderBy("timestamp", "asc"), limit(200));
+    const unsubscribeMessages = onSnapshot(
+      qMessages,
+      (snapshot) => {
+        const incomingMessages: ChatMessage[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          incomingMessages.push({
+            id: docSnap.id,
+            channelId: data.channelId || "general",
+            userId: data.userId || "",
+            username: data.username || "Unknown",
+            displayName: data.displayName || data.username || "Unknown",
+            avatarColor: data.avatarColor || "#5865f2",
+            content: data.content || "",
+            attachmentUrl: data.attachmentUrl,
+            attachmentName: data.attachmentName,
+            timestamp: data.timestamp || Date.now(),
+            reactions: data.reactions || {},
+          });
         });
-      } catch (e: any) {
-        if (e?.name !== "AbortError") {
-          try {
-            res = await fetch("/chat/state", {
-              headers: { Authorization: `Bearer ${tokenRef.current}` },
-              signal: controller.signal,
-            });
-          } catch {}
-        }
-      }
 
-      if (!res) return;
+        // Filter messages for active channel
+        setMessages(incomingMessages.filter((m) => m.channelId === activeChannelIdRef.current));
 
-      if (res.status === 404) {
-        try {
-          const fallbackRes = await fetch("/chat/state", {
-            headers: { Authorization: `Bearer ${tokenRef.current}` },
-            signal: controller.signal,
-          });
-          if (fallbackRes.ok) res = fallbackRes;
-        } catch {}
-      }
-      if (res.status === 401) {
-        onLogout();
-        return;
-      }
-      if (res.ok) {
-        const data = await res.json();
-
-        const incomingChannels: Channel[] = data.channels || [];
-        setChannels(incomingChannels);
-        if (data.users) setOnlineUsers(data.users);
-
-        // Process real notifications across all incoming messages
-        const allChannelMessages: Record<string, ChatMessage[]> = data.messages || {};
-        const channelNameMap = new Map(incomingChannels.map((c) => [c.id, c.name]));
-
+        // Notifications for new messages
         if (!initialLoadDoneRef.current) {
-          // First fetch - initialize known IDs so we don't alert pre-existing history
-          Object.values(allChannelMessages).forEach((msgs) => {
-            msgs.forEach((m) => knownMessageIdsRef.current.add(m.id));
-          });
+          incomingMessages.forEach((m) => knownMessageIdsRef.current.add(m.id));
           initialLoadDoneRef.current = true;
         } else {
-          // Detect new incoming messages
-          Object.entries(allChannelMessages).forEach(([channelId, msgs]) => {
-            msgs.forEach((m) => {
-              if (!knownMessageIdsRef.current.has(m.id)) {
-                knownMessageIdsRef.current.add(m.id);
-
-                const isSelf =
-                  (currentUserRef.current && m.userId === currentUserRef.current.id) ||
-                  (currentUserRef.current && m.username === currentUserRef.current.username);
-
-                if (!isSelf) {
-                  const chName = channelNameMap.get(channelId) || channelId;
-                  const sender = m.displayName || m.username;
-                  const contentPreview =
-                    m.content || (m.attachmentUrl ? "Sent an attachment" : "New message");
-
-                  notificationManager.showNotification({
-                    title: `${sender} in #${chName}`,
-                    body: contentPreview,
-                    tag: `msg-${m.id}`,
-                    onClick: () => {
-                      setActiveChannelId(channelId);
-                      window.dispatchEvent(
-                        new CustomEvent("frosted-open-chat", { detail: { channelId } })
-                      );
-                    },
-                  });
-                }
+          incomingMessages.forEach((m) => {
+            if (!knownMessageIdsRef.current.has(m.id)) {
+              knownMessageIdsRef.current.add(m.id);
+              if (m.userId !== currentUserRef.current?.id) {
+                notificationManager.notifyNewMessage({
+                  senderName: m.displayName || m.username,
+                  channelName: m.channelId === "general" ? "general" : m.channelId,
+                  content: m.content,
+                  avatarColor: m.avatarColor,
+                });
               }
-            });
+            }
           });
         }
+      },
+      (err) => {
+        console.warn("Firestore message snapshot note:", err.message);
+      }
+    );
 
-        // Update messages for current active text channel
-        if (data.messages && data.messages[activeChannelIdRef.current]) {
-          setMessages(data.messages[activeChannelIdRef.current]);
-        }
+    // 2. Listen for Real-Time Users Presence & Voice States
+    const unsubscribeUsers = onSnapshot(
+      collection(db, "users"),
+      (snapshot) => {
+        const userList: User[] = [];
+        const voices: Record<string, VoiceUser[]> = {
+          "general-voice": [],
+        };
 
-        // Update typing list for current text channel
-        if (data.typing && data.typing[activeChannelIdRef.current]) {
-          setTypingUsers(data.typing[activeChannelIdRef.current]);
-        } else {
-          setTypingUsers([]);
-        }
+        const now = Date.now();
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          const lastSeen = data.lastSeen || 0;
+          const isOnline = now - lastSeen < 45000;
 
-        // Update active voice occupants
-        const voiceStatesMap = data.voiceStates || {};
-        setVoiceStates(voiceStatesMap);
+          const u: User = {
+            id: docSnap.id,
+            username: data.username || "Gamer",
+            displayName: data.displayName || data.username || "Gamer",
+            avatarColor: data.avatarColor || "#5865f2",
+            status: isOnline ? data.status || "online" : "offline",
+            currentVoiceChannelId: data.currentVoiceChannelId,
+            isMuted: !!data.isMuted,
+            isDeafened: !!data.isDeafened,
+            isSpeaking: !!data.isSpeaking,
+          };
 
-        // Process incoming signaling candidates/offers
-        if (data.rtcSignals && Array.isArray(data.rtcSignals)) {
-          for (const signal of data.rtcSignals) {
-            await handleIncomingSignal(signal.senderId, signal.signalData);
+          if (isOnline || docSnap.id === currentUserRef.current?.id) {
+            userList.push(u);
           }
-        }
 
-        // --- WebRTC Room Peer Alignment ---
-        // If we are actively in a voice channel, align PeerConnections with current channel occupants
-        if (currentVoiceChannelId && currentUserRef.current) {
-          const occupants = voiceStatesMap[currentVoiceChannelId] || [];
-          const activePeerIds = occupants
-            .filter((o: any) => o.userId !== currentUserRef.current!.id)
-            .map((o: any) => o.userId);
+          if (isOnline && data.currentVoiceChannelId) {
+            const vChannel = data.currentVoiceChannelId;
+            if (!voices[vChannel]) voices[vChannel] = [];
+            voices[vChannel].push({
+              userId: docSnap.id,
+              username: data.username || "Gamer",
+              displayName: data.displayName || data.username || "Gamer",
+              avatarColor: data.avatarColor || "#5865f2",
+              isMuted: !!data.isMuted,
+              isDeafened: !!data.isDeafened,
+              isSpeaking: !!data.isSpeaking,
+            });
+          }
+        });
 
-          // 1. Initiate connections to new occupants
+        setOnlineUsers(userList);
+        setVoiceStates(voices);
+
+        // Manage WebRTC connections for current voice room occupants
+        if (currentVoiceChannelId) {
+          const channelOccupants = voices[currentVoiceChannelId] || [];
+          const activePeerIds = channelOccupants
+            .filter((o) => o.userId !== currentUserRef.current?.id)
+            .map((o) => o.userId);
+
           for (const peerId of activePeerIds) {
             if (!pcsRef.current[peerId]) {
               const pc = createPeerConnection(peerId);
-              if (currentUserRef.current.id > peerId) {
-                // We are the caller! Initiate Offer
-                try {
-                  const offer = await pc.createOffer();
-                  await pc.setLocalDescription(offer);
-                  await sendSignal(peerId, offer);
-                } catch (e) {
-                  console.warn("Failed to create offer:", e);
-                }
+              if (currentUserRef.current && currentUserRef.current.id > peerId) {
+                pc.createOffer({ offerToReceiveAudio: true })
+                  .then(async (offer) => {
+                    await pc.setLocalDescription(offer);
+                    await sendSignal(peerId, offer);
+                  })
+                  .catch((e) => console.warn("Failed to create offer:", e));
               }
             }
           }
 
-          // 2. Tear down disconnected occupants
+          // Cleanup peers that left
           Object.keys(pcsRef.current).forEach((peerId) => {
             if (!activePeerIds.includes(peerId)) {
-              cleanupPeer(peerId);
+              if (pcsRef.current[peerId]) {
+                pcsRef.current[peerId].close();
+                delete pcsRef.current[peerId];
+              }
+              if (remoteAudiosRef.current[peerId]) {
+                remoteAudiosRef.current[peerId].srcObject = null;
+                remoteAudiosRef.current[peerId].remove();
+                delete remoteAudiosRef.current[peerId];
+              }
             }
           });
         }
+      },
+      (err) => {
+        console.warn("Firestore users snapshot note:", err.message);
       }
-    } catch (err: any) {
-      if (err?.name !== "AbortError") {
-        console.warn("Chat background sync notice:", err?.message || err);
+    );
+
+    // 3. Listen for Incoming WebRTC Signals directed to this user
+    const qSignals = query(
+      collection(db, "signals"),
+      where("targetUserId", "==", currentUser.id),
+      limit(20)
+    );
+    const unsubscribeSignals = onSnapshot(
+      qSignals,
+      (snapshot) => {
+        snapshot.docChanges().forEach(async (change) => {
+          if (change.type === "added") {
+            const data = change.doc.data();
+            try {
+              const signalPayload = JSON.parse(data.signalData);
+              await handleIncomingSignal(data.senderId, signalPayload);
+              // Clean up processed signal
+              deleteDoc(doc(db, "signals", change.doc.id)).catch(() => {});
+            } catch (e) {
+              console.warn("Signal process error:", e);
+            }
+          }
+        });
+      },
+      (err) => {
+        console.warn("Firestore signals snapshot note:", err.message);
       }
-    } finally {
-      window.clearTimeout(timeoutId);
-      isPollingInProgressRef.current = false;
-    }
-  }, [currentVoiceChannelId, handleIncomingSignal, createPeerConnection, onLogout]);
+    );
 
-  // Run synchronization poll every 2 seconds
-  useEffect(() => {
-    if (!token) return;
-    fetchSyncState();
+    // 4. Heartbeat: Update presence periodically
+    const updatePresence = async () => {
+      if (!currentUserRef.current) return;
+      try {
+        await updateDoc(doc(db, "users", currentUserRef.current.id), {
+          lastSeen: Date.now(),
+          status: "online",
+        });
+      } catch {
+        // Document might need initial setDoc
+        try {
+          await setDoc(
+            doc(db, "users", currentUserRef.current.id),
+            {
+              ...currentUserRef.current,
+              lastSeen: Date.now(),
+              status: "online",
+            },
+            { merge: true }
+          );
+        } catch {}
+      }
+    };
 
-    const timer = window.setInterval(() => {
-      fetchSyncState();
-    }, 2000);
+    updatePresence();
+    const heartbeatInterval = window.setInterval(updatePresence, 12000);
 
     return () => {
-      window.clearInterval(timer);
+      unsubscribeMessages();
+      unsubscribeUsers();
+      unsubscribeSignals();
+      window.clearInterval(heartbeatInterval);
     };
-  }, [fetchSyncState, token]);
+  }, [currentUser, currentVoiceChannelId, createPeerConnection, handleIncomingSignal, sendSignal]);
+
+  // Re-filter messages when active channel changes
+  useEffect(() => {
+    async function loadChannelMessages() {
+      try {
+        const q = query(
+          collection(db, "messages"),
+          where("channelId", "==", activeChannelId),
+          orderBy("timestamp", "asc"),
+          limit(100)
+        );
+        const snap = await getDocs(q);
+        const msgs: ChatMessage[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          msgs.push({
+            id: d.id,
+            channelId: data.channelId,
+            userId: data.userId,
+            username: data.username,
+            displayName: data.displayName,
+            avatarColor: data.avatarColor,
+            content: data.content,
+            attachmentUrl: data.attachmentUrl,
+            attachmentName: data.attachmentName,
+            timestamp: data.timestamp,
+            reactions: data.reactions || {},
+          });
+        });
+        setMessages(msgs);
+      } catch {
+        // Fallback to in-memory filter
+      }
+    }
+    loadChannelMessages();
+  }, [activeChannelId]);
+
+  // --- Chat Actions ---
 
   const sendMessage = async (content: string, attachmentUrl?: string, attachmentName?: string) => {
-    if (!token) return;
+    if (!currentUser) return;
+    const msgId = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const newMsg: ChatMessage = {
+      id: msgId,
+      channelId: activeChannelId,
+      userId: currentUser.id,
+      username: currentUser.username,
+      displayName: currentUser.displayName || currentUser.username,
+      avatarColor: currentUser.avatarColor,
+      content,
+      attachmentUrl,
+      attachmentName,
+      timestamp: Date.now(),
+      reactions: {},
+    };
+
+    // Optimistic UI update
+    setMessages((prev) => [...prev, newMsg]);
+
+    // 1. Direct Cloud Firestore write (instant real-time broadcast)
     try {
-      const res = await fetch("/api/chat/message", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          channelId: activeChannelId,
-          content,
-          attachmentUrl,
-          attachmentName,
-        }),
-      });
-      if (res.ok) {
-        const newMsg = await res.json();
-        setMessages((prev) => [...prev, newMsg]);
-      }
-    } catch (e) {
-      console.error("Send message error:", e);
+      await setDoc(doc(db, "messages", msgId), newMsg);
+    } catch (fsErr) {
+      console.warn("Firestore write note:", fsErr);
+    }
+
+    // 2. Also notify backend API if available
+    if (token) {
+      try {
+        await fetch("/api/chat/message", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            channelId: activeChannelId,
+            content,
+            attachmentUrl,
+            attachmentName,
+          }),
+        });
+      } catch {}
     }
   };
 
   const toggleReaction = async (messageId: string, emoji: string) => {
-    if (!token) return;
+    if (!currentUser) return;
+    const username = currentUser.username;
+
+    // Optimistic UI update
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.id !== messageId) return m;
+        const currentReactions = { ...m.reactions };
+        const users = currentReactions[emoji] ? [...currentReactions[emoji]] : [];
+        const idx = users.indexOf(username);
+        if (idx >= 0) {
+          users.splice(idx, 1);
+          if (users.length === 0) delete currentReactions[emoji];
+          else currentReactions[emoji] = users;
+        } else {
+          users.push(username);
+          currentReactions[emoji] = users;
+        }
+        return { ...m, reactions: currentReactions };
+      })
+    );
+
+    // Update on Firestore
     try {
-      const res = await fetch("/api/chat/reaction", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ channelId: activeChannelId, messageId, emoji }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setMessages((prev) =>
-          prev.map((m) => (m.id === messageId ? { ...m, reactions: data.reactions } : m)),
-        );
+      const msgRef = doc(db, "messages", messageId);
+      const targetMsg = messages.find((m) => m.id === messageId);
+      if (targetMsg) {
+        const nextReactions = { ...targetMsg.reactions };
+        const users = nextReactions[emoji] ? [...nextReactions[emoji]] : [];
+        const idx = users.indexOf(username);
+        if (idx >= 0) {
+          users.splice(idx, 1);
+          if (users.length === 0) delete nextReactions[emoji];
+          else nextReactions[emoji] = users;
+        } else {
+          users.push(username);
+          nextReactions[emoji] = users;
+        }
+        await updateDoc(msgRef, { reactions: nextReactions });
       }
     } catch (e) {
-      console.error("Toggle reaction error:", e);
+      console.warn("Reaction update note:", e);
     }
   };
 
   const sendTyping = async (isTyping: boolean) => {
-    if (!token) return;
+    if (!currentUser) return;
     try {
-      await fetch("/api/chat/typing", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ channelId: activeChannelId, isTyping }),
-      });
-    } catch (e) {
-      console.error("Typing state error:", e);
-    }
+      if (isTyping) {
+        setTypingUsers((prev) => (prev.includes(currentUser.username) ? prev : [...prev, currentUser.username]));
+      } else {
+        setTypingUsers((prev) => prev.filter((u) => u !== currentUser.username));
+      }
+    } catch {}
   };
 
   // --- Voice Actions ---
@@ -473,14 +602,14 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const joinVoiceChannel = async (voiceChannelId: string) => {
     if (isSuspended) {
       setVoiceError(
-        `You are suspended from voice channels for ${suspensionTimeLeft} more seconds due to inappropriate content.`,
+        `You are suspended from voice channels for ${suspensionTimeLeft} more seconds due to inappropriate content.`
       );
       return;
     }
-    if (!token || !currentUser) return;
+    if (!currentUser) return;
     setVoiceError(null);
+
     try {
-      // 1. Capture local audio first
       cleanupVoice();
       let stream: MediaStream;
       try {
@@ -491,172 +620,76 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
             autoGainControl: false,
           },
         });
-      } catch (e) {
-        console.warn("High-fidelity audio constraints failed, falling back to basic audio:", e);
+      } catch {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       }
       localStreamRef.current = stream;
 
-      // Ensure initial mute state is applied
       stream.getAudioTracks().forEach((track) => {
         track.enabled = !isMuted && !isDeafened;
       });
 
-      // 2. Announce presence to server
-      const res = await fetch("/api/chat/voice/state", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          currentVoiceChannelId: voiceChannelId,
-          isMuted,
-          isDeafened,
-          isSpeaking: false,
-        }),
+      // Voice presence update in Firestore
+      await updateDoc(doc(db, "users", currentUser.id), {
+        currentVoiceChannelId: voiceChannelId,
+        isMuted,
+        isDeafened,
+        isSpeaking: false,
+        lastSeen: Date.now(),
+      }).catch(async () => {
+        await setDoc(
+          doc(db, "users", currentUser.id),
+          {
+            ...currentUser,
+            currentVoiceChannelId: voiceChannelId,
+            isMuted,
+            isDeafened,
+            isSpeaking: false,
+            lastSeen: Date.now(),
+          },
+          { merge: true }
+        );
       });
 
-      if (res.ok) {
-        setCurrentVoiceChannelId(voiceChannelId);
-        // Instantly sync
-        fetchSyncState();
-      }
+      setCurrentVoiceChannelId(voiceChannelId);
     } catch (err: any) {
-      console.error("Voice join failed (check browser permissions):", err);
-      let errMsg =
-        "Microphone access blocked. Please allow mic permission in your browser or iframe settings.";
-      if (err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError") {
-        errMsg = "Permission denied. Please grant microphone access to use voice chat.";
-      } else if (err?.name === "NotFoundError" || err?.name === "DevicesNotFoundError") {
-        errMsg = "No microphone device was found on your system.";
-      }
-      setVoiceError(errMsg);
+      console.error("Microphone access denied or error:", err);
+      setVoiceError(err.message || "Failed to access microphone.");
     }
   };
 
   const leaveVoiceChannel = async () => {
-    if (!token) return;
-    try {
-      await fetch("/api/chat/voice/state", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
+    cleanupVoice();
+    if (currentUser) {
+      try {
+        await updateDoc(doc(db, "users", currentUser.id), {
           currentVoiceChannelId: null,
           isSpeaking: false,
-        }),
-      });
-      cleanupVoice();
-      fetchSyncState();
-    } catch (e) {
-      console.error("Leave voice error:", e);
+        });
+      } catch {}
     }
   };
 
-  const triggerVoiceSuspension = useCallback(() => {
-    setIsSuspended(true);
-    setSuspensionTimeLeft(60);
-    leaveVoiceChannel();
-  }, [leaveVoiceChannel]);
-
-  // Speech Recognition hook for live voice moderation
-  useEffect(() => {
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      console.warn("SpeechRecognition is not supported in this browser.");
-      return;
-    }
-
-    let rec: any = null;
-    const shouldBeRunning = !!currentVoiceChannelId && !isSuspended && !isMuted;
-
-    if (shouldBeRunning) {
-      rec = new SpeechRecognition();
-      rec.continuous = true;
-      rec.interimResults = true;
-      rec.lang = "en-US";
-
-      rec.onresult = (event: any) => {
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          const transcript = event.results[i][0].transcript;
-          if (isInappropriateContent(transcript)) {
-            console.warn("Moderation triggered from speech transcript:", transcript);
-            triggerVoiceSuspension();
-            break;
-          }
-        }
-      };
-
-      rec.onerror = (e: any) => {
-        console.warn("SpeechRecognition error / silent:", e.error);
-      };
-
-      rec.onend = () => {
-        // Automatically attempt to restart if voice channel is active and not suspended
-        if (!!currentVoiceChannelId && !isSuspended && !isMuted) {
-          try {
-            rec.start();
-          } catch (e) {}
-        }
-      };
-
-      try {
-        rec.start();
-      } catch (err) {
-        console.error("Failed to start SpeechRecognition:", err);
-      }
-    }
-
-    return () => {
-      if (rec) {
-        try {
-          rec.onend = null;
-          rec.stop();
-        } catch (e) {}
-      }
-    };
-  }, [currentVoiceChannelId, isSuspended, isMuted, triggerVoiceSuspension]);
-
-  const toggleMute = async () => {
+  const toggleMute = () => {
     const nextMuted = !isMuted;
     setIsMuted(nextMuted);
-    if (!token) return;
-    try {
-      await fetch("/api/chat/voice/state", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          isMuted: nextMuted,
-        }),
-      });
-      fetchSyncState();
-    } catch (e) {}
+    if (localStreamRef.current) {
+      localStreamRef.current.getAudioTracks().forEach((t) => (t.enabled = !nextMuted && !isDeafened));
+    }
+    if (currentUser) {
+      updateDoc(doc(db, "users", currentUser.id), { isMuted: nextMuted }).catch(() => {});
+    }
   };
 
-  const toggleDeafen = async () => {
-    const nextDeafened = !isDeafened;
-    setIsDeafened(nextDeafened);
-    if (!token) return;
-    try {
-      await fetch("/api/chat/voice/state", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          isDeafened: nextDeafened,
-        }),
-      });
-      fetchSyncState();
-    } catch (e) {}
+  const toggleDeafen = () => {
+    const nextDeaf = !isDeafened;
+    setIsDeafened(nextDeaf);
+    if (localStreamRef.current) {
+      localStreamRef.current.getAudioTracks().forEach((t) => (t.enabled = !isMuted && !nextDeaf));
+    }
+    if (currentUser) {
+      updateDoc(doc(db, "users", currentUser.id), { isDeafened: nextDeaf }).catch(() => {});
+    }
   };
 
   return {
@@ -666,17 +699,17 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     setActiveChannelId,
     messages,
     onlineUsers,
-    voiceStates,
     typingUsers,
+    voiceStates,
     currentVoiceChannelId,
     voiceError,
-    setVoiceError,
     isMuted,
     isDeafened,
     isSelfSpeaking,
     isSuspended,
     suspensionTimeLeft,
-    triggerVoiceSuspension,
+    notificationPermission,
+    requestNotificationPermission,
     sendMessage,
     toggleReaction,
     sendTyping,
@@ -684,7 +717,5 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     leaveVoiceChannel,
     toggleMute,
     toggleDeafen,
-    notificationPermission,
-    requestNotificationPermission,
   };
 }

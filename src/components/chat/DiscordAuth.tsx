@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import type { User } from "@/types/chat";
 import { notificationManager } from "../../lib/notifications";
+import { db } from "../../lib/firebaseClient";
+import { doc, setDoc, getDoc } from "firebase/firestore";
 
 interface Props {
   onLoginSuccess: (token: string, user: User) => void;
@@ -37,71 +39,77 @@ export function DiscordAuth({ onLoginSuccess }: Props) {
     setError(null);
     setLoading(true);
 
+    const trimmedUsername = username.trim();
+    if (!trimmedUsername) {
+      setError("Please enter a username");
+      setLoading(false);
+      return;
+    }
+
     // Request notification permission during user gesture
     notificationManager.requestPermission().catch(() => {});
 
     try {
-      let res: Response | null = null;
+      let loggedInUser: User | null = null;
+      let sessionToken = "";
+
+      // 1. Attempt Serverless / API Route Join
       try {
-        res = await fetch("/api/chat/join", {
+        const res = await fetch("/api/chat/join", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: username.trim(), avatarColor }),
+          body: JSON.stringify({ username: trimmedUsername, avatarColor }),
         });
-      } catch {
-        // Fallback retry on network error
-        try {
-          res = await fetch("/chat/join", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ username: username.trim(), avatarColor }),
-          });
-        } catch {}
-      }
-
-      if (!res) {
-        throw new Error("Unable to connect to chat server. Please verify your connection or try again in a moment.");
-      }
-
-      // Fallback for custom serverless routing setups
-      if (res.status === 404) {
-        try {
-          const fallbackRes = await fetch("/chat/join", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ username: username.trim(), avatarColor }),
-          });
-          if (fallbackRes.ok) res = fallbackRes;
-        } catch {}
-      }
-
-      const text = await res.text();
-      let data: any = {};
-      try {
-        data = text ? JSON.parse(text) : {};
-      } catch {
-        data = {};
-      }
-
-      if (!res.ok) {
-        let msg = data.error;
-        if (!msg) {
-          if (text && !text.includes("<") && !text.includes("FUNCTION_INVOCATION_FAILED")) {
-            msg = text;
-          } else {
-            msg = "Unable to connect to chat server. Please check your network and try again.";
+        if (res.ok) {
+          const data = await res.json();
+          if (data.token && data.user) {
+            sessionToken = data.token;
+            loggedInUser = data.user;
           }
         }
-        throw new Error(msg);
+      } catch {
+        // Fallback to direct Firestore auth
       }
 
-      // Store credentials
-      localStorage.setItem("discord_chat_token", data.token);
-      localStorage.setItem("discord_last_username", data.user.username);
+      // 2. Direct Cloud Firestore Registration (Serverless-Independent)
+      if (!loggedInUser) {
+        const userId = "usr-" + Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+        sessionToken = "fs_" + userId + "_" + Date.now();
+        loggedInUser = {
+          id: userId,
+          username: trimmedUsername,
+          displayName: trimmedUsername,
+          avatarColor,
+          status: "online",
+        };
 
-      onLoginSuccess(data.token, data.user);
+        try {
+          await setDoc(
+            doc(db, "users", userId),
+            {
+              ...loggedInUser,
+              currentVoiceChannelId: null,
+              isMuted: false,
+              isDeafened: false,
+              isSpeaking: false,
+              createdAt: Date.now(),
+              lastSeen: Date.now(),
+            },
+            { merge: true }
+          );
+        } catch (fsErr) {
+          console.warn("Direct Firestore auth note:", fsErr);
+        }
+      }
+
+      // Store credentials locally
+      localStorage.setItem("discord_chat_token", sessionToken);
+      localStorage.setItem("discord_last_username", loggedInUser.username);
+      localStorage.setItem("discord_cached_user", JSON.stringify(loggedInUser));
+
+      onLoginSuccess(sessionToken, loggedInUser);
     } catch (err: any) {
-      setError(err.message || "Something went wrong");
+      setError(err.message || "Unable to join chat. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -119,9 +127,9 @@ export function DiscordAuth({ onLoginSuccess }: Props) {
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.15)]">
             <MessageSquare className="h-7 w-7" />
           </div>
-          <h1 className="text-2xl font-black tracking-tight text-white mb-1.5">Join Chat</h1>
+          <h1 className="text-2xl font-black tracking-tight text-white mb-1.5">Join Community Chat</h1>
           <p className="text-xs text-neutral-400">
-            Choose a username and an avatar color to jump in.
+            Real-time messaging & voice rooms powered by Cloud Firestore.
           </p>
         </div>
 
@@ -140,59 +148,62 @@ export function DiscordAuth({ onLoginSuccess }: Props) {
               Username
             </label>
             <div className="relative">
-              <UserIcon className="absolute left-3.5 top-3 h-4 w-4 text-neutral-500" />
+              <UserIcon className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
               <input
                 type="text"
-                required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="e.g. frosted_player"
-                className="w-full rounded-xl border border-neutral-800 bg-[#141414] pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-neutral-600 outline-none focus:border-white focus:ring-1 focus:ring-white transition-all"
+                placeholder="e.g. MasterGamer99"
+                maxLength={24}
+                required
+                className="w-full rounded-xl border border-neutral-800 bg-neutral-900/90 py-2.5 pl-10 pr-4 text-sm text-white placeholder-neutral-500 focus:border-white focus:outline-none focus:ring-1 focus:ring-white transition-colors"
               />
             </div>
           </div>
 
           <div>
-            <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-neutral-300">
-              Choose Avatar Accent Color
+            <label className="mb-2 block text-[11px] font-bold uppercase tracking-wider text-neutral-300">
+              Pick Avatar Color
             </label>
-            <div className="flex gap-2 py-1">
-              {AVATAR_COLORS.map((c) => (
+            <div className="flex flex-wrap gap-2.5">
+              {AVATAR_COLORS.map((color) => (
                 <button
-                  key={c}
+                  key={color}
                   type="button"
-                  onClick={() => setAvatarColor(c)}
-                  style={{ backgroundColor: c }}
-                  className={`h-7 w-7 rounded-full border-2 transition-transform cursor-pointer ${
-                    avatarColor === c
-                      ? "border-white scale-110 shadow-md ring-2 ring-white/50"
-                      : "border-transparent opacity-70 hover:opacity-100"
+                  onClick={() => setAvatarColor(color)}
+                  className={`h-8 w-8 rounded-lg transition-transform ${
+                    avatarColor === color
+                      ? "ring-2 ring-white ring-offset-2 ring-offset-[#0d0d0d] scale-110"
+                      : "opacity-75 hover:opacity-100 hover:scale-105"
                   }`}
+                  style={{ backgroundColor: color }}
+                  aria-label={`Select color ${color}`}
                 />
               ))}
             </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading || !username}
-            className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3 text-xs font-bold text-black shadow-[0_0_20px_rgba(255,255,255,0.1)] transition-all hover:bg-neutral-200 active:scale-[0.99] disabled:opacity-40 cursor-pointer"
-          >
-            {loading ? (
-              <div className="h-4 w-4 rounded-full border-2 border-black border-t-transparent animate-spin" />
-            ) : (
-              <>
-                <span>Jump In</span>
-                <ArrowRight className="h-4 w-4" />
-              </>
-            )}
-          </button>
+          <div className="pt-2">
+            <button
+              type="submit"
+              disabled={loading || !username.trim()}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3 text-sm font-bold text-black transition-all hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer active:scale-[0.98]"
+            >
+              {loading ? (
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-black border-t-transparent" />
+              ) : (
+                <>
+                  <span>Enter Chat</span>
+                  <ArrowRight className="h-4 w-4" />
+                </>
+              )}
+            </button>
+          </div>
         </form>
 
-        {/* Security badge */}
-        <div className="mt-4 flex items-center justify-center gap-1.5 text-[10px] text-neutral-500">
-          <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-          <span>Guest access via HTTP</span>
+        <div className="mt-6 flex items-center justify-center gap-1.5 text-[11px] text-neutral-400">
+          <ShieldCheck className="h-3.5 w-3.5 text-neutral-400" />
+          <span>Real-time sync • Zero WebSockets • Firestore Live</span>
         </div>
       </div>
     </div>

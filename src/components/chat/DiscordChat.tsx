@@ -69,28 +69,49 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
           } catch {}
         }
 
-        if (res.ok) {
+        if (res && res.ok) {
           const text = await res.text();
           try {
             const data = JSON.parse(text);
             if (data && data.user) {
               setCurrentUser(data.user);
-            } else {
-              localStorage.removeItem("discord_chat_token");
-              setToken(null);
+              localStorage.setItem("discord_cached_user", JSON.stringify(data.user));
+              setIsVerifyingAuth(false);
+              return;
             }
-          } catch {
-            localStorage.removeItem("discord_chat_token");
-            setToken(null);
-          }
-        } else {
-          // Token invalid or session expired
-          localStorage.removeItem("discord_chat_token");
-          setToken(null);
+          } catch {}
         }
+
+        // Fallback: check cached user session
+        const cachedUserStr = localStorage.getItem("discord_cached_user");
+        if (cachedUserStr) {
+          try {
+            const cachedUser = JSON.parse(cachedUserStr);
+            if (cachedUser && cachedUser.id && cachedUser.username) {
+              setCurrentUser(cachedUser);
+              setIsVerifyingAuth(false);
+              return;
+            }
+          } catch {}
+        }
+
+        // Token invalid or session expired
+        localStorage.removeItem("discord_chat_token");
+        localStorage.removeItem("discord_cached_user");
+        setToken(null);
       } catch (err: any) {
         console.warn("Auth verify notice:", err?.message || err);
-        // On network failure or invalid session state, clear token so login form displays cleanly
+        const cachedUserStr = localStorage.getItem("discord_cached_user");
+        if (cachedUserStr) {
+          try {
+            const cachedUser = JSON.parse(cachedUserStr);
+            if (cachedUser && cachedUser.id) {
+              setCurrentUser(cachedUser);
+              setIsVerifyingAuth(false);
+              return;
+            }
+          } catch {}
+        }
         localStorage.removeItem("discord_chat_token");
         setToken(null);
       } finally {

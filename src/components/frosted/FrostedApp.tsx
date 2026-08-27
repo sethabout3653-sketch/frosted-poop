@@ -106,7 +106,7 @@ export function FrostedApp() {
         isChatActive={isChatActive}
       />
 
-      {/* Persistent Discord Chat Container (keeps WebSocket active) */}
+      {/* Persistent Discord Chat Container (Maintains Cloud Firestore Sync) */}
       <div className={isChatActive ? "block" : "hidden"}>
         <DiscordChat onReturnToGames={() => setIsChatActive(false)} />
       </div>

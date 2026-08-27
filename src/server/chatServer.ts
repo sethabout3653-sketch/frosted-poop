@@ -864,5 +864,3 @@ ${scraped.sample}`;
   }
 });
 
-// Minimal stub for server.ts backwards-compatibility
-export function setupChatWebSocket() {}

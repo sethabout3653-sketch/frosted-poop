@@ -31,7 +31,10 @@
         "displayName": { "type": "string" },
         "avatarColor": { "type": "string" },
         "content": { "type": "string" },
-        "timestamp": { "type": "integer" }
+        "attachmentUrl": { "type": "string" },
+        "attachmentName": { "type": "string" },
+        "timestamp": { "type": "integer" },
+        "reactions": { "type": "object" }
       },
       "required": ["id", "channelId", "userId", "username", "displayName", "avatarColor", "content", "timestamp"]
     }
@@ -43,7 +46,7 @@
     },
     "/messages/{messageId}": {
       "schema": "Message",
-      "description": "Chat message"
+      "description": "Chat messages collection"
     }
   }
 }
