@@ -1,0 +1,49 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and presence record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "displayName": { "type": "string" },
+        "avatarColor": { "type": "string" },
+        "status": { "type": "string", "enum": ["online", "idle", "dnd", "offline"] },
+        "currentVoiceChannelId": { "type": "string" },
+        "isMuted": { "type": "boolean" },
+        "isDeafened": { "type": "boolean" },
+        "isSpeaking": { "type": "boolean" },
+        "createdAt": { "type": "integer" },
+        "lastSeen": { "type": "integer" }
+      },
+      "required": ["id", "username", "displayName", "avatarColor", "status", "createdAt", "lastSeen"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Chat message",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "channelId": { "type": "string" },
+        "userId": { "type": "string" },
+        "username": { "type": "string" },
+        "displayName": { "type": "string" },
+        "avatarColor": { "type": "string" },
+        "content": { "type": "string" },
+        "timestamp": { "type": "integer" }
+      },
+      "required": ["id", "channelId", "userId", "username", "displayName", "avatarColor", "content", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User presence and profile"
+    },
+    "/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Chat message"
+    }
+  }
+}

@@ -1,9 +1,44 @@
 import { Router } from "express";
 import { randomBytes } from "crypto";
+import fs from "fs";
+import path from "path";
+import { initializeApp } from "firebase/app";
+import { 
+  getFirestore, 
+  doc, 
+  getDoc, 
+  setDoc, 
+  getDocs, 
+  collection, 
+  query, 
+  where, 
+  deleteDoc, 
+  updateDoc,
+  orderBy,
+  limit
+} from "firebase/firestore";
 
 export const chatRouter = Router();
 
-// In-Memory Database for Users and Messages
+// Load firebase-applet-config.json
+let firebaseConfig: any = null;
+try {
+  const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+  if (fs.existsSync(configPath)) {
+    firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+  }
+} catch (e) {
+  console.error("Failed to load firebase-applet-config.json", e);
+}
+
+if (!firebaseConfig) {
+  throw new Error("firebase-applet-config.json is missing or corrupt!");
+}
+
+// Initialize Firebase App & Firestore Database
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || "(default)");
+
 export interface UserRecord {
   id: string;
   username: string;
@@ -32,41 +67,41 @@ export interface ChatMessage {
   reactions: Record<string, string[]>; // emoji -> array of usernames
 }
 
-const g = global as any;
-const users = g.users || (g.users = new Map<string, UserRecord>()); // userId -> UserRecord
-const usernameToUser = g.usernameToUser || (g.usernameToUser = new Map<string, UserRecord>()); // username -> UserRecord
-const sessions = g.sessions || (g.sessions = new Map<string, string>()); // token -> userId
-
 // Pre-seeded channels
 export const CHANNELS = [
   { id: "general", name: "general", type: "text", topic: "General community chat and discussions" },
   { id: "general-voice", name: "General Voice", type: "voice", topic: "General Voice Chat Room" },
 ];
 
-const messages = g.messages || (g.messages = new Map<string, ChatMessage[]>()); // channelId -> array of ChatMessage
-
-// Real-Time Polling structures
-const typingStates = g.typingStates || (g.typingStates = new Map<string, Map<string, number>>()); // channelId -> Map<username, lastSeenTyping>
-const signalQueue = g.signalQueue || (g.signalQueue = new Map<string, Array<{ senderId: string; signalData: any }>>()); // targetUserId -> Array of signals
-
-// Initialize default channels with welcome messages
-const seedWelcomeMessages = () => {
-  const systemId = "system-bot";
-  const now = Date.now();
-
-  messages.set("general", [
-    {
-      id: "msg-welcome-1",
-      channelId: "general",
-      userId: systemId,
-      username: "FrostedBot",
-      displayName: "Frosted Bot",
-      avatarColor: "#ffffff",
-      content: "Welcome to Frosted Chat! 🎉 Enter a username to chat with everyone.",
-      timestamp: now - 3600000,
-      reactions: { "👋": ["FrostedBot"] },
-    },
-  ]);
+// Initialize default channels with welcome messages if collection is empty
+const seedWelcomeMessages = async () => {
+  try {
+    const msgsRef = collection(db, "messages");
+    const q = query(msgsRef, limit(1));
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty) {
+      const systemId = "system-bot";
+      const now = Date.now();
+      const msgId = "msg-welcome-1";
+      
+      const welcomeMsg: ChatMessage = {
+        id: msgId,
+        channelId: "general",
+        userId: systemId,
+        username: "FrostedBot",
+        displayName: "Frosted Bot",
+        avatarColor: "#ffffff",
+        content: "Welcome to Frosted Chat! 🎉 Enter a username to chat with everyone.",
+        timestamp: now - 3600000,
+        reactions: { "👋": ["FrostedBot"] },
+      };
+      
+      await setDoc(doc(db, "messages", msgId), welcomeMsg);
+    }
+  } catch (err) {
+    console.error("Failed to seed welcome message:", err);
+  }
 };
 
 seedWelcomeMessages();
@@ -85,7 +120,7 @@ const AVATAR_COLORS = [
 // --- HTTP Auth Endpoints ---
 
 // POST /api/chat/join
-chatRouter.post("/join", (req, res) => {
+chatRouter.post("/join", async (req, res) => {
   try {
     const { username, avatarColor } = req.body || {};
 
@@ -98,12 +133,17 @@ chatRouter.post("/join", (req, res) => {
       return res.status(400).json({ error: "Username must be between 3 and 20 characters" });
     }
 
-    // Since this is a guest join, if username exists, we can just log them back in or append a number
+    // Check if the user already exists in Firestore
+    const usersRef = collection(db, "users");
+    const q = query(usersRef, where("username", "==", cleanUsername));
+    const querySnapshot = await getDocs(q);
+
     let finalUsername = cleanUsername;
     let displayName = String(username).trim();
-    if (usernameToUser.has(cleanUsername)) {
-      finalUsername = cleanUsername + "-" + Math.floor(Math.random() * 1000);
-      displayName = displayName + " " + Math.floor(Math.random() * 1000);
+    if (!querySnapshot.empty) {
+      const randSuffix = Math.floor(Math.random() * 1000);
+      finalUsername = cleanUsername + "-" + randSuffix;
+      displayName = displayName + " " + randSuffix;
     }
 
     const userId = "usr-" + randomBytes(8).toString("hex");
@@ -123,9 +163,9 @@ chatRouter.post("/join", (req, res) => {
       lastSeen: Date.now(),
     };
 
-    users.set(userId, newUser);
-    usernameToUser.set(finalUsername, newUser);
-    sessions.set(token, userId);
+    // Save user record and session mapping in centralized database
+    await setDoc(doc(db, "users", userId), newUser);
+    await setDoc(doc(db, "sessions", token), { userId, createdAt: Date.now() });
 
     return res.json({ token, user: newUser });
   } catch (err: any) {
@@ -135,284 +175,443 @@ chatRouter.post("/join", (req, res) => {
 });
 
 // GET /api/chat/me
-chatRouter.get("/me", (req, res) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.replace("Bearer ", "");
+chatRouter.get("/me", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.replace("Bearer ", "");
 
-  if (!token || !sessions.has(token)) {
-    return res.status(401).json({ error: "Unauthorized" });
+    if (!token) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const sessionDoc = await getDoc(doc(db, "sessions", token));
+    if (!sessionDoc.exists()) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const userId = sessionDoc.data().userId;
+    const userDoc = await getDoc(doc(db, "users", userId));
+    if (!userDoc.exists()) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const user = userDoc.data() as UserRecord;
+    user.lastSeen = Date.now();
+    user.status = "online";
+
+    await updateDoc(doc(db, "users", userId), {
+      lastSeen: user.lastSeen,
+      status: user.status
+    });
+
+    return res.json({ token, user });
+  } catch (err: any) {
+    console.error("Me error:", err);
+    return res.status(500).json({ error: "Server error" });
   }
-
-  const userId = sessions.get(token)!;
-  const user = users.get(userId);
-
-  if (!user) {
-    return res.status(404).json({ error: "User not found" });
-  }
-
-  user.lastSeen = Date.now();
-  user.status = "online";
-  return res.json({ token, user });
 });
 
 // GET /api/chat/messages/:channelId
-chatRouter.get("/messages/:channelId", (req, res) => {
-  const { channelId } = req.params;
-  const channelMsgs = messages.get(channelId) || [];
-  return res.json(channelMsgs);
+chatRouter.get("/messages/:channelId", async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    const msgsRef = collection(db, "messages");
+    const q = query(msgsRef, where("channelId", "==", channelId), orderBy("timestamp", "asc"), limit(100));
+    const snapshot = await getDocs(q);
+    const msgs: ChatMessage[] = [];
+    snapshot.forEach(doc => {
+      msgs.push(doc.data() as ChatMessage);
+    });
+    return res.json(msgs);
+  } catch (err: any) {
+    console.error("Get messages error:", err);
+    return res.status(500).json([]);
+  }
 });
 
 // GET /api/chat/state
-chatRouter.get("/state", (req, res) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.replace("Bearer ", "");
-  
-  let currentUserId: string | null = null;
-  if (token && sessions.has(token)) {
-    currentUserId = sessions.get(token)!;
-    const user = users.get(currentUserId);
-    if (user) {
-      user.lastSeen = Date.now();
-      user.status = "online";
-    }
-  }
-
-  // Cleanup offline/timed out users (timeout threshold: 6 seconds for high responsiveness)
-  const now = Date.now();
-  for (const [id, user] of users.entries()) {
-    if (now - user.lastSeen > 6000) {
-      user.status = "offline";
-      user.currentVoiceChannelId = null; // automatically boot from voice rooms if disconnected
-    }
-  }
-
-  // Prepare messages map
-  const allMessages: Record<string, ChatMessage[]> = {};
-  for (const [channelId, msgs] of messages.entries()) {
-    allMessages[channelId] = msgs;
-  }
-
-  // Get active online users
-  const onlineUsers = Array.from(users.values())
-    .filter(u => u.status === "online")
-    .map(({ lastSeen, ...safe }) => safe);
-
-  // Compile typing statuses
-  const typing: Record<string, string[]> = {};
-  for (const [channelId, userMap] of typingStates.entries()) {
-    typing[channelId] = [];
-    for (const [username, lastActive] of userMap.entries()) {
-      if (now - lastActive < 4000) {
-        typing[channelId].push(username);
+chatRouter.get("/state", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.replace("Bearer ", "");
+    
+    let currentUserId: string | null = null;
+    if (token) {
+      const sessionDoc = await getDoc(doc(db, "sessions", token));
+      if (sessionDoc.exists()) {
+        currentUserId = sessionDoc.data().userId;
+        await updateDoc(doc(db, "users", currentUserId), {
+          lastSeen: Date.now(),
+          status: "online"
+        });
       }
     }
-  }
 
-  // Compile voice channel states
-  const voiceStates: Record<string, any[]> = {};
-  for (const u of users.values()) {
-    if (u.status === "online" && u.currentVoiceChannelId) {
-      if (!voiceStates[u.currentVoiceChannelId]) {
-        voiceStates[u.currentVoiceChannelId] = [];
+    const now = Date.now();
+
+    // Retrieve all users from Firestore
+    const usersSnapshot = await getDocs(collection(db, "users"));
+    const allUsers: UserRecord[] = [];
+    
+    // Cleanup offline/timed out users (timeout threshold: 12 seconds for serverless tolerance)
+    for (const d of usersSnapshot.docs) {
+      const u = d.data() as UserRecord;
+      if (now - u.lastSeen > 12000) {
+        if (u.status !== "offline" || u.currentVoiceChannelId !== null) {
+          u.status = "offline";
+          u.currentVoiceChannelId = null;
+          await updateDoc(doc(db, "users", u.id), {
+            status: "offline",
+            currentVoiceChannelId: null
+          });
+        }
       }
-      voiceStates[u.currentVoiceChannelId].push({
-        userId: u.id,
-        username: u.username,
-        displayName: u.displayName,
-        avatarColor: u.avatarColor,
-        isMuted: u.isMuted,
-        isDeafened: u.isDeafened,
-        isSpeaking: u.isSpeaking,
+      allUsers.push(u);
+    }
+
+    // Get active online users
+    const onlineUsers = allUsers
+      .filter(u => u.status === "online")
+      .map(({ lastSeen, ...safe }) => safe);
+
+    // Retrieve latest messages
+    const msgsSnapshot = await getDocs(
+      query(collection(db, "messages"), orderBy("timestamp", "asc"), limit(100))
+    );
+    const allMessages: Record<string, ChatMessage[]> = {};
+    msgsSnapshot.forEach(d => {
+      const m = d.data() as ChatMessage;
+      if (!allMessages[m.channelId]) {
+        allMessages[m.channelId] = [];
+      }
+      allMessages[m.channelId].push(m);
+    });
+
+    // Retrieve typing statuses
+    const typingSnapshot = await getDocs(collection(db, "typing"));
+    const typing: Record<string, string[]> = {};
+    typingSnapshot.forEach(d => {
+      const channelId = d.id;
+      const data = d.data() || {};
+      const usersMap = data.users || {};
+      typing[channelId] = [];
+      for (const [username, lastActive] of Object.entries(usersMap)) {
+        if (now - (lastActive as number) < 5000) {
+          typing[channelId].push(username);
+        }
+      }
+    });
+
+    // Compile voice channel states
+    const voiceStates: Record<string, any[]> = {};
+    for (const u of allUsers) {
+      if (u.status === "online" && u.currentVoiceChannelId) {
+        if (!voiceStates[u.currentVoiceChannelId]) {
+          voiceStates[u.currentVoiceChannelId] = [];
+        }
+        voiceStates[u.currentVoiceChannelId].push({
+          userId: u.id,
+          username: u.username,
+          displayName: u.displayName,
+          avatarColor: u.avatarColor,
+          isMuted: u.isMuted,
+          isDeafened: u.isDeafened,
+          isSpeaking: u.isSpeaking,
+        });
+      }
+    }
+
+    // Retrieve signals queued for this client
+    let rtcSignals: Array<{ senderId: string; signalData: any }> = [];
+    if (currentUserId) {
+      const signalsQuery = query(collection(db, "signals"), where("targetUserId", "==", currentUserId));
+      const signalsSnapshot = await getDocs(signalsQuery);
+      
+      signalsSnapshot.forEach(d => {
+        const s = d.data();
+        rtcSignals.push({
+          senderId: s.senderId,
+          signalData: typeof s.signalData === "string" ? JSON.parse(s.signalData) : s.signalData,
+        });
+        // Consume signals on retrieval
+        deleteDoc(doc(db, "signals", d.id)).catch(e => console.error("Signal consumption delete error:", e));
       });
     }
-  }
 
-  // Fetch signals queued for this client
-  let rtcSignals: Array<{ senderId: string; signalData: any }> = [];
-  if (currentUserId) {
-    rtcSignals = signalQueue.get(currentUserId) || [];
-    signalQueue.delete(currentUserId); // Consume signals on retrieval
+    return res.json({
+      channels: CHANNELS,
+      messages: allMessages,
+      users: onlineUsers,
+      typing,
+      voiceStates,
+      rtcSignals,
+    });
+  } catch (err: any) {
+    console.error("State API error:", err);
+    return res.status(500).json({
+      channels: CHANNELS,
+      messages: {},
+      users: [],
+      typing: {},
+      voiceStates: {},
+      rtcSignals: [],
+    });
   }
-
-  return res.json({
-    channels: CHANNELS,
-    messages: allMessages,
-    users: onlineUsers,
-    typing,
-    voiceStates,
-    rtcSignals,
-  });
 });
 
 // POST /api/chat/message
-chatRouter.post("/message", (req, res) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.replace("Bearer ", "");
+chatRouter.post("/message", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.replace("Bearer ", "");
 
-  if (!token || !sessions.has(token)) {
-    return res.status(401).json({ error: "Unauthorized" });
+    if (!token) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const sessionDoc = await getDoc(doc(db, "sessions", token));
+    if (!sessionDoc.exists()) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const userId = sessionDoc.data().userId;
+    const userDoc = await getDoc(doc(db, "users", userId));
+    if (!userDoc.exists()) {
+      return res.status(401).json({ error: "User not found" });
+    }
+
+    const user = userDoc.data() as UserRecord;
+    user.lastSeen = Date.now();
+    await updateDoc(doc(db, "users", userId), { lastSeen: user.lastSeen });
+
+    const { channelId, content, attachmentUrl, attachmentName } = req.body;
+    if (!channelId || (!content && !attachmentUrl)) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    const msgId = "msg-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6);
+    const newMsg: ChatMessage = {
+      id: msgId,
+      channelId,
+      userId: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      avatarColor: user.avatarColor,
+      content: content || "",
+      timestamp: Date.now(),
+      reactions: {},
+    };
+
+    if (attachmentUrl !== undefined) {
+      newMsg.attachmentUrl = attachmentUrl;
+    }
+    if (attachmentName !== undefined) {
+      newMsg.attachmentName = attachmentName;
+    }
+
+    // Store in centralized Firestore messages collection
+    await setDoc(doc(db, "messages", msgId), newMsg);
+
+    return res.json(newMsg);
+  } catch (err: any) {
+    console.error("Post message error:", err);
+    return res.status(500).json({ error: "Server error" });
   }
-
-  const userId = sessions.get(token)!;
-  const user = users.get(userId);
-  if (!user) return res.status(401).json({ error: "User not found" });
-
-  user.lastSeen = Date.now();
-
-  const { channelId, content, attachmentUrl, attachmentName } = req.body;
-  if (!channelId || (!content && !attachmentUrl)) {
-    return res.status(400).json({ error: "Missing required fields" });
-  }
-
-  const newMsg: ChatMessage = {
-    id: "msg-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6),
-    channelId,
-    userId: user.id,
-    username: user.username,
-    displayName: user.displayName,
-    avatarColor: user.avatarColor,
-    content: content || "",
-    attachmentUrl,
-    attachmentName,
-    timestamp: Date.now(),
-    reactions: {},
-  };
-
-  let channelList = messages.get(channelId);
-  if (!channelList) {
-    channelList = [];
-    messages.set(channelId, channelList);
-  }
-  channelList.push(newMsg);
-
-  if (channelList.length > 200) {
-    channelList.shift();
-  }
-
-  return res.json(newMsg);
 });
 
 // POST /api/chat/reaction
-chatRouter.post("/reaction", (req, res) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.replace("Bearer ", "");
+chatRouter.post("/reaction", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.replace("Bearer ", "");
 
-  if (!token || !sessions.has(token)) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-
-  const userId = sessions.get(token)!;
-  const user = users.get(userId);
-  if (!user) return res.status(401).json({ error: "User not found" });
-
-  user.lastSeen = Date.now();
-
-  const { channelId, messageId, emoji } = req.body;
-  const channelList = messages.get(channelId);
-  if (!channelList) return res.status(404).json({ error: "Channel not found" });
-
-  const msg = channelList.find((m) => m.id === messageId);
-  if (!msg) return res.status(404).json({ error: "Message not found" });
-
-  if (!msg.reactions[emoji]) {
-    msg.reactions[emoji] = [];
-  }
-
-  const usernameIndex = msg.reactions[emoji].indexOf(user.username);
-  if (usernameIndex > -1) {
-    msg.reactions[emoji].splice(usernameIndex, 1);
-    if (msg.reactions[emoji].length === 0) {
-      delete msg.reactions[emoji];
+    if (!token) {
+      return res.status(401).json({ error: "Unauthorized" });
     }
-  } else {
-    msg.reactions[emoji].push(user.username);
-  }
 
-  return res.json({ success: true, reactions: msg.reactions });
+    const sessionDoc = await getDoc(doc(db, "sessions", token));
+    if (!sessionDoc.exists()) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const userId = sessionDoc.data().userId;
+    const userDoc = await getDoc(doc(db, "users", userId));
+    if (!userDoc.exists()) {
+      return res.status(401).json({ error: "User not found" });
+    }
+
+    const user = userDoc.data() as UserRecord;
+    user.lastSeen = Date.now();
+    await updateDoc(doc(db, "users", userId), { lastSeen: user.lastSeen });
+
+    const { channelId, messageId, emoji } = req.body;
+    const msgDocRef = doc(db, "messages", messageId);
+    const msgDoc = await getDoc(msgDocRef);
+    if (!msgDoc.exists()) {
+      return res.status(404).json({ error: "Message not found" });
+    }
+
+    const msg = msgDoc.data() as ChatMessage;
+    if (!msg.reactions) {
+      msg.reactions = {};
+    }
+    if (!msg.reactions[emoji]) {
+      msg.reactions[emoji] = [];
+    }
+
+    const usernameIndex = msg.reactions[emoji].indexOf(user.username);
+    if (usernameIndex > -1) {
+      msg.reactions[emoji].splice(usernameIndex, 1);
+      if (msg.reactions[emoji].length === 0) {
+        delete msg.reactions[emoji];
+      }
+    } else {
+      msg.reactions[emoji].push(user.username);
+    }
+
+    await updateDoc(msgDocRef, { reactions: msg.reactions });
+
+    return res.json({ success: true, reactions: msg.reactions });
+  } catch (err: any) {
+    console.error("Reaction error:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
 });
 
 // POST /api/chat/typing
-chatRouter.post("/typing", (req, res) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.replace("Bearer ", "");
+chatRouter.post("/typing", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.replace("Bearer ", "");
 
-  if (!token || !sessions.has(token)) {
-    return res.status(401).json({ error: "Unauthorized" });
+    if (!token) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const sessionDoc = await getDoc(doc(db, "sessions", token));
+    if (!sessionDoc.exists()) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const userId = sessionDoc.data().userId;
+    const userDoc = await getDoc(doc(db, "users", userId));
+    if (!userDoc.exists()) {
+      return res.status(401).json({ error: "User not found" });
+    }
+
+    const user = userDoc.data() as UserRecord;
+
+    const { channelId, isTyping } = req.body;
+    if (!channelId) return res.status(400).json({ error: "Missing channelId" });
+
+    const typingDocRef = doc(db, "typing", channelId);
+    const typingDoc = await getDoc(typingDocRef);
+    let usersMap = typingDoc.exists() ? typingDoc.data().users || {} : {};
+
+    if (isTyping) {
+      usersMap[user.username] = Date.now();
+    } else {
+      delete usersMap[user.username];
+    }
+
+    const now = Date.now();
+    for (const [uname, time] of Object.entries(usersMap)) {
+      if (now - (time as number) > 5000) {
+        delete usersMap[uname];
+      }
+    }
+
+    await setDoc(typingDocRef, { users: usersMap });
+
+    return res.json({ success: true });
+  } catch (err: any) {
+    console.error("Typing API error:", err);
+    return res.status(500).json({ error: "Server error" });
   }
-
-  const userId = sessions.get(token)!;
-  const user = users.get(userId);
-  if (!user) return res.status(401).json({ error: "User not found" });
-
-  const { channelId, isTyping } = req.body;
-  if (!channelId) return res.status(400).json({ error: "Missing channelId" });
-
-  if (!typingStates.has(channelId)) {
-    typingStates.set(channelId, new Map());
-  }
-
-  if (isTyping) {
-    typingStates.get(channelId)!.set(user.username, Date.now());
-  } else {
-    typingStates.get(channelId)!.delete(user.username);
-  }
-
-  return res.json({ success: true });
 });
 
 // POST /api/chat/voice/state
-chatRouter.post("/voice/state", (req, res) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.replace("Bearer ", "");
+chatRouter.post("/voice/state", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.replace("Bearer ", "");
 
-  if (!token || !sessions.has(token)) {
-    return res.status(401).json({ error: "Unauthorized" });
+    if (!token) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const sessionDoc = await getDoc(doc(db, "sessions", token));
+    if (!sessionDoc.exists()) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const userId = sessionDoc.data().userId;
+    const userDocRef = doc(db, "users", userId);
+    const userDoc = await getDoc(userDocRef);
+    if (!userDoc.exists()) {
+      return res.status(401).json({ error: "User not found" });
+    }
+
+    const user = userDoc.data() as UserRecord;
+    user.lastSeen = Date.now();
+
+    const { currentVoiceChannelId, isMuted, isDeafened, isSpeaking } = req.body;
+    
+    user.currentVoiceChannelId = currentVoiceChannelId !== undefined ? currentVoiceChannelId : user.currentVoiceChannelId;
+    user.isMuted = isMuted !== undefined ? !!isMuted : user.isMuted;
+    user.isDeafened = isDeafened !== undefined ? !!isDeafened : user.isDeafened;
+    user.isSpeaking = isSpeaking !== undefined ? !!isSpeaking : user.isSpeaking;
+
+    await setDoc(userDocRef, user);
+
+    return res.json({ success: true, user });
+  } catch (err: any) {
+    console.error("Voice state error:", err);
+    return res.status(500).json({ error: "Server error" });
   }
-
-  const userId = sessions.get(token)!;
-  const user = users.get(userId);
-  if (!user) return res.status(401).json({ error: "User not found" });
-
-  user.lastSeen = Date.now();
-
-  const { currentVoiceChannelId, isMuted, isDeafened, isSpeaking } = req.body;
-  
-  user.currentVoiceChannelId = currentVoiceChannelId !== undefined ? currentVoiceChannelId : user.currentVoiceChannelId;
-  user.isMuted = isMuted !== undefined ? !!isMuted : user.isMuted;
-  user.isDeafened = isDeafened !== undefined ? !!isDeafened : user.isDeafened;
-  user.isSpeaking = isSpeaking !== undefined ? !!isSpeaking : user.isSpeaking;
-
-  return res.json({ success: true, user });
 });
 
 // POST /api/chat/signal
-chatRouter.post("/signal", (req, res) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.replace("Bearer ", "");
+chatRouter.post("/signal", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.replace("Bearer ", "");
 
-  if (!token || !sessions.has(token)) {
-    return res.status(401).json({ error: "Unauthorized" });
+    if (!token) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const sessionDoc = await getDoc(doc(db, "sessions", token));
+    if (!sessionDoc.exists()) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const userId = sessionDoc.data().userId;
+    const userDoc = await getDoc(doc(db, "users", userId));
+    if (!userDoc.exists()) {
+      return res.status(401).json({ error: "User not found" });
+    }
+
+    const user = userDoc.data() as UserRecord;
+
+    const { targetPeerId, signalData } = req.body;
+    if (!targetPeerId || !signalData) {
+      return res.status(400).json({ error: "Missing targetPeerId or signalData" });
+    }
+
+    const signalId = "sig-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6);
+    await setDoc(doc(db, "signals", signalId), {
+      targetUserId: targetPeerId,
+      senderId: user.id,
+      signalData: typeof signalData === "object" ? JSON.stringify(signalData) : signalData,
+      createdAt: Date.now()
+    });
+
+    return res.json({ success: true });
+  } catch (err: any) {
+    console.error("Signal post error:", err);
+    return res.status(500).json({ error: "Server error" });
   }
-
-  const userId = sessions.get(token)!;
-  const user = users.get(userId);
-  if (!user) return res.status(401).json({ error: "User not found" });
-
-  const { targetPeerId, signalData } = req.body;
-  if (!targetPeerId || !signalData) {
-    return res.status(400).json({ error: "Missing targetPeerId or signalData" });
-  }
-
-  if (!signalQueue.has(targetPeerId)) {
-    signalQueue.set(targetPeerId, []);
-  }
-
-  signalQueue.get(targetPeerId)!.push({
-    senderId: user.id,
-    signalData,
-  });
-
-  return res.json({ success: true });
 });
 
 // Minimal stub for server.ts backwards-compatibility
