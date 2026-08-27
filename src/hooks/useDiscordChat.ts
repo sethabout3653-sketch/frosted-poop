@@ -13,10 +13,10 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const [activeChannelId, setActiveChannelId] = useState<string>("general");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<User[]>([]);
-  const [voiceStates, setVoiceStates] = useState<Record<string, VoiceUser[]>>({});
   const [typingUsers, setTypingUsers] = useState<Record<string, string[]>>({}); // channelId -> array of displayNames
 
   // Voice state controls
+  const [voiceStates, setVoiceStates] = useState<Record<string, VoiceUser[]>>({});
   const [currentVoiceChannelId, setCurrentVoiceChannelId] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
@@ -28,36 +28,50 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const remoteAudioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const audioContextRef = useRef<AudioContext | null>(null);
 
-  // Initialize and fetch messages for active channel
-  const fetchChannelMessages = useCallback(async (channelId: string) => {
-    try {
-      const res = await fetch(`/api/chat/messages/${channelId}`);
-      if (res.ok) {
-        const text = await res.text();
-        try {
-          const msgs: ChatMessage[] = JSON.parse(text);
-          if (Array.isArray(msgs)) {
-            setMessages(msgs);
-          }
-        } catch (e) {
-          console.error("Fetch messages parse error:", e);
-        }
-      }
-    } catch (err) {
-      console.error("Fetch messages error:", err);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (activeChannelId) {
-      fetchChannelMessages(activeChannelId);
-    }
-  }, [activeChannelId, fetchChannelMessages]);
-
   const activeChannelIdRef = useRef(activeChannelId);
   useEffect(() => {
     activeChannelIdRef.current = activeChannelId;
   }, [activeChannelId]);
+
+  const fetchState = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch("/api/chat/state", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.status === 401) {
+        onLogout();
+        return;
+      }
+      if (res.ok) {
+        const data = await res.json();
+        setChannels(data.channels || []);
+        if (data.users) setOnlineUsers(data.users);
+        if (data.messages && data.messages[activeChannelIdRef.current]) {
+          setMessages(data.messages[activeChannelIdRef.current]);
+        }
+      }
+    } catch (err) {
+      console.error("Poll error:", err);
+    }
+  }, [token, onLogout]);
+
+  // Initial fetch and poll setup
+  useEffect(() => {
+    if (!token) return;
+    fetchState();
+    
+    const interval = window.setInterval(() => {
+      // Only poll if WebSocket is not connected (fallback mode)
+      if (!isConnected) {
+        fetchState();
+      }
+    }, 3000);
+    
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [fetchState, token, isConnected]);
 
   // Main WebSocket Lifecycle Connection
   useEffect(() => {
@@ -83,6 +97,10 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           setIsConnected(true);
           setChannels(payload.channels || []);
           if (payload.usersList) setOnlineUsers(payload.usersList);
+          
+          if (payload.messages && payload.messages[activeChannelIdRef.current]) {
+            setMessages(payload.messages[activeChannelIdRef.current]);
+          }
         }
 
         if (type === "new_message") {
@@ -192,6 +210,19 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, onLogout]);
+
+  // Handle active channel change
+  useEffect(() => {
+    if (!token) return;
+    fetch(`/api/chat/messages/${activeChannelId}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setMessages(data);
+        }
+      })
+      .catch(console.error);
+  }, [activeChannelId, token]);
 
   // --- WebRTC Peer-to-Peer Real Audio Engine ---
 
@@ -431,25 +462,48 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   };
 
   // Send Message
-  const sendMessage = (content: string, attachmentUrl?: string, attachmentName?: string) => {
-    if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) return;
-    socketRef.current.send(
-      JSON.stringify({
-        type: "send_message",
-        payload: { channelId: activeChannelId, content, attachmentUrl, attachmentName },
-      })
-    );
+  const sendMessage = async (content: string, attachmentUrl?: string, attachmentName?: string) => {
+    if (!token) return;
+    try {
+      const res = await fetch("/api/chat/message", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ channelId: activeChannelId, content, attachmentUrl, attachmentName })
+      });
+      // The server will broadcast 'new_message', but if WS is disconnected, we can optimistically update or rely on polling.
+      if (res.ok && !isConnected) {
+        const newMsg = await res.json();
+        setMessages(prev => [...prev, newMsg]);
+      }
+    } catch (e) {
+      console.error("Send message error:", e);
+    }
   };
 
   // Send Reaction
-  const toggleReaction = (messageId: string, emoji: string) => {
-    if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) return;
-    socketRef.current.send(
-      JSON.stringify({
-        type: "toggle_reaction",
-        payload: { channelId: activeChannelId, messageId, emoji },
-      })
-    );
+  const toggleReaction = async (messageId: string, emoji: string) => {
+    if (!token) return;
+    try {
+      const res = await fetch("/api/chat/reaction", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ channelId: activeChannelId, messageId, emoji })
+      });
+      if (res.ok && !isConnected) {
+        const data = await res.json();
+        setMessages((prev) =>
+          prev.map((m) => (m.id === messageId ? { ...m, reactions: data.reactions } : m))
+        );
+      }
+    } catch (e) {
+      console.error("Toggle reaction error:", e);
+    }
   };
 
   // Send Typing Notification

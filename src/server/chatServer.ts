@@ -1,6 +1,6 @@
-import { WebSocketServer, WebSocket } from "ws";
 import { Router } from "express";
-import { createHash, randomBytes } from "crypto";
+import { WebSocketServer, WebSocket } from "ws";
+import { randomBytes } from "crypto";
 
 export const chatRouter = Router();
 
@@ -9,7 +9,6 @@ export interface UserRecord {
   id: string;
   username: string;
   displayName: string;
-  passwordHash: string;
   avatarColor: string;
   status: "online" | "idle" | "dnd" | "offline";
   currentVoiceChannelId: string | null;
@@ -17,6 +16,7 @@ export interface UserRecord {
   isDeafened: boolean;
   isSpeaking: boolean;
   createdAt: number;
+  lastSeen: number;
 }
 
 export interface ChatMessage {
@@ -62,7 +62,7 @@ const seedWelcomeMessages = () => {
       username: "FrostedBot",
       displayName: "Frosted Bot",
       avatarColor: "#ffffff",
-      content: "Welcome to Frosted Chat! 🎉 Sign in or register an account to chat and join live voice channels with other players.",
+      content: "Welcome to Frosted Chat! 🎉 Enter a username to chat with everyone.",
       timestamp: now - 3600000,
       reactions: { "👋": ["FrostedBot"] },
     },
@@ -91,7 +91,7 @@ const seedWelcomeMessages = () => {
       username: "FrostedBot",
       displayName: "Frosted Bot",
       avatarColor: "#ffffff",
-      content: "🚀 Frosted Real-Time Text & Voice Chat is live! Real audio streaming, status indicators, custom attachments, and reactions are fully supported.",
+      content: "🚀 Frosted Real-Time Text Chat is live! Custom attachments, and reactions are fully supported.",
       timestamp: now - 7200000,
       reactions: { "🚀": ["FrostedBot"] },
     },
@@ -99,11 +99,6 @@ const seedWelcomeMessages = () => {
 };
 
 seedWelcomeMessages();
-
-// Simple hash function for passwords
-function hashPassword(password: string): string {
-  return createHash("sha256").update(password + "frosted_salt_2026").digest("hex");
-}
 
 const AVATAR_COLORS = [
   "#5865f2", // Discord Blurple
@@ -118,13 +113,13 @@ const AVATAR_COLORS = [
 
 // --- HTTP Auth Endpoints ---
 
-// POST /api/chat/signup
-chatRouter.post("/signup", (req, res) => {
+// POST /api/chat/join
+chatRouter.post("/join", (req, res) => {
   try {
-    const { username, password, displayName, avatarColor } = req.body || {};
+    const { username, avatarColor } = req.body || {};
 
-    if (!username || !password) {
-      return res.status(400).json({ error: "Username and password are required" });
+    if (!username) {
+      return res.status(400).json({ error: "Username is required" });
     }
 
     const cleanUsername = String(username).trim().toLowerCase();
@@ -132,21 +127,12 @@ chatRouter.post("/signup", (req, res) => {
       return res.status(400).json({ error: "Username must be between 3 and 20 characters" });
     }
 
-    // Password requirements validation
-    const passStr = String(password);
-    const hasMinLength = passStr.length >= 8;
-    const hasUppercase = /[A-Z]/.test(passStr);
-    const hasLowercase = /[a-z]/.test(passStr);
-    const hasNumberOrSpecial = /[0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(passStr);
-
-    if (!hasMinLength || !hasUppercase || !hasLowercase || !hasNumberOrSpecial) {
-      return res.status(400).json({
-        error: "Password must be at least 8 characters long and include uppercase, lowercase, and a number or symbol.",
-      });
-    }
-
+    // Since this is a guest join, if username exists, we can just log them back in or append a number
+    let finalUsername = cleanUsername;
+    let displayName = String(username).trim();
     if (usernameToUser.has(cleanUsername)) {
-      return res.status(409).json({ error: "Username is already taken" });
+      finalUsername = cleanUsername + "-" + Math.floor(Math.random() * 1000);
+      displayName = displayName + " " + Math.floor(Math.random() * 1000);
     }
 
     const userId = "usr-" + randomBytes(8).toString("hex");
@@ -154,9 +140,8 @@ chatRouter.post("/signup", (req, res) => {
 
     const newUser: UserRecord = {
       id: userId,
-      username: cleanUsername,
-      displayName: displayName ? String(displayName).trim() : username,
-      passwordHash: hashPassword(password),
+      username: finalUsername,
+      displayName: displayName,
       avatarColor: avatarColor || AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)],
       status: "online",
       currentVoiceChannelId: null,
@@ -164,46 +149,17 @@ chatRouter.post("/signup", (req, res) => {
       isDeafened: false,
       isSpeaking: false,
       createdAt: Date.now(),
+      lastSeen: Date.now(),
     };
 
     users.set(userId, newUser);
-    usernameToUser.set(cleanUsername, newUser);
+    usernameToUser.set(finalUsername, newUser);
     sessions.set(token, userId);
 
-    // Return user without password hash
-    const { passwordHash, ...safeUser } = newUser;
-    return res.json({ token, user: safeUser });
+    return res.json({ token, user: newUser });
   } catch (err: any) {
-    console.error("Signup error:", err);
-    return res.status(500).json({ error: err?.message || "Internal server error during registration" });
-  }
-});
-
-// POST /api/chat/login
-chatRouter.post("/login", (req, res) => {
-  try {
-    const { username, password } = req.body || {};
-
-    if (!username || !password) {
-      return res.status(400).json({ error: "Username and password are required" });
-    }
-
-    const cleanUsername = String(username).trim().toLowerCase();
-    const user = usernameToUser.get(cleanUsername);
-
-    if (!user || user.passwordHash !== hashPassword(password)) {
-      return res.status(401).json({ error: "Invalid username or password" });
-    }
-
-    const token = "tok-" + randomBytes(16).toString("hex");
-    sessions.set(token, user.id);
-    user.status = "online";
-
-    const { passwordHash, ...safeUser } = user;
-    return res.json({ token, user: safeUser });
-  } catch (err: any) {
-    console.error("Login error:", err);
-    return res.status(500).json({ error: err?.message || "Internal server error during login" });
+    console.error("Join error:", err);
+    return res.status(500).json({ error: err?.message || "Internal server error during join" });
   }
 });
 
@@ -223,13 +179,9 @@ chatRouter.get("/me", (req, res) => {
     return res.status(404).json({ error: "User not found" });
   }
 
-  const { passwordHash, ...safeUser } = user;
-  return res.json({ token, user: safeUser });
-});
-
-// GET /api/chat/channels
-chatRouter.get("/channels", (_req, res) => {
-  return res.json(CHANNELS);
+  user.lastSeen = Date.now();
+  user.status = "online";
+  return res.json({ token, user });
 });
 
 // GET /api/chat/messages/:channelId
@@ -237,6 +189,146 @@ chatRouter.get("/messages/:channelId", (req, res) => {
   const { channelId } = req.params;
   const channelMsgs = messages.get(channelId) || [];
   return res.json(channelMsgs);
+});
+
+// GET /api/chat/state
+chatRouter.get("/state", (req, res) => {
+  // Update last seen for requesting user
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.replace("Bearer ", "");
+  if (token && sessions.has(token)) {
+    const userId = sessions.get(token)!;
+    const user = users.get(userId);
+    if (user) {
+      user.lastSeen = Date.now();
+      user.status = "online";
+    }
+  }
+
+  // Cleanup offline users
+  const now = Date.now();
+  for (const [id, user] of users.entries()) {
+    if (now - user.lastSeen > 30000) {
+      user.status = "offline";
+    }
+  }
+
+  const allMessages: Record<string, ChatMessage[]> = {};
+  for (const [channelId, msgs] of messages.entries()) {
+    allMessages[channelId] = msgs;
+  }
+
+  const onlineUsers = Array.from(users.values())
+    .filter(u => u.status === "online")
+    .map(({ lastSeen, ...safe }) => safe);
+
+  return res.json({
+    channels: CHANNELS,
+    messages: allMessages,
+    users: onlineUsers,
+  });
+});
+
+// POST /api/chat/message
+chatRouter.post("/message", (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.replace("Bearer ", "");
+
+  if (!token || !sessions.has(token)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const userId = sessions.get(token)!;
+  const user = users.get(userId);
+  if (!user) return res.status(401).json({ error: "User not found" });
+
+  user.lastSeen = Date.now();
+
+  const { channelId, content, attachmentUrl, attachmentName } = req.body;
+  if (!channelId || (!content && !attachmentUrl)) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+
+  const newMsg: ChatMessage = {
+    id: "msg-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6),
+    channelId,
+    userId: user.id,
+    username: user.username,
+    displayName: user.displayName,
+    avatarColor: user.avatarColor,
+    content: content || "",
+    attachmentUrl,
+    attachmentName,
+    timestamp: Date.now(),
+    reactions: {},
+  };
+
+  let channelList = messages.get(channelId);
+  if (!channelList) {
+    channelList = [];
+    messages.set(channelId, channelList);
+  }
+  channelList.push(newMsg);
+
+  if (channelList.length > 200) {
+    channelList.shift();
+  }
+
+  // Broadcast to WS clients if available
+  try {
+    broadcastAll({
+      type: "new_message",
+      payload: newMsg,
+    });
+  } catch (e) {}
+
+  return res.json(newMsg);
+});
+
+// POST /api/chat/reaction
+chatRouter.post("/reaction", (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.replace("Bearer ", "");
+
+  if (!token || !sessions.has(token)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const userId = sessions.get(token)!;
+  const user = users.get(userId);
+  if (!user) return res.status(401).json({ error: "User not found" });
+
+  user.lastSeen = Date.now();
+
+  const { channelId, messageId, emoji } = req.body;
+  const channelList = messages.get(channelId);
+  if (!channelList) return res.status(404).json({ error: "Channel not found" });
+
+  const msg = channelList.find((m) => m.id === messageId);
+  if (!msg) return res.status(404).json({ error: "Message not found" });
+
+  if (!msg.reactions[emoji]) {
+    msg.reactions[emoji] = [];
+  }
+
+  const usernameIndex = msg.reactions[emoji].indexOf(user.username);
+  if (usernameIndex > -1) {
+    msg.reactions[emoji].splice(usernameIndex, 1);
+    if (msg.reactions[emoji].length === 0) {
+      delete msg.reactions[emoji];
+    }
+  } else {
+    msg.reactions[emoji].push(user.username);
+  }
+
+  try {
+    broadcastAll({
+      type: "reaction_updated",
+      payload: { channelId, messageId, reactions: msg.reactions },
+    });
+  } catch (e) {}
+
+  return res.json({ success: true, reactions: msg.reactions });
 });
 
 // --- WebSocket Server Logic ---
@@ -285,6 +377,15 @@ export function setupChatWebSocket(wss: WebSocketServer) {
 
           activeSockets.set(ws, clientInfo);
 
+          const allMessages: Record<string, ChatMessage[]> = {};
+          for (const [channelId, msgs] of messages.entries()) {
+            allMessages[channelId] = msgs;
+          }
+
+          const onlineUsers = Array.from(users.values())
+            .filter(u => u.status === "online")
+            .map(({ lastSeen, ...safe }) => safe);
+
           // Confirm auth success to client
           ws.send(
             JSON.stringify({
@@ -297,7 +398,8 @@ export function setupChatWebSocket(wss: WebSocketServer) {
                   avatarColor: user.avatarColor,
                 },
                 channels: CHANNELS,
-                usersList: getOnlineUsersList(),
+                messages: allMessages,
+                usersList: onlineUsers,
               },
             })
           );
@@ -579,15 +681,6 @@ function getVoiceStates() {
         isSpeaking: u?.isSpeaking || false,
       });
     }
-  }
-  return result;
-}
-
-function getOnlineUsersList() {
-  const result = [];
-  for (const u of users.values()) {
-    const { passwordHash, ...safe } = u;
-    result.push(safe);
   }
   return result;
 }

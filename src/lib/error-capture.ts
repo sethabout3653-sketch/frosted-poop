@@ -24,13 +24,8 @@ function isIgnoredError(error: unknown): boolean {
   const lower = str.toLowerCase();
   return (
     lower.includes("hyper_util") ||
-    lower.includes("muxtaskended") ||
     lower.includes("websocket") ||
-    lower.includes("wisp") ||
     lower.includes("closure invoked") ||
-    lower.includes("wasm-bindgen") ||
-    lower.includes("scramjet") ||
-    lower.includes("controller request handler") ||
     lower.includes("caught error") ||
     lower.includes("resizeobserver") ||
     lower.includes("cross-origin") ||

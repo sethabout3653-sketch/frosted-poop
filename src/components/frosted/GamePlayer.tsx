@@ -12,7 +12,6 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { gameCover, type Game } from "@/lib/games";
 import { loadGameSource, type GameLoadResult } from "@/lib/gameLoader";
-import { initProxy, getOptimalWisp } from "@/lib/proxy";
 
 interface Props {
   game: Game;
@@ -55,14 +54,6 @@ export function GamePlayer({
     }
 
     async function initAndLoad() {
-      if (game.directory.startsWith("/~/")) {
-        try {
-          const wisp = getOptimalWisp(game.directory);
-          await initProxy(wisp);
-        } catch (e) {
-          console.error(e);
-        }
-      }
       if (cancelled) return;
       const result = await loadGameSource(game.directory);
       if (cancelled) {
@@ -131,12 +122,6 @@ export function GamePlayer({
       currentBlobUrlRef.current = null;
     }
     async function reloadProxyAndGame() {
-      if (game.directory.startsWith("/~/")) {
-        try {
-          const wisp = getOptimalWisp(game.directory);
-          await initProxy(wisp);
-        } catch (e) {}
-      }
       const result = await loadGameSource(game.directory);
       if (result.blobUrl) {
         currentBlobUrlRef.current = result.blobUrl;
