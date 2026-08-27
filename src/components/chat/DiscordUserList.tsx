@@ -24,7 +24,7 @@ export function DiscordUserList({ users, currentUserId }: Props) {
             return (
               <div
                 key={u.id}
-                className="group flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-[#161616] cursor-pointer"
+                className="group flex items-center gap-2.5 rounded-lg px-2 py-1.5 cursor-default select-none"
               >
                 {/* Avatar */}
                 <div className="relative shrink-0">
@@ -40,8 +40,8 @@ export function DiscordUserList({ users, currentUserId }: Props) {
 
                 <div className="truncate">
                   <div className="flex items-center gap-1 truncate">
-                    <span className="truncate text-xs font-bold text-neutral-200 group-hover:text-white">
-                      {u.displayName || u.username}
+                    <span className="truncate text-xs font-bold text-neutral-200">
+                      {u.username}
                     </span>
                     {u.username === "frostedbot" ? (
                       <span className="rounded bg-white px-1 py-0.2 text-[9px] font-black text-black uppercase">
@@ -74,7 +74,7 @@ export function DiscordUserList({ users, currentUserId }: Props) {
             {offline.map((u) => (
               <div
                 key={u.id}
-                className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 opacity-50 hover:opacity-100 transition-opacity cursor-pointer"
+                className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 opacity-50 select-none cursor-default"
               >
                 <div className="relative shrink-0">
                   <div
@@ -88,7 +88,7 @@ export function DiscordUserList({ users, currentUserId }: Props) {
 
                 <div className="truncate">
                   <div className="truncate text-xs font-medium text-neutral-300">
-                    {u.displayName || u.username}
+                    {u.username}
                   </div>
                   <div className="text-[10px] text-neutral-500">Offline</div>
                 </div>

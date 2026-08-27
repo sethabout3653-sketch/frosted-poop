@@ -11,6 +11,7 @@ import {
   Plus,
 } from "lucide-react";
 import type { Channel, ChatMessage, User } from "@/types/chat";
+import { isInappropriateContent } from "../../lib/moderation";
 
 interface Props {
   activeChannel: Channel | undefined;
@@ -26,6 +27,34 @@ interface Props {
 
 const EMOJIS = ["👍", "❤️", "🔥", "🚀", "🎉", "🎮", "😂", "😎"];
 
+function renderMessageContentWithLinks(content: string, msgId: string) {
+  const urlRegex = /((?:https?:\/\/|www\.)[^\s]+|\b[a-zA-Z0-9-]+\.(?:com|org|net|gov|edu|mil|co|io|me|us|info|biz|tv|cc|xyz|club|link|adult|sex|porn|pro|online|site|net)\b[^\s]*)/gi;
+  const parts = content.split(urlRegex);
+  if (parts.length <= 1) return content;
+
+  return parts.map((part, i) => {
+    if (part.match(urlRegex)) {
+      let href = part;
+      if (!/^https?:\/\//i.test(part)) {
+        href = "http://" + part;
+      }
+      return (
+        <a
+          key={`${msgId}-link-${i}`}
+          id={`link-${msgId}-${i}`}
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[#5865f2] hover:underline break-all font-medium inline-flex items-center gap-0.5"
+        >
+          {part}
+        </a>
+      );
+    }
+    return part;
+  });
+}
+
 export function DiscordMessageArea({
   activeChannel,
   messages,
@@ -40,6 +69,8 @@ export function DiscordMessageArea({
   const [inputText, setInputText] = useState("");
   const [attachment, setAttachment] = useState<{ url: string; name: string } | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null); // messageId or null for main input
+  const [errorText, setErrorText] = useState<string | null>(null);
+  const [isCheckingLinks, setIsCheckingLinks] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimerRef = useRef<any>(null);
@@ -52,6 +83,7 @@ export function DiscordMessageArea({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputText(e.target.value);
     onSendTyping(true);
+    if (errorText) setErrorText(null);
 
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
     typingTimerRef.current = setTimeout(() => {
@@ -59,13 +91,55 @@ export function DiscordMessageArea({
     }, 2000);
   };
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim() && !attachment) return;
+    if (isCheckingLinks) return;
+    const trimmedInput = inputText.trim();
+    if (!trimmedInput && !attachment) return;
 
-    onSendMessage(inputText.trim(), attachment?.url, attachment?.name);
+    if (isInappropriateContent(trimmedInput)) {
+      setErrorText("detected inappropriate content try sending something else");
+      return;
+    }
+
+    // Extract links
+    const urlRegex = /((?:https?:\/\/|www\.)[^\s]+|\b[a-zA-Z0-9-]+\.(?:com|org|net|gov|edu|mil|co|io|me|us|info|biz|tv|cc|xyz|club|link|adult|sex|porn|pro|online|site|net)\b[^\s]*)/gi;
+    const urls = trimmedInput.match(urlRegex) || [];
+
+    if (urls.length > 0) {
+      setIsCheckingLinks(true);
+      setErrorText(null);
+      try {
+        for (const url of urls) {
+          const checkRes = await fetch("/api/chat/moderate-link", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${localStorage.getItem("discord_chat_token") || ""}`
+            },
+            body: JSON.stringify({ url })
+          });
+
+          if (checkRes.ok) {
+            const data = await checkRes.json();
+            if (data.allowed === false) {
+              setErrorText("detected inappropriate content try sending something else");
+              setIsCheckingLinks(false);
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Link verification failed:", err);
+      } finally {
+        setIsCheckingLinks(false);
+      }
+    }
+
+    onSendMessage(trimmedInput, attachment?.url, attachment?.name);
     setInputText("");
     setAttachment(null);
+    setErrorText(null);
     onSendTyping(false);
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
   };
@@ -163,8 +237,8 @@ export function DiscordMessageArea({
               <div className="flex-1 min-w-0">
                 {!isCompact && (
                   <div className="flex items-baseline gap-2 mb-0.5">
-                    <span className="font-bold text-white text-xs hover:underline cursor-pointer">
-                      {msg.displayName || msg.username}
+                    <span className="font-bold text-white text-xs select-none">
+                      {msg.username}
                     </span>
                     <span className="text-[10px] text-neutral-500 font-medium">{formattedTime}</span>
                   </div>
@@ -173,7 +247,7 @@ export function DiscordMessageArea({
                 {/* Content */}
                 {msg.content && (
                   <p className="text-xs text-neutral-200 leading-relaxed break-words whitespace-pre-wrap">
-                    {msg.content}
+                    {renderMessageContentWithLinks(msg.content, msg.id)}
                   </p>
                 )}
 
@@ -265,6 +339,18 @@ export function DiscordMessageArea({
 
       {/* Input Box Area */}
       <div className="p-4 pt-0">
+        {errorText && (
+          <div className="mb-2 rounded-lg bg-red-950/80 border border-red-800 p-2.5 text-xs text-red-200 animate-bounce flex items-center justify-between shadow-md">
+            <span className="font-semibold">{errorText}</span>
+            <button 
+              type="button" 
+              onClick={() => setErrorText(null)} 
+              className="text-red-400 hover:text-white cursor-pointer ml-2"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        )}
         <form
           onSubmit={handleSend}
           className="relative rounded-xl bg-[#0e0e0e] p-2.5 border border-neutral-800 focus-within:border-white focus-within:ring-1 focus-within:ring-white transition-all shadow-lg"
@@ -309,8 +395,9 @@ export function DiscordMessageArea({
               type="text"
               value={inputText}
               onChange={handleInputChange}
-              placeholder={`Message #${activeChannel?.name || "channel"}...`}
-              className="flex-1 bg-transparent text-xs text-white placeholder-neutral-500 outline-none"
+              disabled={isCheckingLinks}
+              placeholder={isCheckingLinks ? "Verifying link safety..." : `Message #${activeChannel?.name || "channel"}...`}
+              className="flex-1 bg-transparent text-xs text-white placeholder-neutral-500 outline-none disabled:opacity-50"
             />
 
             {/* Quick Emoji Buttons */}
@@ -328,10 +415,14 @@ export function DiscordMessageArea({
 
               <button
                 type="submit"
-                disabled={!inputText.trim() && !attachment}
+                disabled={(!inputText.trim() && !attachment) || isCheckingLinks}
                 className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-black hover:bg-neutral-200 transition-colors disabled:opacity-30 cursor-pointer ml-1"
               >
-                <Send className="h-4 w-4" />
+                {isCheckingLinks ? (
+                  <div className="h-4 w-4 rounded-full border-2 border-black border-t-transparent animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
               </button>
             </div>
           </div>

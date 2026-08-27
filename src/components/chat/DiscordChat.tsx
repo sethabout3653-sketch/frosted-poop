@@ -6,6 +6,7 @@ import { DiscordServerBar } from "./DiscordServerBar";
 import { DiscordChannelSidebar } from "./DiscordChannelSidebar";
 import { DiscordMessageArea } from "./DiscordMessageArea";
 import { DiscordUserList } from "./DiscordUserList";
+import { ShieldAlert } from "lucide-react";
 
 export interface VoiceStateInfo {
   currentVoiceChannelId: string | null;
@@ -98,6 +99,8 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
     setVoiceError,
     isMuted,
     isDeafened,
+    isSuspended,
+    suspensionTimeLeft,
     sendMessage,
     toggleReaction,
     sendTyping,
@@ -142,6 +145,8 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
         setVoiceError={setVoiceError}
         isMuted={isMuted}
         isDeafened={isDeafened}
+        isSuspended={isSuspended}
+        suspensionTimeLeft={suspensionTimeLeft}
         onJoinVoice={joinVoiceChannel}
         onLeaveVoice={leaveVoiceChannel}
         onToggleMute={toggleMute}

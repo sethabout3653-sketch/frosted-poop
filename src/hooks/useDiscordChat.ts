@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { User, Channel, ChatMessage, VoiceUser } from "@/types/chat";
+import { isInappropriateContent } from "../lib/moderation";
 
 interface Props {
   token: string | null;
@@ -21,6 +22,25 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const [isMuted, setIsMuted] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
   const [isSelfSpeaking, setIsSelfSpeaking] = useState(false);
+
+  const [isSuspended, setIsSuspended] = useState(false);
+  const [suspensionTimeLeft, setSuspensionTimeLeft] = useState(0);
+
+  // Countdown timer for voice suspension
+  useEffect(() => {
+    if (isSuspended && suspensionTimeLeft > 0) {
+      const timer = window.setInterval(() => {
+        setSuspensionTimeLeft((prev) => {
+          if (prev <= 1) {
+            setIsSuspended(false);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => window.clearInterval(timer);
+    }
+  }, [isSuspended, suspensionTimeLeft]);
 
   const localStreamRef = useRef<MediaStream | null>(null);
   const pcsRef = useRef<Record<string, RTCPeerConnection>>({});
@@ -333,6 +353,10 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   // --- Voice Actions ---
 
   const joinVoiceChannel = async (voiceChannelId: string) => {
+    if (isSuspended) {
+      setVoiceError(`You are suspended from voice channels for ${suspensionTimeLeft} more seconds due to inappropriate content.`);
+      return;
+    }
     if (!token || !currentUser) return;
     setVoiceError(null);
     try {
@@ -411,6 +435,70 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     }
   };
 
+  const triggerVoiceSuspension = useCallback(() => {
+    setIsSuspended(true);
+    setSuspensionTimeLeft(60);
+    leaveVoiceChannel();
+  }, [leaveVoiceChannel]);
+
+  // Speech Recognition hook for live voice moderation
+  useEffect(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      console.warn("SpeechRecognition is not supported in this browser.");
+      return;
+    }
+
+    let rec: any = null;
+    let shouldBeRunning = !!currentVoiceChannelId && !isSuspended && !isMuted;
+
+    if (shouldBeRunning) {
+      rec = new SpeechRecognition();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = "en-US";
+
+      rec.onresult = (event: any) => {
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          const transcript = event.results[i][0].transcript;
+          if (isInappropriateContent(transcript)) {
+            console.warn("Moderation triggered from speech transcript:", transcript);
+            triggerVoiceSuspension();
+            break;
+          }
+        }
+      };
+
+      rec.onerror = (e: any) => {
+        console.warn("SpeechRecognition error / silent:", e.error);
+      };
+
+      rec.onend = () => {
+        // Automatically attempt to restart if voice channel is active and not suspended
+        if (!!currentVoiceChannelId && !isSuspended && !isMuted) {
+          try {
+            rec.start();
+          } catch (e) {}
+        }
+      };
+
+      try {
+        rec.start();
+      } catch (err) {
+        console.error("Failed to start SpeechRecognition:", err);
+      }
+    }
+
+    return () => {
+      if (rec) {
+        try {
+          rec.onend = null;
+          rec.stop();
+        } catch (e) {}
+      }
+    };
+  }, [currentVoiceChannelId, isSuspended, isMuted, triggerVoiceSuspension]);
+
   const toggleMute = async () => {
     const nextMuted = !isMuted;
     setIsMuted(nextMuted);
@@ -464,6 +552,9 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     isMuted,
     isDeafened,
     isSelfSpeaking,
+    isSuspended,
+    suspensionTimeLeft,
+    triggerVoiceSuspension,
     sendMessage,
     toggleReaction,
     sendTyping,
