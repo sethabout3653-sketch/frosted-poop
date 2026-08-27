@@ -96,7 +96,15 @@ export function DiscordAuth({ onLoginSuccess }: Props) {
       }
 
       if (!res.ok) {
-        throw new Error(data.error || (text && !text.startsWith("<") ? text : `Server error (${res.status}). Please try again.`));
+        let msg = data.error;
+        if (!msg) {
+          if (text && !text.includes("<") && !text.includes("FUNCTION_INVOCATION_FAILED")) {
+            msg = text;
+          } else {
+            msg = "Unable to connect to chat server. Please check your details and try again.";
+          }
+        }
+        throw new Error(msg);
       }
 
       // Store credentials & registered status in localStorage to remember site state

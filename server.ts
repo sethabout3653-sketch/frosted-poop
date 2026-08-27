@@ -12,8 +12,9 @@ async function startServer() {
   const PORT = process.env.PORT || 3000;
   const server = http.createServer(app);
 
-  // We need to parse JSON
+  // We need to parse JSON and urlencoded requests
   app.use(express.json({ limit: "25mb" }));
+  app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
   // Initialize Chat WebSocket Server
   const chatWss = new WebSocketServer({ noServer: true });
@@ -113,9 +114,20 @@ async function startServer() {
     });
   }
 
+  // Global Express Error Handler
+  app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error("Global Express Error caught:", err);
+    if (res.headersSent) return;
+    return res.status(err?.status || 500).json({
+      error: err?.message || "Internal server error. Please try again.",
+    });
+  });
+
   server.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }
 
-startServer();
+startServer().catch((err) => {
+  console.error("Fatal server start error:", err);
+});
