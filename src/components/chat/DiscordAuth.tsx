@@ -41,11 +41,20 @@ export function DiscordAuth({ onLoginSuccess }: Props) {
     notificationManager.requestPermission().catch(() => {});
 
     try {
-      const res = await fetch("/api/chat/join", {
+      let res = await fetch("/api/chat/join", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: username.trim(), avatarColor }),
       });
+
+      // Fallback for custom serverless routing setups
+      if (res.status === 404) {
+        res = await fetch("/chat/join", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: username.trim(), avatarColor }),
+        });
+      }
 
       const text = await res.text();
       let data: any = {};
@@ -61,7 +70,7 @@ export function DiscordAuth({ onLoginSuccess }: Props) {
           if (text && !text.includes("<") && !text.includes("FUNCTION_INVOCATION_FAILED")) {
             msg = text;
           } else {
-            msg = "Unable to connect to chat server. Please check your details and try again.";
+            msg = "Unable to connect to chat server. Please check your network and try again.";
           }
         }
         throw new Error(msg);

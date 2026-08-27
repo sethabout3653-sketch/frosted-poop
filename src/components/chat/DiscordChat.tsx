@@ -42,9 +42,15 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
       }
 
       try {
-        const res = await fetch("/api/chat/me", {
+        let res = await fetch("/api/chat/me", {
           headers: { Authorization: `Bearer ${token}` },
         });
+
+        if (res.status === 404) {
+          res = await fetch("/chat/me", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+        }
 
         if (res.ok) {
           const text = await res.text();

@@ -18,18 +18,18 @@ function getStripe(): Stripe {
 
 const app = express();
 
-// Enable CORS for all Vercel domains and client environments
+// Enable CORS for all Vercel domains, preview URLs, and client environments
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept");
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
   next();
 });
 
-// JSON and URL-encoded body parsing with large limit for chat media/attachments
+// JSON and URL-encoded body parsing
 app.use((req, res, next) => {
   if (req.body && typeof req.body === "object") {
     next();
@@ -39,9 +39,19 @@ app.use((req, res, next) => {
 });
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
+// Normalize request URLs across different Vercel serverless routing behaviors
+app.use((req, _res, next) => {
+  // If Vercel rewrote URL or passed x-matched-path / originalUrl
+  const matchedPath = (req.headers["x-matched-path"] as string) || (req.headers["x-now-route-matches"] as string);
+  if (matchedPath && (req.url === "/api" || req.url === "/api/index" || req.url === "/api/index.ts")) {
+    req.url = matchedPath;
+  }
+  next();
+});
+
 // Health check endpoint
 app.get(["/api/health", "/health"], (_req, res) => {
-  res.json({ status: "ok", timestamp: Date.now() });
+  res.json({ status: "ok", timestamp: Date.now(), runtime: "vercel-serverless" });
 });
 
 // Stripe checkout session creation
@@ -75,20 +85,22 @@ app.post(["/api/create-checkout-session", "/create-checkout-session"], async (re
   }
 });
 
-// Mount chat routes (support both rewritten paths /api/chat and /chat)
+// Mount Chat Router at all possible Vercel request paths
 app.use("/api/chat", chatRouter);
 app.use("/chat", chatRouter);
 
-// Mount game proxy routes
+// Mount Game Proxy at all possible paths
 app.use("/api/public", gameProxy);
 app.use("/public", gameProxy);
 app.use(gameProxy);
 
-// Catch-all serverless error handler
+// Fallback error handler for Vercel functions
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error("Vercel API error:", err);
+  console.error("Vercel Serverless Function Error:", err);
   if (res.headersSent) return;
-  res.status(err?.status || 500).json({ error: err?.message || "Internal API Error" });
+  res.status(err?.status || 500).json({
+    error: err?.message || "Internal server error on chat backend",
+  });
 });
 
 export default app;

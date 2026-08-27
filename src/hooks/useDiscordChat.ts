@@ -236,9 +236,14 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const fetchSyncState = useCallback(async () => {
     if (!tokenRef.current) return;
     try {
-      const res = await fetch("/api/chat/state", {
+      let res = await fetch("/api/chat/state", {
         headers: { Authorization: `Bearer ${tokenRef.current}` },
       });
+      if (res.status === 404) {
+        res = await fetch("/chat/state", {
+          headers: { Authorization: `Bearer ${tokenRef.current}` },
+        });
+      }
       if (res.status === 401) {
         onLogout();
         return;
