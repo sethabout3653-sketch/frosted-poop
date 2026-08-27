@@ -15,20 +15,9 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const [onlineUsers, setOnlineUsers] = useState<User[]>([]);
   const [typingUsers, setTypingUsers] = useState<Record<string, string[]>>({}); // channelId -> array of displayNames
 
-  // Voice state controls
-  const [voiceStates, setVoiceStates] = useState<Record<string, VoiceUser[]>>({});
-  const [currentVoiceChannelId, setCurrentVoiceChannelId] = useState<string | null>(null);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isDeafened, setIsDeafened] = useState(false);
-  const [isSelfSpeaking, setIsSelfSpeaking] = useState(false);
-
   const socketRef = useRef<WebSocket | null>(null);
-  const localStreamRef = useRef<MediaStream | null>(null);
-  const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
-  const remoteAudioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
-  const audioContextRef = useRef<AudioContext | null>(null);
-
   const activeChannelIdRef = useRef(activeChannelId);
+
   useEffect(() => {
     activeChannelIdRef.current = activeChannelId;
   }, [activeChannelId]);
@@ -62,7 +51,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     fetchState();
     
     const interval = window.setInterval(() => {
-      // Only poll if WebSocket is not connected (fallback mode)
       if (!isConnected) {
         fetchState();
       }
@@ -73,7 +61,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     };
   }, [fetchState, token, isConnected]);
 
-  // Main WebSocket Lifecycle Connection
+  // WebSocket Lifecycle Connection
   useEffect(() => {
     if (!token) return;
 
@@ -84,7 +72,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     socketRef.current = ws;
 
     ws.onopen = () => {
-      // Authenticate socket
       ws.send(JSON.stringify({ type: "auth", payload: { token } }));
     };
 
@@ -151,47 +138,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           });
         }
 
-        if (type === "voice_state_change") {
-          setVoiceStates(payload);
-        }
-
-        // WebRTC Signaling Events for REAL Voice Streaming
-        if (type === "voice_room_joined") {
-          const { occupants } = payload;
-          // Initiate WebRTC peer connections with existing occupants
-          for (const occ of occupants) {
-            initiatePeerConnection(occ.peerId, true);
-          }
-        }
-
-        if (type === "peer_joined_voice") {
-          const { peerId } = payload;
-          initiatePeerConnection(peerId, false);
-        }
-
-        if (type === "peer_left_voice") {
-          const { peerId } = payload;
-          closePeerConnection(peerId);
-        }
-
-        if (type === "peer_speaking") {
-          const { peerId, isSpeaking } = payload;
-          setVoiceStates((prev) => {
-            const copy = { ...prev };
-            for (const chId in copy) {
-              copy[chId] = copy[chId].map((v) =>
-                v.userId === peerId ? { ...v, isSpeaking } : v
-              );
-            }
-            return copy;
-          });
-        }
-
-        if (type === "webrtc_signal") {
-          const { senderPeerId, signalData } = payload;
-          handleWebRTCSignal(senderPeerId, signalData);
-        }
-
         if (type === "error" && payload === "Authentication failed") {
           onLogout();
         }
@@ -206,9 +152,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
 
     return () => {
       ws.close();
-      cleanupVoiceSession();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, onLogout]);
 
   // Handle active channel change
@@ -224,244 +168,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       .catch(console.error);
   }, [activeChannelId, token]);
 
-  // --- WebRTC Peer-to-Peer Real Audio Engine ---
-
-  const initiatePeerConnection = async (peerId: string, isInitiator: boolean) => {
-    if (peerConnectionsRef.current.has(peerId)) return;
-
-    const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-        { urls: "stun:stun1.l.google.com:19302" },
-      ],
-    });
-
-    peerConnectionsRef.current.set(peerId, pc);
-
-    // Add local mic stream tracks to Peer Connection
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach((track) => {
-        pc.addTrack(track, localStreamRef.current!);
-      });
-    }
-
-    // Handle ICE Candidates
-    pc.onicecandidate = (event) => {
-      if (event.candidate && socketRef.current) {
-        socketRef.current.send(
-          JSON.stringify({
-            type: "webrtc_signal",
-            payload: {
-              targetPeerId: peerId,
-              signalData: { type: "candidate", candidate: event.candidate },
-            },
-          })
-        );
-      }
-    };
-
-    // Handle Remote Stream Audio Playback
-    pc.ontrack = (event) => {
-      const remoteStream = event.streams[0];
-      if (remoteStream) {
-        let audioEl = remoteAudioElementsRef.current.get(peerId);
-        if (!audioEl) {
-          audioEl = document.createElement("audio");
-          audioEl.autoplay = true;
-          audioEl.muted = isDeafened;
-          remoteAudioElementsRef.current.set(peerId, audioEl);
-        }
-        audioEl.srcObject = remoteStream;
-      }
-    };
-
-    if (isInitiator) {
-      try {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        socketRef.current?.send(
-          JSON.stringify({
-            type: "webrtc_signal",
-            payload: {
-              targetPeerId: peerId,
-              signalData: { type: "offer", sdp: pc.localDescription },
-            },
-          })
-        );
-      } catch (e) {
-        console.error("Create offer error:", e);
-      }
-    }
-  };
-
-  const handleWebRTCSignal = async (senderPeerId: string, signalData: any) => {
-    let pc = peerConnectionsRef.current.get(senderPeerId);
-
-    if (!pc) {
-      await initiatePeerConnection(senderPeerId, false);
-      pc = peerConnectionsRef.current.get(senderPeerId);
-    }
-
-    if (!pc) return;
-
-    try {
-      if (signalData.type === "offer") {
-        await pc.setRemoteDescription(new RTCSessionDescription(signalData.sdp));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        socketRef.current?.send(
-          JSON.stringify({
-            type: "webrtc_signal",
-            payload: {
-              targetPeerId: senderPeerId,
-              signalData: { type: "answer", sdp: pc.localDescription },
-            },
-          })
-        );
-      } else if (signalData.type === "answer") {
-        await pc.setRemoteDescription(new RTCSessionDescription(signalData.sdp));
-      } else if (signalData.type === "candidate") {
-        await pc.addIceCandidate(new RTCIceCandidate(signalData.candidate));
-      }
-    } catch (e) {
-      console.error("Signal handling error:", e);
-    }
-  };
-
-  const closePeerConnection = (peerId: string) => {
-    const pc = peerConnectionsRef.current.get(peerId);
-    if (pc) {
-      pc.close();
-      peerConnectionsRef.current.delete(peerId);
-    }
-    const audioEl = remoteAudioElementsRef.current.get(peerId);
-    if (audioEl) {
-      audioEl.srcObject = null;
-      audioEl.remove();
-      remoteAudioElementsRef.current.delete(peerId);
-    }
-  };
-
-  // Start Voice Session with microphone access
-  const joinVoiceChannel = async (voiceChannelId: string) => {
-    try {
-      // 1. Request microphone permission
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      localStreamRef.current = stream;
-
-      // 2. Audio Level Analyzer for real-time green speaking indicator
-      try {
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        audioContextRef.current = audioCtx;
-        const source = audioCtx.createMediaStreamSource(stream);
-        const analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 256;
-        source.connect(analyser);
-
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        const checkSpeaking = () => {
-          if (!localStreamRef.current) return;
-          analyser.getByteFrequencyData(dataArray);
-          let sum = 0;
-          for (let i = 0; i < dataArray.length; i++) {
-            sum += dataArray[i];
-          }
-          const average = sum / dataArray.length;
-          const isSpeakingNow = average > 25 && !isMuted;
-
-          if (isSpeakingNow !== isSelfSpeaking) {
-            setIsSelfSpeaking(isSpeakingNow);
-            socketRef.current?.send(
-              JSON.stringify({
-                type: "voice_speaking",
-                payload: { isSpeaking: isSpeakingNow },
-              })
-            );
-          }
-          requestAnimationFrame(checkSpeaking);
-        };
-        checkSpeaking();
-      } catch (err) {
-        console.warn("Audio Context Analyzer failed:", err);
-      }
-
-      setCurrentVoiceChannelId(voiceChannelId);
-
-      // Notify server we joined voice
-      socketRef.current?.send(
-        JSON.stringify({
-          type: "join_voice",
-          payload: { voiceChannelId },
-        })
-      );
-    } catch (err) {
-      alert("Microphone access is required for real voice chat. Please allow mic permissions.");
-    }
-  };
-
-  const leaveVoiceChannel = () => {
-    cleanupVoiceSession();
-    socketRef.current?.send(JSON.stringify({ type: "leave_voice" }));
-    setCurrentVoiceChannelId(null);
-  };
-
-  const cleanupVoiceSession = () => {
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach((track) => track.stop());
-      localStreamRef.current = null;
-    }
-    peerConnectionsRef.current.forEach((pc) => pc.close());
-    peerConnectionsRef.current.clear();
-
-    remoteAudioElementsRef.current.forEach((el) => {
-      el.srcObject = null;
-      el.remove();
-    });
-    remoteAudioElementsRef.current.clear();
-
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
-  };
-
-  // Toggle Microphone Mute
-  const toggleMute = () => {
-    const nextMuted = !isMuted;
-    setIsMuted(nextMuted);
-
-    if (localStreamRef.current) {
-      localStreamRef.current.getAudioTracks().forEach((track) => {
-        track.enabled = !nextMuted;
-      });
-    }
-
-    socketRef.current?.send(
-      JSON.stringify({
-        type: "voice_mute_toggle",
-        payload: { isMuted: nextMuted, isDeafened },
-      })
-    );
-  };
-
-  // Toggle Deafen (mute incoming remote audio)
-  const toggleDeafen = () => {
-    const nextDeafened = !isDeafened;
-    setIsDeafened(nextDeafened);
-
-    remoteAudioElementsRef.current.forEach((audioEl) => {
-      audioEl.muted = nextDeafened;
-    });
-
-    socketRef.current?.send(
-      JSON.stringify({
-        type: "voice_mute_toggle",
-        payload: { isMuted, isDeafened: nextDeafened },
-      })
-    );
-  };
-
-  // Send Message
   const sendMessage = async (content: string, attachmentUrl?: string, attachmentName?: string) => {
     if (!token) return;
     try {
@@ -473,7 +179,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
         },
         body: JSON.stringify({ channelId: activeChannelId, content, attachmentUrl, attachmentName })
       });
-      // The server will broadcast 'new_message', but if WS is disconnected, we can optimistically update or rely on polling.
       if (res.ok && !isConnected) {
         const newMsg = await res.json();
         setMessages(prev => [...prev, newMsg]);
@@ -483,7 +188,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     }
   };
 
-  // Send Reaction
   const toggleReaction = async (messageId: string, emoji: string) => {
     if (!token) return;
     try {
@@ -506,7 +210,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     }
   };
 
-  // Send Typing Notification
   const sendTyping = (isTyping: boolean) => {
     if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) return;
     socketRef.current.send(
@@ -516,6 +219,17 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       })
     );
   };
+
+  // Stubs for backward compatibility
+  const voiceStates: Record<string, VoiceUser[]> = {};
+  const currentVoiceChannelId = null;
+  const isMuted = false;
+  const isDeafened = false;
+  const isSelfSpeaking = false;
+  const joinVoiceChannel = () => {};
+  const leaveVoiceChannel = () => {};
+  const toggleMute = () => {};
+  const toggleDeafen = () => {};
 
   return {
     isConnected,

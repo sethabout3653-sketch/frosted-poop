@@ -40,11 +40,6 @@ const sessions = new Map<string, string>(); // token -> userId
 // Pre-seeded channels
 export const CHANNELS = [
   { id: "general", name: "general", type: "text", topic: "General community chat and discussions" },
-  { id: "lounge", name: "lounge", type: "text", topic: "Relax, hang out, and chat about anything" },
-  { id: "gaming", name: "gaming", type: "text", topic: "Share gaming clips, strats, and favorite games" },
-  { id: "announcements", name: "announcements", type: "text", topic: "Official Frosted updates and notices" },
-  { id: "voice-lounge", name: "Voice Lounge", type: "voice", topic: "Open voice channel for everyone" },
-  { id: "voice-gaming", name: "Gaming Voice", type: "voice", topic: "Voice channel for active gaming sessions" },
 ];
 
 const messages = new Map<string, ChatMessage[]>(); // channelId -> array of ChatMessage
@@ -65,35 +60,6 @@ const seedWelcomeMessages = () => {
       content: "Welcome to Frosted Chat! 🎉 Enter a username to chat with everyone.",
       timestamp: now - 3600000,
       reactions: { "👋": ["FrostedBot"] },
-    },
-  ]);
-
-  messages.set("lounge", [
-    {
-      id: "msg-lounge-1",
-      channelId: "lounge",
-      userId: systemId,
-      username: "FrostedBot",
-      displayName: "Frosted Bot",
-      avatarColor: "#ffffff",
-      content: "Welcome to the Lounge! Grab a seat and chat with everyone.",
-      timestamp: now - 1800000,
-      reactions: {},
-    },
-  ]);
-
-  messages.set("gaming", []);
-  messages.set("announcements", [
-    {
-      id: "msg-ann-1",
-      channelId: "announcements",
-      userId: systemId,
-      username: "FrostedBot",
-      displayName: "Frosted Bot",
-      avatarColor: "#ffffff",
-      content: "🚀 Frosted Real-Time Text Chat is live! Custom attachments, and reactions are fully supported.",
-      timestamp: now - 7200000,
-      reactions: { "🚀": ["FrostedBot"] },
     },
   ]);
 };
@@ -501,98 +467,6 @@ export function setupChatWebSocket(wss: WebSocketServer) {
             },
           });
         }
-
-        // 5. WebRTC Voice Channel Join / Leave & Signaling
-        if (type === "join_voice") {
-          const { voiceChannelId } = payload;
-          leaveVoiceChannel(clientInfo);
-
-          clientInfo.voiceChannelId = voiceChannelId;
-          const user = users.get(clientInfo.userId);
-          if (user) user.currentVoiceChannelId = voiceChannelId;
-
-          // Send current occupants of this voice channel to joining user
-          const occupants = getVoiceChannelOccupants(voiceChannelId, clientInfo.userId);
-          ws.send(
-            JSON.stringify({
-              type: "voice_room_joined",
-              payload: {
-                voiceChannelId,
-                occupants,
-              },
-            })
-          );
-
-          // Notify existing occupants that a new peer joined
-          broadcastToVoiceChannel(voiceChannelId, ws, {
-            type: "peer_joined_voice",
-            payload: {
-              peerId: clientInfo.userId,
-              username: clientInfo.username,
-              displayName: clientInfo.displayName,
-              avatarColor: clientInfo.avatarColor,
-            },
-          });
-
-          // Broadcast voice state update globally
-          broadcastAll({
-            type: "voice_state_change",
-            payload: getVoiceStates(),
-          });
-        }
-
-        if (type === "leave_voice") {
-          leaveVoiceChannel(clientInfo);
-        }
-
-        // WebRTC Signaling Relay (Offer, Answer, ICE Candidate)
-        if (type === "webrtc_signal") {
-          const { targetPeerId, signalData } = payload;
-          const targetSocket = findSocketByUserId(targetPeerId);
-
-          if (targetSocket) {
-            targetSocket.send(
-              JSON.stringify({
-                type: "webrtc_signal",
-                payload: {
-                  senderPeerId: clientInfo.userId,
-                  signalData,
-                },
-              })
-            );
-          }
-        }
-
-        // Voice state toggles (Mute, Deafen, Speaking)
-        if (type === "voice_mute_toggle") {
-          const { isMuted, isDeafened } = payload;
-          const user = users.get(clientInfo.userId);
-          if (user) {
-            user.isMuted = !!isMuted;
-            user.isDeafened = !!isDeafened;
-          }
-          broadcastAll({
-            type: "voice_state_change",
-            payload: getVoiceStates(),
-          });
-        }
-
-        if (type === "voice_speaking") {
-          const { isSpeaking } = payload;
-          const user = users.get(clientInfo.userId);
-          if (user) {
-            user.isSpeaking = !!isSpeaking;
-          }
-          if (clientInfo.voiceChannelId) {
-            broadcastToVoiceChannel(clientInfo.voiceChannelId, ws, {
-              type: "peer_speaking",
-              payload: {
-                peerId: clientInfo.userId,
-                isSpeaking: !!isSpeaking,
-              },
-            });
-          }
-        }
       } catch (err) {
         console.error("WS Message Error:", err);
       }
@@ -600,8 +474,6 @@ export function setupChatWebSocket(wss: WebSocketServer) {
 
     ws.on("close", () => {
       if (clientInfo) {
-        leaveVoiceChannel(clientInfo);
-
         const user = users.get(clientInfo.userId);
         if (user) {
           user.status = "offline";
@@ -613,77 +485,12 @@ export function setupChatWebSocket(wss: WebSocketServer) {
           type: "user_status_change",
           payload: { userId: clientInfo.userId, status: "offline" },
         });
-
-        broadcastAll({
-          type: "voice_state_change",
-          payload: getVoiceStates(),
-        });
       }
     });
   });
 }
 
 // Helpers
-
-function leaveVoiceChannel(client: ClientConnection) {
-  if (client.voiceChannelId) {
-    const oldChannelId = client.voiceChannelId;
-    client.voiceChannelId = null;
-
-    const user = users.get(client.userId);
-    if (user) {
-      user.currentVoiceChannelId = null;
-      user.isSpeaking = false;
-    }
-
-    broadcastToVoiceChannel(oldChannelId, client.ws, {
-      type: "peer_left_voice",
-      payload: { peerId: client.userId },
-    });
-
-    broadcastAll({
-      type: "voice_state_change",
-      payload: getVoiceStates(),
-    });
-  }
-}
-
-function getVoiceChannelOccupants(channelId: string, excludeUserId: string) {
-  const occupants = [];
-  for (const client of activeSockets.values()) {
-    if (client.voiceChannelId === channelId && client.userId !== excludeUserId) {
-      occupants.push({
-        peerId: client.userId,
-        username: client.username,
-        displayName: client.displayName,
-        avatarColor: client.avatarColor,
-      });
-    }
-  }
-  return occupants;
-}
-
-function getVoiceStates() {
-  const result: Record<string, any[]> = {};
-  for (const client of activeSockets.values()) {
-    if (client.voiceChannelId) {
-      if (!result[client.voiceChannelId]) {
-        result[client.voiceChannelId] = [];
-      }
-      const u = users.get(client.userId);
-      result[client.voiceChannelId].push({
-        userId: client.userId,
-        username: client.username,
-        displayName: client.displayName,
-        avatarColor: client.avatarColor,
-        isMuted: u?.isMuted || false,
-        isDeafened: u?.isDeafened || false,
-        isSpeaking: u?.isSpeaking || false,
-      });
-    }
-  }
-  return result;
-}
 
 function broadcastAll(messageObj: any) {
   const json = JSON.stringify(messageObj);
@@ -701,22 +508,4 @@ function broadcastExcept(excludeWs: WebSocket, messageObj: any) {
       ws.send(json);
     }
   }
-}
-
-function broadcastToVoiceChannel(channelId: string, excludeWs: WebSocket, messageObj: any) {
-  const json = JSON.stringify(messageObj);
-  for (const [ws, client] of activeSockets.entries()) {
-    if (client.voiceChannelId === channelId && ws !== excludeWs && ws.readyState === WebSocket.OPEN) {
-      ws.send(json);
-    }
-  }
-}
-
-function findSocketByUserId(userId: string): WebSocket | null {
-  for (const [ws, client] of activeSockets.entries()) {
-    if (client.userId === userId && ws.readyState === WebSocket.OPEN) {
-      return ws;
-    }
-  }
-  return null;
 }

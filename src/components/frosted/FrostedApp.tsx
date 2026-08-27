@@ -7,8 +7,7 @@ import { GamesGrid } from "./GamesGrid";
 import { GamePlayer } from "./GamePlayer";
 import { FrostedSettingsModal } from "./FrostedSettingsModal";
 import { VerificationGate } from "./VerificationGate";
-import { DiscordChat, type VoiceStateInfo } from "@/components/chat/DiscordChat";
-import { VoiceOverlayWidget } from "@/components/chat/VoiceOverlayWidget";
+import { DiscordChat } from "@/components/chat/DiscordChat";
 
 export function FrostedApp() {
   const [isVerified, setIsVerified] = useState<boolean>(() => {
@@ -26,7 +25,6 @@ export function FrostedApp() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isChatActive, setIsChatActive] = useState(false);
-  const [voiceState, setVoiceState] = useState<VoiceStateInfo | null>(null);
 
   const { favorites, toggleFavorite, recentlyPlayed, recordPlay, cloak, updateCloak } =
     useFrostedStore();
@@ -94,11 +92,10 @@ export function FrostedApp() {
         isChatActive={isChatActive}
       />
 
-      {/* Persistent Discord Chat Container (keeps WebSocket & Voice Peer Connections active) */}
+      {/* Persistent Discord Chat Container (keeps WebSocket active) */}
       <div className={isChatActive ? "block" : "hidden"}>
         <DiscordChat
           onReturnToGames={() => setIsChatActive(false)}
-          onVoiceStateChange={setVoiceState}
         />
       </div>
 
@@ -126,24 +123,6 @@ export function FrostedApp() {
             />
           )}
         </main>
-      )}
-
-      {/* Floating In-Game Voice Overlay Widget */}
-      {!isChatActive && voiceState?.currentVoiceChannelId && (
-        <VoiceOverlayWidget
-          channelName={voiceState.channelName || "Voice Lounge"}
-          isMuted={voiceState.isMuted}
-          isDeafened={voiceState.isDeafened}
-          isSelfSpeaking={voiceState.isSelfSpeaking}
-          occupantCount={voiceState.occupantCount}
-          onToggleMute={voiceState.toggleMute}
-          onToggleDeafen={voiceState.toggleDeafen}
-          onLeaveVoice={voiceState.leaveVoice}
-          onOpenChat={() => {
-            setActiveGame(null);
-            setIsChatActive(true);
-          }}
-        />
       )}
 
       {/* Modals */}

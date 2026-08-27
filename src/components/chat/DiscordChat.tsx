@@ -91,48 +91,11 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
     setActiveChannelId,
     messages,
     onlineUsers,
-    voiceStates,
     typingUsers,
-    currentVoiceChannelId,
-    isMuted,
-    isDeafened,
-    isSelfSpeaking,
     sendMessage,
     toggleReaction,
     sendTyping,
-    joinVoiceChannel,
-    leaveVoiceChannel,
-    toggleMute,
-    toggleDeafen,
   } = useDiscordChat({ token, currentUser, onLogout: handleLogout });
-
-  // Sync voice state to parent for in-game Voice Overlay Widget
-  useEffect(() => {
-    if (onVoiceStateChange) {
-      const activeVoiceChan = channels.find((c) => c.id === currentVoiceChannelId);
-      const occupants = currentVoiceChannelId ? voiceStates[currentVoiceChannelId] || [] : [];
-
-      onVoiceStateChange({
-        currentVoiceChannelId,
-        channelName: activeVoiceChan?.name || "Voice Lounge",
-        isMuted,
-        isDeafened,
-        isSelfSpeaking,
-        occupantCount: occupants.length,
-        leaveVoice: leaveVoiceChannel,
-        toggleMute,
-        toggleDeafen,
-      });
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    currentVoiceChannelId,
-    channels,
-    voiceStates,
-    isMuted,
-    isDeafened,
-    isSelfSpeaking,
-  ]);
 
   if (isVerifyingAuth) {
     return (
@@ -163,15 +126,6 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
         activeChannelId={activeChannelId}
         onSelectChannel={setActiveChannelId}
         currentUser={currentUser}
-        voiceStates={voiceStates}
-        currentVoiceChannelId={currentVoiceChannelId}
-        isMuted={isMuted}
-        isDeafened={isDeafened}
-        isSelfSpeaking={isSelfSpeaking}
-        onJoinVoice={joinVoiceChannel}
-        onLeaveVoice={leaveVoiceChannel}
-        onToggleMute={toggleMute}
-        onToggleDeafen={toggleDeafen}
         onLogout={handleLogout}
       />
 

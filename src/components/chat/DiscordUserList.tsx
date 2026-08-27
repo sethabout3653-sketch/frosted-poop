@@ -54,7 +54,7 @@ export function DiscordUserList({ users, currentUserId }: Props) {
                     ) : null}
                   </div>
                   <div className="text-[10px] text-neutral-500 truncate">
-                    {u.currentVoiceChannelId ? "🔊 In Voice" : "Playing Frosted Games"}
+                    Online
                   </div>
                 </div>
               </div>
