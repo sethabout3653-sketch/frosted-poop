@@ -12,6 +12,8 @@ import {
   PhoneOff,
   AlertCircle,
   ShieldAlert,
+  Sliders,
+  Sparkles,
   X,
 } from "lucide-react";
 import type { Channel, User, VoiceUser } from "@/types/chat";
@@ -29,6 +31,11 @@ interface Props {
   isDeafened?: boolean;
   isSuspended?: boolean;
   suspensionTimeLeft?: number;
+  micGain?: number;
+  setMicGain?: (gain: number) => void;
+  outputGain?: number;
+  setOutputGain?: (gain: number) => void;
+  micLevel?: number;
   onJoinVoice: (channelId: string) => void;
   onLeaveVoice: () => void;
   onToggleMute: () => void;
@@ -49,6 +56,11 @@ export function DiscordChannelSidebar({
   isDeafened = false,
   isSuspended = false,
   suspensionTimeLeft = 0,
+  micGain = 3.0,
+  setMicGain,
+  outputGain = 2.5,
+  setOutputGain,
+  micLevel = 0,
   onJoinVoice,
   onLeaveVoice,
   onToggleMute,
@@ -57,6 +69,7 @@ export function DiscordChannelSidebar({
 }: Props) {
   const [textOpen, setTextOpen] = useState(true);
   const [voiceOpen, setVoiceOpen] = useState(true);
+  const [showAudioSettings, setShowAudioSettings] = useState(false);
 
   const textChannels = channels.filter((c) => c.type === "text");
   const voiceChannels = channels.filter((c) => c.type === "voice");
@@ -100,14 +113,16 @@ export function DiscordChannelSidebar({
         <div>
           <button
             onClick={() => setTextOpen(!textOpen)}
-            className="flex w-full items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-neutral-400 hover:text-white mb-1 px-1 cursor-pointer"
+            className="flex w-full items-center justify-between px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-neutral-400 hover:text-neutral-200 cursor-pointer"
           >
-            {textOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-            <span>Text Channels</span>
+            <div className="flex items-center gap-1">
+              {textOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              <span>Text Channels</span>
+            </div>
           </button>
 
           {textOpen && (
-            <div className="space-y-0.5">
+            <div className="mt-1 space-y-0.5">
               {textChannels.map((ch) => {
                 const isActive = activeChannelId === ch.id;
                 return (
@@ -116,7 +131,7 @@ export function DiscordChannelSidebar({
                     onClick={() => onSelectChannel(ch.id)}
                     className={`group flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
                       isActive
-                        ? "bg-white text-black font-bold shadow-sm"
+                        ? "bg-white text-black font-semibold shadow-sm"
                         : "text-neutral-400 hover:bg-[#161616] hover:text-white"
                     }`}
                   >
@@ -135,14 +150,16 @@ export function DiscordChannelSidebar({
         <div>
           <button
             onClick={() => setVoiceOpen(!voiceOpen)}
-            className="flex w-full items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-neutral-400 hover:text-white mb-1 px-1 cursor-pointer"
+            className="flex w-full items-center justify-between px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-neutral-400 hover:text-neutral-200 cursor-pointer"
           >
-            {voiceOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-            <span>Voice Channels</span>
+            <div className="flex items-center gap-1">
+              {voiceOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              <span>Voice Channels</span>
+            </div>
           </button>
 
           {voiceOpen && (
-            <div className="space-y-0.5">
+            <div className="mt-1 space-y-0.5">
               {voiceChannels.map((ch) => {
                 const isUserInThisVoice = currentVoiceChannelId === ch.id;
                 const occupants = voiceStates[ch.id] || [];
@@ -164,6 +181,11 @@ export function DiscordChannelSidebar({
                         className={`h-4 w-4 ${isSuspended ? "text-neutral-600" : isUserInThisVoice ? "text-emerald-400" : "text-neutral-500 group-hover:text-white"}`}
                       />
                       <span className="truncate flex-1 text-left">{ch.name}</span>
+                      {isUserInThisVoice && (
+                        <span className="text-[10px] px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 rounded font-bold uppercase">
+                          Live
+                        </span>
+                      )}
                     </button>
 
                     {/* Occupants list */}
@@ -236,6 +258,86 @@ export function DiscordChannelSidebar({
               </span>
             </div>
 
+            {/* Live Mic Activity Bar */}
+            <div className="flex items-center gap-1.5 mt-1 px-1">
+              <span className="text-[9px] text-neutral-400 uppercase font-bold tracking-wider shrink-0">
+                Mic
+              </span>
+              <div className="flex-1 h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-emerald-500 to-green-400 transition-all duration-75"
+                  style={{ width: `${isMuted || isDeafened ? 0 : micLevel}%` }}
+                />
+              </div>
+              <span className="text-[9px] text-emerald-400 font-mono font-bold shrink-0">
+                {isMuted || isDeafened ? "MUTE" : `${Math.round(micGain * 100)}%`}
+              </span>
+            </div>
+
+            {/* Audio Booster Settings Popover */}
+            {showAudioSettings && (
+              <div className="flex flex-col gap-2.5 p-2 bg-[#141414] border border-neutral-800 rounded-lg mt-1 animate-in fade-in zoom-in-95 duration-150 text-[11px]">
+                <div className="flex items-center justify-between border-b border-neutral-800 pb-1">
+                  <div className="flex items-center gap-1 text-white font-bold">
+                    <Sparkles className="h-3 w-3 text-emerald-400" />
+                    <span>Audio Amplifier</span>
+                  </div>
+                  <button
+                    onClick={() => setShowAudioSettings(false)}
+                    className="text-neutral-400 hover:text-white p-0.5"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+
+                {/* Mic Gain Slider */}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[10px] text-neutral-300">
+                    <span>Mic Boost (Gain)</span>
+                    <span className="font-mono text-emerald-400 font-bold">
+                      {Math.round(micGain * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1.0"
+                    max="5.0"
+                    step="0.25"
+                    value={micGain}
+                    onChange={(e) => setMicGain && setMicGain(parseFloat(e.target.value))}
+                    className="w-full h-1.5 bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                  />
+                  <div className="flex justify-between text-[8px] text-neutral-400">
+                    <span>Normal (100%)</span>
+                    <span>Ultra Boost (500%)</span>
+                  </div>
+                </div>
+
+                {/* Output Gain Slider */}
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[10px] text-neutral-300">
+                    <span>Voice Output Boost</span>
+                    <span className="font-mono text-emerald-400 font-bold">
+                      {Math.round(outputGain * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1.0"
+                    max="4.0"
+                    step="0.25"
+                    value={outputGain}
+                    onChange={(e) => setOutputGain && setOutputGain(parseFloat(e.target.value))}
+                    className="w-full h-1.5 bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                  />
+                  <div className="flex justify-between text-[8px] text-neutral-400">
+                    <span>100%</span>
+                    <span>400%</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center justify-around mt-1">
               <button
                 onClick={onToggleMute}
@@ -258,6 +360,17 @@ export function DiscordChannelSidebar({
                 title={isDeafened ? "Undeafen Audio" : "Deafen Audio"}
               >
                 <Headphones className={`h-4 w-4 ${isDeafened ? "text-amber-400" : ""}`} />
+              </button>
+              <button
+                onClick={() => setShowAudioSettings(!showAudioSettings)}
+                className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all cursor-pointer ${
+                  showAudioSettings
+                    ? "bg-white text-black font-bold"
+                    : "hover:bg-neutral-800 text-neutral-400 hover:text-white"
+                }`}
+                title="Audio Boost Settings"
+              >
+                <Sliders className="h-4 w-4" />
               </button>
               <button
                 onClick={onLeaveVoice}
