@@ -73,7 +73,8 @@ export function DiscordAuth({ onLoginSuccess }: Props) {
 
       // 2. Direct Cloud Firestore Registration (Serverless-Independent)
       if (!loggedInUser) {
-        const userId = "usr-" + Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+        const userId =
+          "usr-" + Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
         sessionToken = "fs_" + userId + "_" + Date.now();
         loggedInUser = {
           id: userId,
@@ -95,7 +96,7 @@ export function DiscordAuth({ onLoginSuccess }: Props) {
               createdAt: Date.now(),
               lastSeen: Date.now(),
             },
-            { merge: true }
+            { merge: true },
           );
         } catch (fsErr) {
           console.warn("Direct Firestore auth note:", fsErr);
@@ -127,7 +128,9 @@ export function DiscordAuth({ onLoginSuccess }: Props) {
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.15)]">
             <MessageSquare className="h-7 w-7" />
           </div>
-          <h1 className="text-2xl font-black tracking-tight text-white mb-1.5">Join Community Chat</h1>
+          <h1 className="text-2xl font-black tracking-tight text-white mb-1.5">
+            Join Community Chat
+          </h1>
           <p className="text-xs text-neutral-400">
             Real-time messaging & voice rooms powered by Cloud Firestore.
           </p>

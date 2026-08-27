@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { User, Channel, ChatMessage, VoiceUser } from "@/types/chat";
 import { notificationManager } from "../lib/notifications";
+import { isInappropriateContent, analyzeContent } from "../lib/moderation";
 import { db } from "../lib/firebaseClient";
 import {
   collection,
@@ -86,16 +87,36 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   });
   const [micLevel, setMicLevel] = useState<number>(0);
 
-  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(() => {
-    return notificationManager.getPermission();
-  });
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
+    () => {
+      return notificationManager.getPermission();
+    },
+  );
 
   const [isMuted, setIsMuted] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
   const [isSelfSpeaking, setIsSelfSpeaking] = useState(false);
 
-  const [isSuspended, setIsSuspended] = useState(false);
-  const [suspensionTimeLeft, setSuspensionTimeLeft] = useState(0);
+  // Suspension state (persisted across reloads for security)
+  const [isSuspended, setIsSuspended] = useState<boolean>(() => {
+    const savedUntil = localStorage.getItem("discord_suspended_until");
+    if (savedUntil) {
+      const remaining = Math.ceil((parseInt(savedUntil, 10) - Date.now()) / 1000);
+      return remaining > 0;
+    }
+    return false;
+  });
+  const [suspensionTimeLeft, setSuspensionTimeLeft] = useState<number>(() => {
+    const savedUntil = localStorage.getItem("discord_suspended_until");
+    if (savedUntil) {
+      const remaining = Math.ceil((parseInt(savedUntil, 10) - Date.now()) / 1000);
+      return remaining > 0 ? remaining : 0;
+    }
+    return 0;
+  });
+  const [suspensionAction, setSuspensionAction] = useState<string>(() => {
+    return localStorage.getItem("discord_suspension_action") || "";
+  });
 
   // Audio & WebRTC Refs
   const rawStreamRef = useRef<MediaStream | null>(null);
@@ -110,7 +131,12 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const pcsRef = useRef<Record<string, RTCPeerConnection>>({});
   const remoteAudiosRef = useRef<Record<string, HTMLAudioElement>>({});
 
+  const speechRecognitionRef = useRef<any | null>(null);
   const activeChannelIdRef = useRef(activeChannelId);
+  const currentVoiceChannelIdRef = useRef(currentVoiceChannelId);
+  const isSuspendedRef = useRef(isSuspended);
+  const isMutedRef = useRef(isMuted);
+  const isDeafenedRef = useRef(isDeafened);
   const currentUserRef = useRef(currentUser);
   const knownMessageIdsRef = useRef<Set<string>>(new Set());
   const initialLoadDoneRef = useRef(false);
@@ -129,6 +155,22 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   useEffect(() => {
     activeChannelIdRef.current = activeChannelId;
   }, [activeChannelId]);
+
+  useEffect(() => {
+    currentVoiceChannelIdRef.current = currentVoiceChannelId;
+  }, [currentVoiceChannelId]);
+
+  useEffect(() => {
+    isSuspendedRef.current = isSuspended;
+  }, [isSuspended]);
+
+  useEffect(() => {
+    isMutedRef.current = isMuted;
+  }, [isMuted]);
+
+  useEffect(() => {
+    isDeafenedRef.current = isDeafened;
+  }, [isDeafened]);
 
   useEffect(() => {
     currentUserRef.current = currentUser;
@@ -154,22 +196,28 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   }, []);
 
   // Update Mic Gain
-  const setMicGain = useCallback((newGain: number) => {
-    setMicGainState(newGain);
-    localStorage.setItem("discord_mic_gain", newGain.toString());
-    if (micGainNodeRef.current) {
-      micGainNodeRef.current.gain.value = isMuted ? 0 : newGain;
-    }
-  }, [isMuted]);
+  const setMicGain = useCallback(
+    (newGain: number) => {
+      setMicGainState(newGain);
+      localStorage.setItem("discord_mic_gain", newGain.toString());
+      if (micGainNodeRef.current) {
+        micGainNodeRef.current.gain.value = isMuted ? 0 : newGain;
+      }
+    },
+    [isMuted],
+  );
 
   // Update Output Gain
-  const setOutputGain = useCallback((newGain: number) => {
-    setOutputGainState(newGain);
-    localStorage.setItem("discord_output_gain", newGain.toString());
-    Object.values(remoteGainNodesRef.current).forEach((gNode) => {
-      gNode.gain.value = isDeafened ? 0 : newGain;
-    });
-  }, [isDeafened]);
+  const setOutputGain = useCallback(
+    (newGain: number) => {
+      setOutputGainState(newGain);
+      localStorage.setItem("discord_output_gain", newGain.toString());
+      Object.values(remoteGainNodesRef.current).forEach((gNode) => {
+        gNode.gain.value = isDeafened ? 0 : newGain;
+      });
+    },
+    [isDeafened],
+  );
 
   // Suspension countdown
   useEffect(() => {
@@ -178,6 +226,16 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
         setSuspensionTimeLeft((prev) => {
           if (prev <= 1) {
             setIsSuspended(false);
+            setSuspensionAction("");
+            localStorage.removeItem("discord_suspended_until");
+            localStorage.removeItem("discord_suspension_action");
+            if (currentUserRef.current) {
+              updateDoc(doc(db, "users", currentUserRef.current.id), {
+                isSuspended: false,
+                suspendedUntil: null,
+                suspensionAction: null,
+              }).catch(() => {});
+            }
             return 0;
           }
           return prev - 1;
@@ -214,6 +272,17 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   }, [isDeafened, outputGain]);
 
   const cleanupVoice = useCallback(() => {
+    // 1. Stop Speech Recognition
+    if (speechRecognitionRef.current) {
+      try {
+        speechRecognitionRef.current.onresult = null;
+        speechRecognitionRef.current.onerror = null;
+        speechRecognitionRef.current.onend = null;
+        speechRecognitionRef.current.abort();
+      } catch {}
+      speechRecognitionRef.current = null;
+    }
+
     if (animFrameRef.current) {
       cancelAnimationFrame(animFrameRef.current);
       animFrameRef.current = null;
@@ -252,6 +321,34 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     setIsSelfSpeaking(false);
     setMicLevel(0);
   }, []);
+
+  // Trigger Voice Suspension when inappropriate content is spoken
+  const triggerVoiceSuspension = useCallback(
+    (actionDescription = "Inappropriate microphone activity") => {
+      cleanupVoice();
+
+      const durationSeconds = 60;
+      const suspendedUntil = Date.now() + durationSeconds * 1000;
+      localStorage.setItem("discord_suspended_until", String(suspendedUntil));
+      localStorage.setItem("discord_suspension_action", actionDescription);
+
+      setIsSuspended(true);
+      setSuspensionTimeLeft(durationSeconds);
+      setSuspensionAction(actionDescription);
+      setVoiceError(`You have been suspended for: ${actionDescription}`);
+
+      if (currentUserRef.current) {
+        updateDoc(doc(db, "users", currentUserRef.current.id), {
+          currentVoiceChannelId: null,
+          isSpeaking: false,
+          isSuspended: true,
+          suspendedUntil,
+          suspensionAction: actionDescription,
+        }).catch(() => {});
+      }
+    },
+    [cleanupVoice],
+  );
 
   // Clean up on unmount
   useEffect(() => {
@@ -296,7 +393,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
 
       pcsRef.current[peerId] = pc;
 
-      // Add boosted outbound stream track
       const streamToSend = processedStreamRef.current || rawStreamRef.current;
       if (streamToSend) {
         streamToSend.getAudioTracks().forEach((track) => {
@@ -322,7 +418,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       pc.ontrack = (event) => {
         const [remoteStream] = event.streams;
 
-        // 1. Amplified Web Audio destination playback
         try {
           const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
           if (!remoteAudioCtxRef.current || remoteAudioCtxRef.current.state === "closed") {
@@ -349,7 +444,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           console.warn("WebAudio remote setup note:", webaudioErr);
         }
 
-        // 2. Backup HTMLAudioElement
         let audio = remoteAudiosRef.current[peerId];
         if (!audio) {
           audio = document.createElement("audio");
@@ -360,7 +454,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           remoteAudiosRef.current[peerId] = audio;
         }
         audio.srcObject = remoteStream;
-        // If WebAudio is handling output, mute HTML audio element to avoid double playback
         audio.muted = Boolean(remoteAudioCtxRef.current);
         audio.play().catch(() => {
           const resumeAudio = () => {
@@ -393,7 +486,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
 
       return pc;
     },
-    [isDeafened, sendSignal]
+    [isDeafened, sendSignal],
   );
 
   // Incoming RTC Signal Handler
@@ -422,7 +515,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
         console.warn("RTC Signal handling:", err);
       }
     },
-    [createPeerConnection, sendSignal]
+    [createPeerConnection, sendSignal],
   );
 
   // --- Real-time Cloud Firestore Snapshots (Zero WebSockets) ---
@@ -475,7 +568,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       },
       (err) => {
         console.warn("Firestore message snapshot note:", err.message);
-      }
+      },
     );
 
     // 2. Listen for Real-Time Users Presence & Voice States
@@ -527,7 +620,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
         setOnlineUsers(userList);
         setVoiceStates(voices);
 
-        // Manage WebRTC connections for current voice room occupants
         if (currentVoiceChannelId) {
           const channelOccupants = voices[currentVoiceChannelId] || [];
           const activePeerIds = channelOccupants
@@ -551,7 +643,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
             }
           }
 
-          // Cleanup peers that left
           Object.keys(pcsRef.current).forEach((peerId) => {
             if (!activePeerIds.includes(peerId)) {
               if (pcsRef.current[peerId]) {
@@ -572,14 +663,14 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       },
       (err) => {
         console.warn("Firestore users snapshot note:", err.message);
-      }
+      },
     );
 
     // 3. Listen for Incoming WebRTC Signals directed to this user
     const qSignals = query(
       collection(db, "signals"),
       where("targetUserId", "==", currentUser.id),
-      limit(20)
+      limit(20),
     );
     const unsubscribeSignals = onSnapshot(
       qSignals,
@@ -599,7 +690,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       },
       (err) => {
         console.warn("Firestore signals snapshot note:", err.message);
-      }
+      },
     );
 
     // 4. Heartbeat: Update presence periodically
@@ -619,7 +710,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
               lastSeen: Date.now(),
               status: "online",
             },
-            { merge: true }
+            { merge: true },
           );
         } catch {}
       }
@@ -644,7 +735,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           collection(db, "messages"),
           where("channelId", "==", activeChannelId),
           orderBy("timestamp", "asc"),
-          limit(100)
+          limit(100),
         );
         const snap = await getDocs(q);
         const msgs: ChatMessage[] = [];
@@ -744,7 +835,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           currentReactions[emoji] = users;
         }
         return { ...m, reactions: currentReactions };
-      })
+      }),
     );
 
     try {
@@ -773,19 +864,35 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     if (!currentUser) return;
     try {
       if (isTyping) {
-        setTypingUsers((prev) => (prev.includes(currentUser.username) ? prev : [...prev, currentUser.username]));
+        setTypingUsers((prev) =>
+          prev.includes(currentUser.username) ? prev : [...prev, currentUser.username],
+        );
       } else {
         setTypingUsers((prev) => prev.filter((u) => u !== currentUser.username));
       }
     } catch {}
   };
 
-  // --- Voice Actions ---
+  // --- Voice Actions & Real-Time Moderation ---
 
   const joinVoiceChannel = async (voiceChannelId: string) => {
+    // Check local suspension timer
+    const savedUntil = localStorage.getItem("discord_suspended_until");
+    if (savedUntil) {
+      const remaining = Math.ceil((parseInt(savedUntil, 10) - Date.now()) / 1000);
+      if (remaining > 0) {
+        setIsSuspended(true);
+        setSuspensionTimeLeft(remaining);
+        setVoiceError(
+          `You are suspended from voice channels for ${remaining} more seconds due to inappropriate content.`,
+        );
+        return;
+      }
+    }
+
     if (isSuspended) {
       setVoiceError(
-        `You are suspended from voice channels for ${suspensionTimeLeft} more seconds due to inappropriate content.`
+        `You are suspended from voice channels for ${suspensionTimeLeft} more seconds due to inappropriate content.`,
       );
       return;
     }
@@ -886,6 +993,61 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
         processedStreamRef.current = stream;
       }
 
+      // --- REAL-TIME MICROPHONE SPEECH MODERATION ---
+      try {
+        const SpeechRec =
+          (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        if (SpeechRec) {
+          const recognition = new SpeechRec();
+          recognition.continuous = true;
+          recognition.interimResults = true;
+          recognition.lang = "en-US";
+          recognition.maxAlternatives = 1;
+
+          recognition.onresult = (event: any) => {
+            if (isMutedRef.current || isDeafenedRef.current) return;
+
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+              const transcript = event.results[i][0]?.transcript || "";
+              if (transcript) {
+                const modResult = analyzeContent(transcript);
+                if (modResult.isViolating) {
+                  console.warn("Inappropriate speech detected on microphone:", modResult);
+                  triggerVoiceSuspension(modResult.actionDescription || `Saying "${transcript}"`);
+                  break;
+                }
+              }
+            }
+          };
+
+          recognition.onerror = (event: any) => {
+            // Ignore benign aborted errors
+            if (event.error !== "aborted" && event.error !== "no-speech") {
+              console.warn("Speech recognition notice:", event.error);
+            }
+          };
+
+          recognition.onend = () => {
+            // Restart if still active in voice channel and not suspended
+            if (
+              currentVoiceChannelIdRef.current &&
+              !isSuspendedRef.current &&
+              !isMutedRef.current &&
+              !isDeafenedRef.current
+            ) {
+              try {
+                recognition.start();
+              } catch {}
+            }
+          };
+
+          speechRecognitionRef.current = recognition;
+          recognition.start();
+        }
+      } catch (recErr) {
+        console.warn("Speech recognition initialization note:", recErr);
+      }
+
       // Voice presence update in Firestore
       await updateDoc(doc(db, "users", currentUser.id), {
         currentVoiceChannelId: voiceChannelId,
@@ -904,7 +1066,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
             isSpeaking: false,
             lastSeen: Date.now(),
           },
-          { merge: true }
+          { merge: true },
         );
       });
 
@@ -937,10 +1099,24 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       rawStreamRef.current.getAudioTracks().forEach((t) => (t.enabled = !nextMuted && !isDeafened));
     }
     if (processedStreamRef.current) {
-      processedStreamRef.current.getAudioTracks().forEach((t) => (t.enabled = !nextMuted && !isDeafened));
+      processedStreamRef.current
+        .getAudioTracks()
+        .forEach((t) => (t.enabled = !nextMuted && !isDeafened));
     }
     if (currentUser) {
       updateDoc(doc(db, "users", currentUser.id), { isMuted: nextMuted }).catch(() => {});
+    }
+
+    if (speechRecognitionRef.current) {
+      if (nextMuted) {
+        try {
+          speechRecognitionRef.current.abort();
+        } catch {}
+      } else {
+        try {
+          speechRecognitionRef.current.start();
+        } catch {}
+      }
     }
   };
 
@@ -954,7 +1130,9 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       rawStreamRef.current.getAudioTracks().forEach((t) => (t.enabled = !isMuted && !nextDeaf));
     }
     if (processedStreamRef.current) {
-      processedStreamRef.current.getAudioTracks().forEach((t) => (t.enabled = !isMuted && !nextDeaf));
+      processedStreamRef.current
+        .getAudioTracks()
+        .forEach((t) => (t.enabled = !isMuted && !nextDeaf));
     }
     Object.values(remoteGainNodesRef.current).forEach((gNode) => {
       gNode.gain.value = nextDeaf ? 0 : outputGain;
@@ -964,6 +1142,18 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     });
     if (currentUser) {
       updateDoc(doc(db, "users", currentUser.id), { isDeafened: nextDeaf }).catch(() => {});
+    }
+
+    if (speechRecognitionRef.current) {
+      if (nextDeaf) {
+        try {
+          speechRecognitionRef.current.abort();
+        } catch {}
+      } else if (!isMuted) {
+        try {
+          speechRecognitionRef.current.start();
+        } catch {}
+      }
     }
   };
 
@@ -984,6 +1174,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     isSelfSpeaking,
     isSuspended,
     suspensionTimeLeft,
+    suspensionAction,
     micGain,
     setMicGain,
     outputGain,

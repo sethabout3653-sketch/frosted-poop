@@ -148,6 +148,7 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
     isDeafened,
     isSuspended,
     suspensionTimeLeft,
+    suspensionAction,
     micGain,
     setMicGain,
     outputGain,
@@ -202,6 +203,7 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
         isDeafened={isDeafened}
         isSuspended={isSuspended}
         suspensionTimeLeft={suspensionTimeLeft}
+        suspensionAction={suspensionAction}
         micGain={micGain}
         setMicGain={setMicGain}
         outputGain={outputGain}

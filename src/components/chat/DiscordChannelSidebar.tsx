@@ -31,6 +31,7 @@ interface Props {
   isDeafened?: boolean;
   isSuspended?: boolean;
   suspensionTimeLeft?: number;
+  suspensionAction?: string;
   micGain?: number;
   setMicGain?: (gain: number) => void;
   outputGain?: number;
@@ -56,6 +57,7 @@ export function DiscordChannelSidebar({
   isDeafened = false,
   isSuspended = false,
   suspensionTimeLeft = 0,
+  suspensionAction = "",
   micGain = 3.0,
   setMicGain,
   outputGain = 2.5,
@@ -116,7 +118,11 @@ export function DiscordChannelSidebar({
             className="flex w-full items-center justify-between px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-neutral-400 hover:text-neutral-200 cursor-pointer"
           >
             <div className="flex items-center gap-1">
-              {textOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              {textOpen ? (
+                <ChevronDown className="h-3 w-3" />
+              ) : (
+                <ChevronRight className="h-3 w-3" />
+              )}
               <span>Text Channels</span>
             </div>
           </button>
@@ -153,7 +159,11 @@ export function DiscordChannelSidebar({
             className="flex w-full items-center justify-between px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-neutral-400 hover:text-neutral-200 cursor-pointer"
           >
             <div className="flex items-center gap-1">
-              {voiceOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              {voiceOpen ? (
+                <ChevronDown className="h-3 w-3" />
+              ) : (
+                <ChevronRight className="h-3 w-3" />
+              )}
               <span>Voice Channels</span>
             </div>
           </button>
@@ -223,21 +233,28 @@ export function DiscordChannelSidebar({
 
       {/* Voice Status Controls Panel OR Voice Suspension Panel */}
       {isSuspended ? (
-        <div className="flex flex-col gap-1.5 border-t border-red-900/40 bg-red-950/15 p-2.5 mx-1 rounded-t-lg shadow-inner select-none animate-in slide-in-from-bottom duration-300">
-          <div className="flex items-center gap-1.5 text-red-400">
-            <ShieldAlert className="h-4 w-4 shrink-0 animate-pulse text-red-500" />
-            <span className="text-[11px] font-black uppercase tracking-wider text-red-300">
+        <div className="flex flex-col gap-2 border-t border-rose-900/50 bg-[#160b0d] p-3 mx-1 rounded-t-lg shadow-inner select-none animate-in slide-in-from-bottom duration-300">
+          <div className="flex items-center gap-1.5 text-rose-400">
+            <ShieldAlert className="h-4 w-4 shrink-0 animate-pulse text-rose-500" />
+            <span className="text-[11px] font-black uppercase tracking-wider text-rose-300">
               Voice Suspended
             </span>
           </div>
-          <p className="text-[10px] text-neutral-400 leading-normal">
-            Microphone flagged for inappropriate content. Voice channels are locked.
-          </p>
-          <div className="flex items-center justify-between bg-red-950/30 border border-red-800/30 rounded p-1.5 mt-1">
-            <span className="text-[10px] text-red-300 font-bold uppercase tracking-wider font-semibold">
+
+          <div className="rounded-md border border-rose-800/40 bg-rose-950/40 p-2 text-[11px]">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-rose-300">
+              You have been suspended for:
+            </p>
+            <p className="mt-1 font-extrabold text-white text-xs leading-snug break-words">
+              {suspensionAction || "Inappropriate microphone activity"}
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between bg-rose-950/30 border border-rose-800/30 rounded p-1.5">
+            <span className="text-[10px] text-rose-300 font-bold uppercase tracking-wider">
               Restoring In
             </span>
-            <span className="text-xs font-black text-white bg-red-800/40 px-2 py-0.5 rounded animate-pulse">
+            <span className="text-xs font-black text-white bg-rose-800/60 px-2 py-0.5 rounded font-mono animate-pulse">
               {suspensionTimeLeft}s
             </span>
           </div>

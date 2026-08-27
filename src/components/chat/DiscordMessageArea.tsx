@@ -15,7 +15,7 @@ import {
   Trash2,
 } from "lucide-react";
 import type { Channel, ChatMessage, User } from "@/types/chat";
-import { isInappropriateContent } from "../../lib/moderation";
+import { isInappropriateContent, analyzeContent } from "../../lib/moderation";
 import { notificationManager } from "../../lib/notifications";
 
 interface Props {
@@ -134,8 +134,9 @@ export function DiscordMessageArea({
     const trimmedInput = inputText.trim();
     if (!trimmedInput && !attachment) return;
 
-    if (isInappropriateContent(trimmedInput)) {
-      setErrorText("detected inappropriate content try sending something else");
+    const modResult = analyzeContent(trimmedInput);
+    if (modResult.isViolating) {
+      setErrorText(`Message blocked: ${modResult.actionDescription || "Inappropriate content"}`);
       return;
     }
 
@@ -267,7 +268,10 @@ export function DiscordMessageArea({
         <div className="flex items-center justify-between px-4 py-2 bg-gradient-to-r from-neutral-900 via-neutral-900 to-[#141414] border-b border-amber-500/20 text-xs">
           <div className="flex items-center gap-2 text-neutral-300">
             <Bell className="h-4 w-4 text-amber-400 shrink-0" />
-            <span>Enable real desktop notifications to get alerted whenever someone messages, even when you're off the app!</span>
+            <span>
+              Enable real desktop notifications to get alerted whenever someone messages, even when
+              you're off the app!
+            </span>
           </div>
           <button
             onClick={handleNotificationClick}
@@ -395,15 +399,16 @@ export function DiscordMessageArea({
                   </button>
 
                   {/* Delete message button */}
-                  {onDeleteMessage && (currentUser?.id === msg.userId || currentUser?.username === msg.username) && (
-                    <button
-                      onClick={() => onDeleteMessage(msg.id)}
-                      className="opacity-0 group-hover:opacity-100 flex items-center justify-center h-6 w-6 rounded-lg bg-[#141414] border border-neutral-800 text-neutral-400 hover:text-rose-400 hover:border-rose-500/30 transition-opacity cursor-pointer"
-                      title="Delete Message"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  )}
+                  {onDeleteMessage &&
+                    (currentUser?.id === msg.userId || currentUser?.username === msg.username) && (
+                      <button
+                        onClick={() => onDeleteMessage(msg.id)}
+                        className="opacity-0 group-hover:opacity-100 flex items-center justify-center h-6 w-6 rounded-lg bg-[#141414] border border-neutral-800 text-neutral-400 hover:text-rose-400 hover:border-rose-500/30 transition-opacity cursor-pointer"
+                        title="Delete Message"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                 </div>
 
                 {/* Quick Emoji Picker Popover */}

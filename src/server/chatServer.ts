@@ -340,9 +340,7 @@ chatRouter.get("/state", async (req, res) => {
           senderId: s.senderId,
           signalData: typeof s.signalData === "string" ? JSON.parse(s.signalData) : s.signalData,
         });
-        deleteDoc(doc(db, "signals", d.id)).catch((e) =>
-          console.warn("Signal delete error:", e),
-        );
+        deleteDoc(doc(db, "signals", d.id)).catch((e) => console.warn("Signal delete error:", e));
       });
     }
 
@@ -863,4 +861,3 @@ ${scraped.sample}`;
     return res.json({ allowed: true });
   }
 });
-
