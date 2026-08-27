@@ -1,6 +1,6 @@
 {
   "name": "Frosted",
   "description": "Frosted - Unblocked HTML5 & retro games arcade with clean player controls, stealth cloaking, and favorites.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

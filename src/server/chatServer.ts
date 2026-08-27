@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { WebSocketServer, WebSocket } from "ws";
 import { randomBytes } from "crypto";
 
 export const chatRouter = Router();
@@ -40,9 +39,14 @@ const sessions = new Map<string, string>(); // token -> userId
 // Pre-seeded channels
 export const CHANNELS = [
   { id: "general", name: "general", type: "text", topic: "General community chat and discussions" },
+  { id: "general-voice", name: "General Voice", type: "voice", topic: "General Voice Chat Room" },
 ];
 
 const messages = new Map<string, ChatMessage[]>(); // channelId -> array of ChatMessage
+
+// Real-Time Polling structures
+const typingStates = new Map<string, Map<string, number>>(); // channelId -> Map<username, lastSeenTyping>
+const signalQueue = new Map<string, Array<{ senderId: string; signalData: any }>>(); // targetUserId -> Array of signals
 
 // Initialize default channels with welcome messages
 const seedWelcomeMessages = () => {
@@ -159,39 +163,83 @@ chatRouter.get("/messages/:channelId", (req, res) => {
 
 // GET /api/chat/state
 chatRouter.get("/state", (req, res) => {
-  // Update last seen for requesting user
   const authHeader = req.headers.authorization;
   const token = authHeader?.replace("Bearer ", "");
+  
+  let currentUserId: string | null = null;
   if (token && sessions.has(token)) {
-    const userId = sessions.get(token)!;
-    const user = users.get(userId);
+    currentUserId = sessions.get(token)!;
+    const user = users.get(currentUserId);
     if (user) {
       user.lastSeen = Date.now();
       user.status = "online";
     }
   }
 
-  // Cleanup offline users
+  // Cleanup offline/timed out users (timeout threshold: 6 seconds for high responsiveness)
   const now = Date.now();
   for (const [id, user] of users.entries()) {
-    if (now - user.lastSeen > 30000) {
+    if (now - user.lastSeen > 6000) {
       user.status = "offline";
+      user.currentVoiceChannelId = null; // automatically boot from voice rooms if disconnected
     }
   }
 
+  // Prepare messages map
   const allMessages: Record<string, ChatMessage[]> = {};
   for (const [channelId, msgs] of messages.entries()) {
     allMessages[channelId] = msgs;
   }
 
+  // Get active online users
   const onlineUsers = Array.from(users.values())
     .filter(u => u.status === "online")
     .map(({ lastSeen, ...safe }) => safe);
+
+  // Compile typing statuses
+  const typing: Record<string, string[]> = {};
+  for (const [channelId, userMap] of typingStates.entries()) {
+    typing[channelId] = [];
+    for (const [username, lastActive] of userMap.entries()) {
+      if (now - lastActive < 4000) {
+        typing[channelId].push(username);
+      }
+    }
+  }
+
+  // Compile voice channel states
+  const voiceStates: Record<string, any[]> = {};
+  for (const u of users.values()) {
+    if (u.status === "online" && u.currentVoiceChannelId) {
+      if (!voiceStates[u.currentVoiceChannelId]) {
+        voiceStates[u.currentVoiceChannelId] = [];
+      }
+      voiceStates[u.currentVoiceChannelId].push({
+        userId: u.id,
+        username: u.username,
+        displayName: u.displayName,
+        avatarColor: u.avatarColor,
+        isMuted: u.isMuted,
+        isDeafened: u.isDeafened,
+        isSpeaking: u.isSpeaking,
+      });
+    }
+  }
+
+  // Fetch signals queued for this client
+  let rtcSignals: Array<{ senderId: string; signalData: any }> = [];
+  if (currentUserId) {
+    rtcSignals = signalQueue.get(currentUserId) || [];
+    signalQueue.delete(currentUserId); // Consume signals on retrieval
+  }
 
   return res.json({
     channels: CHANNELS,
     messages: allMessages,
     users: onlineUsers,
+    typing,
+    voiceStates,
+    rtcSignals,
   });
 });
 
@@ -240,14 +288,6 @@ chatRouter.post("/message", (req, res) => {
     channelList.shift();
   }
 
-  // Broadcast to WS clients if available
-  try {
-    broadcastAll({
-      type: "new_message",
-      payload: newMsg,
-    });
-  } catch (e) {}
-
   return res.json(newMsg);
 });
 
@@ -287,225 +327,92 @@ chatRouter.post("/reaction", (req, res) => {
     msg.reactions[emoji].push(user.username);
   }
 
-  try {
-    broadcastAll({
-      type: "reaction_updated",
-      payload: { channelId, messageId, reactions: msg.reactions },
-    });
-  } catch (e) {}
-
   return res.json({ success: true, reactions: msg.reactions });
 });
 
-// --- WebSocket Server Logic ---
+// POST /api/chat/typing
+chatRouter.post("/typing", (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.replace("Bearer ", "");
 
-export interface ClientConnection {
-  ws: WebSocket;
-  userId: string;
-  username: string;
-  displayName: string;
-  avatarColor: string;
-  voiceChannelId: string | null;
-}
+  if (!token || !sessions.has(token)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
 
-const activeSockets = new Map<WebSocket, ClientConnection>();
+  const userId = sessions.get(token)!;
+  const user = users.get(userId);
+  if (!user) return res.status(401).json({ error: "User not found" });
 
-export function setupChatWebSocket(wss: WebSocketServer) {
-  wss.on("connection", (ws, req) => {
-    let clientInfo: ClientConnection | null = null;
+  const { channelId, isTyping } = req.body;
+  if (!channelId) return res.status(400).json({ error: "Missing channelId" });
 
-    ws.on("message", (data) => {
-      try {
-        const message = JSON.parse(data.toString());
-        const { type, payload } = message;
+  if (!typingStates.has(channelId)) {
+    typingStates.set(channelId, new Map());
+  }
 
-        // 1. Authenticate socket connection
-        if (type === "auth") {
-          const { token } = payload;
-          const userId = sessions.get(token);
+  if (isTyping) {
+    typingStates.get(channelId)!.set(user.username, Date.now());
+  } else {
+    typingStates.get(channelId)!.delete(user.username);
+  }
 
-          if (!userId || !users.has(userId)) {
-            ws.send(JSON.stringify({ type: "error", payload: "Authentication failed" }));
-            return;
-          }
+  return res.json({ success: true });
+});
 
-          const user = users.get(userId)!;
-          user.status = "online";
+// POST /api/chat/voice/state
+chatRouter.post("/voice/state", (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.replace("Bearer ", "");
 
-          clientInfo = {
-            ws,
-            userId: user.id,
-            username: user.username,
-            displayName: user.displayName,
-            avatarColor: user.avatarColor,
-            voiceChannelId: null,
-          };
+  if (!token || !sessions.has(token)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
 
-          activeSockets.set(ws, clientInfo);
+  const userId = sessions.get(token)!;
+  const user = users.get(userId);
+  if (!user) return res.status(401).json({ error: "User not found" });
 
-          const allMessages: Record<string, ChatMessage[]> = {};
-          for (const [channelId, msgs] of messages.entries()) {
-            allMessages[channelId] = msgs;
-          }
+  user.lastSeen = Date.now();
 
-          const onlineUsers = Array.from(users.values())
-            .filter(u => u.status === "online")
-            .map(({ lastSeen, ...safe }) => safe);
+  const { currentVoiceChannelId, isMuted, isDeafened, isSpeaking } = req.body;
+  
+  user.currentVoiceChannelId = currentVoiceChannelId !== undefined ? currentVoiceChannelId : user.currentVoiceChannelId;
+  user.isMuted = isMuted !== undefined ? !!isMuted : user.isMuted;
+  user.isDeafened = isDeafened !== undefined ? !!isDeafened : user.isDeafened;
+  user.isSpeaking = isSpeaking !== undefined ? !!isSpeaking : user.isSpeaking;
 
-          // Confirm auth success to client
-          ws.send(
-            JSON.stringify({
-              type: "auth_success",
-              payload: {
-                user: {
-                  id: user.id,
-                  username: user.username,
-                  displayName: user.displayName,
-                  avatarColor: user.avatarColor,
-                },
-                channels: CHANNELS,
-                messages: allMessages,
-                usersList: onlineUsers,
-              },
-            })
-          );
+  return res.json({ success: true, user });
+});
 
-          // Broadcast user online status update to everyone
-          broadcastAll({
-            type: "user_status_change",
-            payload: { userId: user.id, status: "online", username: user.username, displayName: user.displayName, avatarColor: user.avatarColor },
-          });
+// POST /api/chat/signal
+chatRouter.post("/signal", (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.replace("Bearer ", "");
 
-          return;
-        }
+  if (!token || !sessions.has(token)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
 
-        // Require authentication for all subsequent events
-        if (!clientInfo) {
-          ws.send(JSON.stringify({ type: "error", payload: "Unauthenticated socket" }));
-          return;
-        }
+  const userId = sessions.get(token)!;
+  const user = users.get(userId);
+  if (!user) return res.status(401).json({ error: "User not found" });
 
-        // 2. Text Message Sending
-        if (type === "send_message") {
-          const { channelId, content, attachmentUrl, attachmentName } = payload;
+  const { targetPeerId, signalData } = req.body;
+  if (!targetPeerId || !signalData) {
+    return res.status(400).json({ error: "Missing targetPeerId or signalData" });
+  }
 
-          if (!channelId || (!content && !attachmentUrl)) return;
+  if (!signalQueue.has(targetPeerId)) {
+    signalQueue.set(targetPeerId, []);
+  }
 
-          const newMsg: ChatMessage = {
-            id: "msg-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6),
-            channelId,
-            userId: clientInfo.userId,
-            username: clientInfo.username,
-            displayName: clientInfo.displayName,
-            avatarColor: clientInfo.avatarColor,
-            content: content || "",
-            attachmentUrl,
-            attachmentName,
-            timestamp: Date.now(),
-            reactions: {},
-          };
-
-          let channelList = messages.get(channelId);
-          if (!channelList) {
-            channelList = [];
-            messages.set(channelId, channelList);
-          }
-          channelList.push(newMsg);
-
-          // Keep channel history capped at 200 messages
-          if (channelList.length > 200) {
-            channelList.shift();
-          }
-
-          // Broadcast new message to all clients
-          broadcastAll({
-            type: "new_message",
-            payload: newMsg,
-          });
-        }
-
-        // 3. Message Reaction
-        if (type === "toggle_reaction") {
-          const { channelId, messageId, emoji } = payload;
-          const channelList = messages.get(channelId);
-          if (channelList) {
-            const msg = channelList.find((m) => m.id === messageId);
-            if (msg) {
-              if (!msg.reactions[emoji]) {
-                msg.reactions[emoji] = [];
-              }
-
-              const usernameIndex = msg.reactions[emoji].indexOf(clientInfo.username);
-              if (usernameIndex > -1) {
-                msg.reactions[emoji].splice(usernameIndex, 1);
-                if (msg.reactions[emoji].length === 0) {
-                  delete msg.reactions[emoji];
-                }
-              } else {
-                msg.reactions[emoji].push(clientInfo.username);
-              }
-
-              broadcastAll({
-                type: "reaction_updated",
-                payload: { channelId, messageId, reactions: msg.reactions },
-              });
-            }
-          }
-        }
-
-        // 4. Typing Indicator
-        if (type === "typing") {
-          const { channelId, isTyping } = payload;
-          broadcastExcept(ws, {
-            type: "user_typing",
-            payload: {
-              channelId,
-              userId: clientInfo.userId,
-              username: clientInfo.username,
-              displayName: clientInfo.displayName,
-              isTyping,
-            },
-          });
-        }
-      } catch (err) {
-        console.error("WS Message Error:", err);
-      }
-    });
-
-    ws.on("close", () => {
-      if (clientInfo) {
-        const user = users.get(clientInfo.userId);
-        if (user) {
-          user.status = "offline";
-        }
-
-        activeSockets.delete(ws);
-
-        broadcastAll({
-          type: "user_status_change",
-          payload: { userId: clientInfo.userId, status: "offline" },
-        });
-      }
-    });
+  signalQueue.get(targetPeerId)!.push({
+    senderId: user.id,
+    signalData,
   });
-}
 
-// Helpers
+  return res.json({ success: true });
+});
 
-function broadcastAll(messageObj: any) {
-  const json = JSON.stringify(messageObj);
-  for (const client of activeSockets.values()) {
-    if (client.ws.readyState === WebSocket.OPEN) {
-      client.ws.send(json);
-    }
-  }
-}
-
-function broadcastExcept(excludeWs: WebSocket, messageObj: any) {
-  const json = JSON.stringify(messageObj);
-  for (const [ws, client] of activeSockets.entries()) {
-    if (ws !== excludeWs && ws.readyState === WebSocket.OPEN) {
-      ws.send(json);
-    }
-  }
-}
+// Minimal stub for server.ts backwards-compatibility
+export function setupChatWebSocket() {}

@@ -1,10 +1,9 @@
 import express from "express";
 import path from "path";
 import http from "http";
-import { WebSocketServer } from "ws";
 import { createServer as createViteServer } from "vite";
 import gameProxy from "./src/server/gameProxy.js";
-import { chatRouter, setupChatWebSocket } from "./src/server/chatServer.js";
+import { chatRouter } from "./src/server/chatServer.js";
 
 async function startServer() {
   const app = express();
@@ -14,20 +13,6 @@ async function startServer() {
   // We need to parse JSON and urlencoded requests
   app.use(express.json({ limit: "25mb" }));
   app.use(express.urlencoded({ extended: true, limit: "25mb" }));
-
-  // Initialize Chat WebSocket Server
-  const chatWss = new WebSocketServer({ noServer: true });
-  setupChatWebSocket(chatWss);
-
-  // Handle WebSocket Upgrade events (for Chat WebSocket only now)
-  server.on("upgrade", (req, socket, head) => {
-    const url = req.url || "";
-    if (url.startsWith("/ws/chat") || url.startsWith("/ws/chat/")) {
-      chatWss.handleUpgrade(req, socket, head, (ws) => {
-        chatWss.emit("connection", ws, req);
-      });
-    }
-  });
 
   // Attach API routes
   app.use("/api/public", gameProxy);

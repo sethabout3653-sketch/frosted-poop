@@ -91,10 +91,20 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
     setActiveChannelId,
     messages,
     onlineUsers,
+    voiceStates,
     typingUsers,
+    currentVoiceChannelId,
+    voiceError,
+    setVoiceError,
+    isMuted,
+    isDeafened,
     sendMessage,
     toggleReaction,
     sendTyping,
+    joinVoiceChannel,
+    leaveVoiceChannel,
+    toggleMute,
+    toggleDeafen,
   } = useDiscordChat({ token, currentUser, onLogout: handleLogout });
 
   if (isVerifyingAuth) {
@@ -126,6 +136,16 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
         activeChannelId={activeChannelId}
         onSelectChannel={setActiveChannelId}
         currentUser={currentUser}
+        voiceStates={voiceStates}
+        currentVoiceChannelId={currentVoiceChannelId}
+        voiceError={voiceError}
+        setVoiceError={setVoiceError}
+        isMuted={isMuted}
+        isDeafened={isDeafened}
+        onJoinVoice={joinVoiceChannel}
+        onLeaveVoice={leaveVoiceChannel}
+        onToggleMute={toggleMute}
+        onToggleDeafen={toggleDeafen}
         onLogout={handleLogout}
       />
 
