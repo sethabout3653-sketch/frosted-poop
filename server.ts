@@ -3,21 +3,7 @@ import path from "path";
 import http from "http";
 import { createServer as createViteServer } from "vite";
 import { server as wispServer } from "@mercuryworkshop/wisp-js";
-import Stripe from "stripe";
 import gameProxy from "./src/server/gameProxy.js";
-
-// Initialize Stripe gracefully
-let stripeClient: Stripe | null = null;
-function getStripe(): Stripe {
-  if (!stripeClient) {
-    const key = process.env.STRIPE_SECRET_KEY;
-    if (!key) {
-      throw new Error("STRIPE_SECRET_KEY environment variable is required");
-    }
-    stripeClient = new Stripe(key);
-  }
-  return stripeClient;
-}
 
 async function startServer() {
   const app = express();
@@ -37,55 +23,6 @@ async function startServer() {
   // Attach game proxy routes
   app.use("/api/public", gameProxy);
 
-  // Stripe VIP Checkout API Route
-  app.post("/api/create-checkout-session", async (req, res) => {
-    try {
-      const stripe = getStripe();
-      const session = await stripe.checkout.sessions.create({
-        payment_method_types: ["card"],
-        line_items: [
-          {
-            price_data: {
-              currency: "usd",
-              product_data: {
-                name: "VIP Access",
-                description: "Unlock exclusive VIP features.",
-              },
-              unit_amount: 100, // $1.00 USD
-            },
-            quantity: 1,
-          },
-        ],
-        mode: "payment",
-        success_url: `${req.protocol}://${req.get("host")}/?vip=success`,
-        cancel_url: `${req.protocol}://${req.get("host")}/`,
-      });
-
-      res.json({ id: session.id, url: session.url });
-    } catch (error: any) {
-      console.error("Stripe Checkout Error:", error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Helper to extract target origin from a Scramjet/UV proxy referer header
-  function extractProxyTargetOrigin(referer?: string): string | null {
-    if (!referer) return null;
-    try {
-      const u = new URL(referer);
-      if (u.pathname.startsWith("/~/sj/")) {
-        const rawTarget = u.pathname.slice("/~/sj/".length);
-        const decoded = decodeURIComponent(rawTarget);
-        const targetUrl = /^https?:\/\//i.test(decoded) ? decoded : "https://" + decoded;
-        const targetObj = new URL(targetUrl);
-        return targetObj.origin;
-      }
-    } catch {
-      /* silent */
-    }
-    return null;
-  }
-
   // Prevent internal site relative requests or unintercepted proxy requests from recursively serving the React index.html app
   app.use((req, res, next) => {
     const pathName = req.path;
@@ -99,9 +36,7 @@ async function startServer() {
       pathName.startsWith("/node_modules/") ||
       pathName.startsWith("/@") ||
       pathName.startsWith("/proxy/") ||
-      pathName.startsWith("/scramjet/") ||
       pathName.startsWith("/uv/") ||
-      pathName.startsWith("/controller/") ||
       pathName === "/sw.js" ||
       pathName.startsWith("/wisp") ||
       pathName.startsWith("/api/");
@@ -111,11 +46,7 @@ async function startServer() {
     }
 
     // Explicit proxy prefixes
-    if (
-      pathName.startsWith("/~/uv/") ||
-      pathName.startsWith("/~/scramjet/") ||
-      pathName.startsWith("/~/sj/")
-    ) {
+    if (pathName.startsWith("/~/uv/")) {
       res.setHeader("content-type", "text/html; charset=utf-8");
       return res.send(`<!DOCTYPE html>
 <html>
@@ -143,12 +74,6 @@ async function startServer() {
 
     // Check if this request originated from inside a proxy iframe
     const referer = req.headers.referer;
-    const targetOrigin = extractProxyTargetOrigin(referer);
-    if (targetOrigin) {
-      const redirectedTarget = targetOrigin + req.originalUrl;
-      return res.redirect(`/~/sj/${encodeURIComponent(redirectedTarget)}`);
-    }
-
     const isIframeRequest =
       req.headers["sec-fetch-dest"] === "iframe" ||
       req.headers["sec-fetch-mode"] === "nested-navigate" ||

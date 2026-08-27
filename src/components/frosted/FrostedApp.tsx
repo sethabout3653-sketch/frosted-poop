@@ -6,14 +6,36 @@ import { FrostedNavbar } from "./FrostedNavbar";
 import { GamesGrid } from "./GamesGrid";
 import { GamePlayer } from "./GamePlayer";
 import { FrostedSettingsModal } from "./FrostedSettingsModal";
+import { VerificationGate } from "./VerificationGate";
 
 export function FrostedApp() {
+  const [isVerified, setIsVerified] = useState<boolean>(() => {
+    try {
+      return (
+        localStorage.getItem("frosted_verified_permanent") === "true" ||
+        sessionStorage.getItem("frosted_verified") === "true"
+      );
+    } catch {
+      return false;
+    }
+  });
+
   const [activeGame, setActiveGame] = useState<Game | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
   const { favorites, toggleFavorite, recentlyPlayed, recordPlay, cloak, updateCloak } =
     useFrostedStore();
+
+  const handleVerify = () => {
+    try {
+      localStorage.setItem("frosted_verified_permanent", "true");
+      sessionStorage.setItem("frosted_verified", "true");
+    } catch {
+      /* silent */
+    }
+    setIsVerified(true);
+  };
 
   const { data: gamesList = [], isLoading } = useQuery({
     queryKey: ["frosted-games"],
@@ -43,6 +65,10 @@ export function FrostedApp() {
     setSearchQuery("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+
+  if (!isVerified) {
+    return <VerificationGate onVerified={handleVerify} />;
+  }
 
   return (
     <div className="min-h-screen bg-[#050505] text-neutral-200 font-sans selection:bg-white selection:text-black">

@@ -68,13 +68,13 @@ export function decodeXor(str: string): string {
  * Chooses the proxy engine
  */
 export function chooseProxyEngine(_inputUrl?: string): ProxyEngine {
-  return "scramjet";
+  return "ultraviolet";
 }
 
 /**
  * Encodes a URL for the specified proxy engine
  */
-export function getProxyUrl(url: string, engine: ProxyEngine = "scramjet"): string {
+export function getProxyUrl(url: string, engine: ProxyEngine = "ultraviolet"): string {
   if (!url) return "";
   const targetUrl = /^https?:\/\//i.test(url) ? url : toUrl(url);
   if (!targetUrl) return "";
@@ -225,8 +225,6 @@ function loadScript(src: string): Promise<void> {
 }
 
 async function ensureScripts() {
-  await loadScript("/scramjet/scramjet.js");
-  await loadScript("/controller/controller.api.js");
   await loadScript("/uv/uv.bundle.js");
   await loadScript("/uv/uv.config.js");
 }
@@ -301,17 +299,7 @@ export async function initProxy(wisp: string): Promise<{ scramjet?: ScramjetCont
 
   await ensureTransport(wisp);
 
-  if (window.$scramjetController && navigator.serviceWorker.controller && currentEpoxyTransport) {
-    if (!scramjetControllerInstance) {
-      scramjetControllerInstance = new window.$scramjetController.Controller({
-        serviceworker: navigator.serviceWorker.controller,
-        transport: currentEpoxyTransport,
-      });
-      await scramjetControllerInstance.wait();
-    }
-  }
-
-  return { scramjet: scramjetControllerInstance || undefined };
+  return { scramjet: undefined };
 }
 
 export function getScramjetController(): ScramjetController | null {

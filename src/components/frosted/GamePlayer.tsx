@@ -12,6 +12,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { gameCover, type Game } from "@/lib/games";
 import { loadGameSource, type GameLoadResult } from "@/lib/gameLoader";
+import { initProxy, getOptimalWisp } from "@/lib/proxy";
 
 interface Props {
   game: Game;
@@ -53,7 +54,17 @@ export function GamePlayer({
       currentBlobUrlRef.current = null;
     }
 
-    loadGameSource(game.directory).then((result: GameLoadResult) => {
+    async function initAndLoad() {
+      if (game.directory.startsWith("/~/")) {
+        try {
+          const wisp = getOptimalWisp(game.directory);
+          await initProxy(wisp);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      if (cancelled) return;
+      const result = await loadGameSource(game.directory);
       if (cancelled) {
         if (result.blobUrl) URL.revokeObjectURL(result.blobUrl);
         return;
@@ -62,7 +73,8 @@ export function GamePlayer({
         currentBlobUrlRef.current = result.blobUrl;
       }
       setActiveSrc(result.src);
-    });
+    }
+    initAndLoad();
 
     return () => {
       cancelled = true;
@@ -118,7 +130,14 @@ export function GamePlayer({
       URL.revokeObjectURL(currentBlobUrlRef.current);
       currentBlobUrlRef.current = null;
     }
-    loadGameSource(game.directory).then((result) => {
+    async function reloadProxyAndGame() {
+      if (game.directory.startsWith("/~/")) {
+        try {
+          const wisp = getOptimalWisp(game.directory);
+          await initProxy(wisp);
+        } catch (e) {}
+      }
+      const result = await loadGameSource(game.directory);
       if (result.blobUrl) {
         currentBlobUrlRef.current = result.blobUrl;
       }
@@ -127,7 +146,8 @@ export function GamePlayer({
         iframeRef.current.src = result.src;
       }
       setTimeout(() => setIsReloading(false), 500);
-    });
+    }
+    reloadProxyAndGame();
   };
 
   const handleShare = () => {

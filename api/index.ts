@@ -31,7 +31,7 @@ app.post("/api/create-checkout-session", async (req, res) => {
               name: "VIP Access",
               description: "Unlock exclusive VIP features.",
             },
-            unit_amount: 100, // $1.00 USD
+            unit_amount: 99, // $0.99 USD
           },
           quantity: 1,
         },

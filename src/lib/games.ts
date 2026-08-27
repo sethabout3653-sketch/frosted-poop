@@ -1,3 +1,5 @@
+// Custom games list module
+// --- Existing code from your provided snippet ---
 export type GameCategory =
   "all" | "popular" | "action" | "driving" | "sports" | "puzzle" | "retro" | "casual";
 
@@ -22,7 +24,8 @@ export function gameEntry(directory: string) {
   if (
     directory.startsWith("http://") ||
     directory.startsWith("https://") ||
-    directory.startsWith("/api/")
+    directory.startsWith("/api/") ||
+    directory.startsWith("/~/")
   ) {
     return directory;
   }
@@ -190,5 +193,6 @@ export async function fetchGames(): Promise<Game[]> {
     console.error("Failed to fetch gn-math games:", err);
   }
 
+  // If fetch fails, return the custom games
   return [customGame];
 }

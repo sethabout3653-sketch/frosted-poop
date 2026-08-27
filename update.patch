@@ -1,0 +1,32 @@
+--- src/components/frosted/GamePlayer.tsx
++++ src/components/frosted/GamePlayer.tsx
+@@ -53,15 +53,24 @@
+       currentBlobUrlRef.current = null;
+     }
+ 
+-    loadGameSource(game.directory).then((result: GameLoadResult) => {
++    async function initAndLoad() {
++      if (game.directory.startsWith("/~/")) {
++        try {
++          const wisp = getOptimalWisp(game.directory);
++          await initProxy(wisp);
++        } catch (err) {
++          console.error("Proxy initialization failed:", err);
++        }
++      }
++      if (cancelled) return;
++      const result = await loadGameSource(game.directory);
+       if (cancelled) {
+         if (result.blobUrl) URL.revokeObjectURL(result.blobUrl);
+         return;
+       }
+-
+       if (result.blobUrl) {
+         currentBlobUrlRef.current = result.blobUrl;
+       }
+       setActiveSrc(result.src);
+-    });
++    }
++    initAndLoad();
+ 
+     return () => {

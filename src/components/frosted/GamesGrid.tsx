@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Flame,
   Grid,
@@ -12,6 +12,7 @@ import {
   Play,
   Sparkles,
   Search,
+  Coffee,
 } from "lucide-react";
 import { gameCover, type Game, type GameCategory } from "@/lib/games";
 
@@ -41,6 +42,7 @@ const CATEGORIES: {
   { id: "sports", label: "Sports", icon: <Trophy className="h-3.5 w-3.5 text-emerald-400" /> },
   { id: "puzzle", label: "Puzzle", icon: <Puzzle className="h-3.5 w-3.5 text-purple-400" /> },
   { id: "retro", label: "Retro", icon: <Gamepad2 className="h-3.5 w-3.5 text-yellow-400" /> },
+  { id: "casual", label: "Casual", icon: <Coffee className="h-3.5 w-3.5 text-amber-200" /> },
   { id: "favorites", label: "My Favorites", icon: <Star className="h-3.5 w-3.5 text-amber-300" /> },
   { id: "recent", label: "Recently Played", icon: <Clock className="h-3.5 w-3.5 text-cyan-400" /> },
 ];
@@ -57,6 +59,14 @@ export function GamesGrid({
   const [activeCategory, setActiveCategory] = useState<GameCategory | "favorites" | "recent">(
     "all",
   );
+
+  // Lazy loading pagination to render 830+ games fast and fluid without crashing lower-end browsers
+  const [visibleCount, setVisibleCount] = useState(48);
+
+  // Reset pagination on category or search change
+  useEffect(() => {
+    setVisibleCount(48);
+  }, [activeCategory, searchQuery]);
 
   // Filter games according to search & category
   const filteredGames = useMemo(() => {
@@ -79,10 +89,16 @@ export function GamesGrid({
     return list;
   }, [games, activeCategory, searchQuery, favorites, recentlyPlayed]);
 
+  // Sliced games list for progressive rendering
+  const visibleGames = useMemo(() => {
+    return filteredGames.slice(0, visibleCount);
+  }, [filteredGames, visibleCount]);
+
   // Top featured games for the hero section
   const featuredGames = useMemo(() => {
     return games.filter((g) => g.featured || g.category === "popular").slice(0, 4);
   }, [games]);
+
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
@@ -233,7 +249,7 @@ export function GamesGrid({
 
       {/* Game Cards Grid */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-        {filteredGames.map((game) => {
+        {visibleGames.map((game) => {
           const isFav = favorites.includes(game.id);
 
           return (
@@ -288,6 +304,25 @@ export function GamesGrid({
           );
         })}
       </div>
+
+      {/* Modern Load More Controller */}
+      {filteredGames.length > visibleCount && (
+        <div className="mt-12 flex flex-col items-center justify-center gap-3">
+          <button
+            onClick={() => setVisibleCount((prev) => prev + 48)}
+            className="smooth-btn group cursor-pointer flex items-center gap-2 rounded-2xl border border-neutral-800 bg-neutral-900/60 px-6 py-3.5 text-sm font-semibold text-white hover:border-neutral-500 hover:bg-neutral-900 shadow-[0_4px_20px_rgba(0,0,0,0.4)] hover:shadow-[0_0_20px_rgba(255,255,255,0.06)]"
+          >
+            <span>Load More Games</span>
+            <span className="text-neutral-500 font-normal">|</span>
+            <span className="text-amber-300 font-mono text-xs bg-amber-400/10 px-2 py-0.5 rounded-lg border border-amber-400/20">
+              +{Math.min(48, filteredGames.length - visibleCount)}
+            </span>
+          </button>
+          <p className="text-[11px] text-neutral-500 tracking-wide">
+            Showing {visibleCount} of {filteredGames.length} available titles
+          </p>
+        </div>
+      )}
     </div>
   );
 }
