@@ -242,15 +242,33 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     const timeoutId = window.setTimeout(() => controller.abort(), 9000);
 
     try {
-      let res = await fetch("/api/chat/state", {
-        headers: { Authorization: `Bearer ${tokenRef.current}` },
-        signal: controller.signal,
-      });
-      if (res.status === 404) {
-        res = await fetch("/chat/state", {
+      let res: Response | null = null;
+      try {
+        res = await fetch("/api/chat/state", {
           headers: { Authorization: `Bearer ${tokenRef.current}` },
           signal: controller.signal,
         });
+      } catch (e: any) {
+        if (e?.name !== "AbortError") {
+          try {
+            res = await fetch("/chat/state", {
+              headers: { Authorization: `Bearer ${tokenRef.current}` },
+              signal: controller.signal,
+            });
+          } catch {}
+        }
+      }
+
+      if (!res) return;
+
+      if (res.status === 404) {
+        try {
+          const fallbackRes = await fetch("/chat/state", {
+            headers: { Authorization: `Bearer ${tokenRef.current}` },
+            signal: controller.signal,
+          });
+          if (fallbackRes.ok) res = fallbackRes;
+        } catch {}
       }
       if (res.status === 401) {
         onLogout();

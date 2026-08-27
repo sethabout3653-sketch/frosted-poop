@@ -18,33 +18,78 @@ function getStripe(): Stripe {
 
 const app = express();
 
-// Enable CORS for all Vercel domains, preview URLs, and client environments
+// 1. Enable Global CORS for all origins, methods, and headers
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD");
+  res.setHeader("Access-Control-Allow-Headers", "*");
+  res.setHeader("Access-Control-Expose-Headers", "*");
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
   next();
 });
 
-// JSON and URL-encoded body parsing
+// 2. Safe Body Parser that avoids stream consumption deadlocks on Vercel
 app.use((req, res, next) => {
-  if (req.body && typeof req.body === "object") {
-    next();
+  if (req.body !== undefined && req.body !== null) {
+    if (typeof req.body === "string" && req.body.length > 0) {
+      try {
+        req.body = JSON.parse(req.body);
+      } catch {
+        // Keep original string
+      }
+    } else if (Buffer.isBuffer(req.body)) {
+      try {
+        req.body = JSON.parse(req.body.toString("utf-8"));
+      } catch {
+        // Keep original buffer
+      }
+    }
+    return next();
+  }
+
+  // If stream is still readable and not closed
+  if (!req.complete && req.readable) {
+    express.json({ limit: "25mb" })(req, res, (err) => {
+      if (err) return next(err);
+      express.urlencoded({ extended: true, limit: "25mb" })(req, res, next);
+    });
   } else {
-    express.json({ limit: "25mb" })(req, res, next);
+    next();
   }
 });
-app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
-// Health check endpoint
-app.get(["/api/health", "/health"], (_req, res) => {
+// 3. Normalize Vercel serverless request URLs across routing patterns
+app.use((req, _res, next) => {
+  let url = req.url || "/";
+
+  // If Vercel catch-all passed query params (e.g. all: ['chat', 'join'])
+  if (req.query) {
+    if (req.query.all) {
+      const parts = Array.isArray(req.query.all) ? req.query.all : [req.query.all];
+      url = "/" + parts.join("/");
+    } else if (req.query.slug) {
+      const parts = Array.isArray(req.query.slug) ? req.query.slug : [req.query.slug];
+      url = "/chat/" + parts.join("/");
+    }
+  }
+
+  const matchedHeader = (req.headers["x-matched-path"] || req.headers["x-now-route-matches"]) as string | undefined;
+  if (matchedHeader && (matchedHeader.includes("/chat") || matchedHeader.includes("/public") || matchedHeader.includes("/health"))) {
+    url = matchedHeader;
+  }
+
+  req.url = url;
+  next();
+});
+
+// 4. Health check
+app.get(["/api/health", "/health", "/api", "/"], (_req, res) => {
   res.json({ status: "ok", timestamp: Date.now(), runtime: "vercel-serverless" });
 });
 
-// Stripe checkout session creation
+// 5. Stripe checkout session creation
 app.post(["/api/create-checkout-session", "/create-checkout-session"], async (req, res) => {
   try {
     const stripe = getStripe();
@@ -75,24 +120,24 @@ app.post(["/api/create-checkout-session", "/create-checkout-session"], async (re
   }
 });
 
-// Mount Chat Router at all possible paths
+// 6. Mount Chat Router at all possible sub-paths
 app.use("/api/chat", chatRouter);
 app.use("/chat", chatRouter);
 
-// Mount Game Proxy at all possible paths
+// 7. Mount Game Proxy at all possible sub-paths
 app.use("/api/public", gameProxy);
 app.use("/public", gameProxy);
 app.use(gameProxy);
 
-// If request reached here and has a direct chat route (e.g. /join, /state, /me)
+// 8. Direct router fallback if path was stripped (e.g. /join, /state, /me)
 app.use(chatRouter);
 
-// Fallback error handler for Vercel functions
+// 9. Error Handler
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error("Vercel Serverless Function Error:", err);
+  console.error("Serverless Function Error:", err);
   if (res.headersSent) return;
   res.status(err?.status || 500).json({
-    error: err?.message || "Internal server error on chat backend",
+    error: err?.message || "Internal server error on backend",
   });
 });
 

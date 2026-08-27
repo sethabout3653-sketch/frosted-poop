@@ -4,11 +4,7 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/((?!api|assets|public|favicon|icon|.*\\..*).*)",
+      "source": "/((?!api/|api$|assets/|public/|.*\\..*).*)",
       "destination": "/index.html"
     }
   ]

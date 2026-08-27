@@ -42,14 +42,31 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
       }
 
       try {
-        let res = await fetch("/api/chat/me", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (res.status === 404) {
-          res = await fetch("/chat/me", {
+        let res: Response | null = null;
+        try {
+          res = await fetch("/api/chat/me", {
             headers: { Authorization: `Bearer ${token}` },
           });
+        } catch {
+          try {
+            res = await fetch("/chat/me", {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+          } catch {}
+        }
+
+        if (!res) {
+          setIsVerifyingAuth(false);
+          return;
+        }
+
+        if (res.status === 404) {
+          try {
+            const fallbackRes = await fetch("/chat/me", {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (fallbackRes.ok) res = fallbackRes;
+          } catch {}
         }
 
         if (res.ok) {

@@ -41,19 +41,38 @@ export function DiscordAuth({ onLoginSuccess }: Props) {
     notificationManager.requestPermission().catch(() => {});
 
     try {
-      let res = await fetch("/api/chat/join", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: username.trim(), avatarColor }),
-      });
-
-      // Fallback for custom serverless routing setups
-      if (res.status === 404) {
-        res = await fetch("/chat/join", {
+      let res: Response | null = null;
+      try {
+        res = await fetch("/api/chat/join", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ username: username.trim(), avatarColor }),
         });
+      } catch {
+        // Fallback retry on network error
+        try {
+          res = await fetch("/chat/join", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: username.trim(), avatarColor }),
+          });
+        } catch {}
+      }
+
+      if (!res) {
+        throw new Error("Unable to connect to chat server. Please verify your connection or try again in a moment.");
+      }
+
+      // Fallback for custom serverless routing setups
+      if (res.status === 404) {
+        try {
+          const fallbackRes = await fetch("/chat/join", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: username.trim(), avatarColor }),
+          });
+          if (fallbackRes.ok) res = fallbackRes;
+        } catch {}
       }
 
       const text = await res.text();
