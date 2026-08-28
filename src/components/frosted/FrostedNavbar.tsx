@@ -1,12 +1,4 @@
-import {
-  Search,
-  Shuffle,
-  SlidersHorizontal,
-  Gamepad2,
-  X,
-  MessageSquare,
-  Radio,
-} from "lucide-react";
+import { Search, Shuffle, SlidersHorizontal, Gamepad2, X, MessageSquare } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { Game } from "@/lib/games";
 
@@ -17,10 +9,8 @@ interface Props {
   onRandomGame: () => void;
   onOpenSettingsModal: () => void;
   onOpenChat: () => void;
-  onOpenSoundboard: () => void;
   activeGame: Game | null;
   isChatActive: boolean;
-  isSoundboardActive: boolean;
 }
 
 export function FrostedNavbar({
@@ -30,10 +20,8 @@ export function FrostedNavbar({
   onRandomGame,
   onOpenSettingsModal,
   onOpenChat,
-  onOpenSoundboard,
   activeGame,
   isChatActive,
-  isSoundboardActive,
 }: Props) {
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -110,19 +98,6 @@ export function FrostedNavbar({
               <span>Library</span>
             </button>
           )}
-
-          <button
-            onClick={onOpenSoundboard}
-            title="Instant Soundboard & Myinstants CORS Proxy"
-            className={`smooth-btn flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium cursor-pointer transition-all ${
-              isSoundboardActive
-                ? "border-rose-500 bg-rose-500 text-white shadow-[0_0_15px_rgba(244,63,94,0.4)]"
-                : "border-neutral-800 bg-[#0d0d0d] text-neutral-300 hover:border-rose-500/60 hover:text-white"
-            }`}
-          >
-            <Radio className="h-3.5 w-3.5 text-rose-400" />
-            <span className="hidden sm:inline font-bold">Soundboard</span>
-          </button>
 
           <button
             onClick={onOpenChat}
