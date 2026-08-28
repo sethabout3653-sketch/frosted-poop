@@ -37,7 +37,7 @@ const DEFAULT_CHANNELS: Channel[] = [
  * Optimizes WebRTC SDP to ensure crystal-clear, continuous voice transmission without cutting off:
  * - usedtx=0 (disables discontinuous transmission / silence clipping, prevents voice cutting off)
  * - useinbandfec=1 (in-band forward error correction, restores lost packets across Wi-Fi & cellular)
- * - maxaveragebitrate=320000 (studio broadcast voice bitrate with zero packet buffer congestion)
+ * - maxaveragebitrate=32000 (stable voice bitrate even on bad wifis)
  * - ptime=20, minptime=10 (smooth, low-latency audio delivery)
  */
 function optimizeOpusSdp(sdp: string): string {
@@ -53,9 +53,9 @@ function optimizeOpusSdp(sdp: string): string {
         newParams += ";usedtx=0";
       }
       if (newParams.includes("maxaveragebitrate=")) {
-        newParams = newParams.replace(/maxaveragebitrate=\d+/g, "maxaveragebitrate=320000");
+        newParams = newParams.replace(/maxaveragebitrate=\d+/g, "maxaveragebitrate=32000");
       } else {
-        newParams += ";maxaveragebitrate=320000";
+        newParams += ";maxaveragebitrate=32000";
       }
       if (!newParams.includes("ptime=")) {
         newParams += ";ptime=20";
@@ -94,16 +94,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const [voiceStates, setVoiceStates] = useState<Record<string, VoiceUser[]>>({});
   const [currentVoiceChannelId, setCurrentVoiceChannelId] = useState<string | null>(null);
   const [voiceError, setVoiceError] = useState<string | null>(null);
-
-  // Audio Gain & Volume Boost States (Default 150% mic boost, 250% speaker boost)
-  const [micGain, setMicGainState] = useState<number>(() => {
-    const saved = localStorage.getItem("discord_mic_gain");
-    return saved ? parseFloat(saved) : 1.5;
-  });
-  const [outputGain, setOutputGainState] = useState<number>(() => {
-    const saved = localStorage.getItem("discord_output_gain");
-    return saved ? parseFloat(saved) : 2.5;
-  });
   const [micLevel, setMicLevel] = useState<number>(0);
 
   // Studio Voice Quality Controls
@@ -111,26 +101,18 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     const saved = localStorage.getItem("discord_studio_voice");
     return saved !== null ? saved === "true" : true;
   });
-  const [micMonitoring, setMicMonitoringState] = useState<boolean>(() => {
-    return localStorage.getItem("discord_mic_monitoring") === "true";
-  });
   const [echoCancellation, setEchoCancellationState] = useState<boolean>(() => {
     const saved = localStorage.getItem("discord_echo_cancellation");
     return saved !== null ? saved === "true" : true;
   });
 
   const studioVoiceModeRef = useRef(studioVoiceMode);
-  const micMonitoringRef = useRef(micMonitoring);
   const echoCancellationRef = useRef(echoCancellation);
   const studioEngineRef = useRef<StudioAudioEngine | null>(null);
 
   useEffect(() => {
     studioVoiceModeRef.current = studioVoiceMode;
   }, [studioVoiceMode]);
-
-  useEffect(() => {
-    micMonitoringRef.current = micMonitoring;
-  }, [micMonitoring]);
 
   useEffect(() => {
     echoCancellationRef.current = echoCancellation;
@@ -252,12 +234,10 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const rawStreamRef = useRef<MediaStream | null>(null);
   const processedStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const micGainNodeRef = useRef<GainNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number | null>(null);
 
   const remoteAudioCtxRef = useRef<AudioContext | null>(null);
-  const remoteGainNodesRef = useRef<Record<string, GainNode>>({});
   const pcsRef = useRef<Record<string, RTCPeerConnection>>({});
   const remoteAudiosRef = useRef<Record<string, HTMLAudioElement>>({});
 
@@ -276,17 +256,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const currentUserRef = useRef(currentUser);
   const knownMessageIdsRef = useRef<Set<string>>(new Set());
   const initialLoadDoneRef = useRef(false);
-
-  const micGainRef = useRef(micGain);
-  const outputGainRef = useRef(outputGain);
-
-  useEffect(() => {
-    micGainRef.current = micGain;
-  }, [micGain]);
-
-  useEffect(() => {
-    outputGainRef.current = outputGain;
-  }, [outputGain]);
 
   useEffect(() => {
     activeChannelIdRef.current = activeChannelId;
@@ -331,37 +300,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     return perm;
   }, []);
 
-  // Update Mic Gain
-  const setMicGain = useCallback(
-    (newGain: number) => {
-      setMicGainState(newGain);
-      try {
-        localStorage.setItem("discord_mic_gain", newGain.toString());
-      } catch {}
-      if (studioEngineRef.current) {
-        studioEngineRef.current.setMicGain(newGain);
-      }
-      if (micGainNodeRef.current) {
-        micGainNodeRef.current.gain.value = isMuted ? 0 : newGain;
-      }
-    },
-    [isMuted],
-  );
-
-  // Update Output Gain
-  const setOutputGain = useCallback(
-    (newGain: number) => {
-      setOutputGainState(newGain);
-      try {
-        localStorage.setItem("discord_output_gain", newGain.toString());
-      } catch {}
-      Object.values(remoteGainNodesRef.current).forEach((gNode) => {
-        gNode.gain.value = isDeafened ? 0 : newGain;
-      });
-    },
-    [isDeafened],
-  );
-
   const setStudioVoiceMode = useCallback((val: boolean) => {
     setStudioVoiceModeState(val);
     try {
@@ -369,16 +307,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     } catch {}
     if (studioEngineRef.current) {
       studioEngineRef.current.setStudioEnhancer(val);
-    }
-  }, []);
-
-  const setMicMonitoring = useCallback((val: boolean) => {
-    setMicMonitoringState(val);
-    try {
-      localStorage.setItem("discord_mic_monitoring", val.toString());
-    } catch {}
-    if (studioEngineRef.current) {
-      studioEngineRef.current.setMicMonitoring(val);
     }
   }, []);
 
@@ -391,9 +319,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
 
   // Audio track states (Mute/Deafen)
   useEffect(() => {
-    if (micGainNodeRef.current) {
-      micGainNodeRef.current.gain.value = isMuted || isDeafened ? 0 : micGain;
-    }
     if (rawStreamRef.current) {
       rawStreamRef.current.getAudioTracks().forEach((track) => {
         track.enabled = !isMuted && !isDeafened;
@@ -404,16 +329,13 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
         track.enabled = !isMuted && !isDeafened;
       });
     }
-  }, [isMuted, isDeafened, micGain]);
+  }, [isMuted, isDeafened]);
 
   useEffect(() => {
-    Object.values(remoteGainNodesRef.current).forEach((gNode) => {
-      gNode.gain.value = isDeafened ? 0 : outputGain;
-    });
     Object.values(remoteAudiosRef.current).forEach((audio) => {
       audio.muted = isDeafened;
     });
-  }, [isDeafened, outputGain]);
+  }, [isDeafened]);
 
   const cleanupVoice = useCallback(() => {
     // 1. Stop Speech Recognition & Watchdog
@@ -466,8 +388,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       remoteAudioCtxRef.current = null;
     }
     analyserRef.current = null;
-    micGainNodeRef.current = null;
-    remoteGainNodesRef.current = {};
 
     if (rawStreamRef.current) {
       rawStreamRef.current.getTracks().forEach((track) => track.stop());
@@ -838,7 +758,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           try {
             const params = sender.getParameters();
             if (params.encodings && params.encodings.length > 0) {
-              params.encodings[0].maxBitrate = 320000;
+              params.encodings[0].maxBitrate = 32000;
               params.encodings[0].priority = "high";
               params.encodings[0].networkPriority = "high";
               sender.setParameters(params);
@@ -867,7 +787,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
         }
         audio.srcObject = remoteStream;
         audio.muted = isDeafened;
-        audio.volume = isDeafened ? 0 : Math.min(1.0, Math.max(0.1, outputGainRef.current / 2.5));
+        audio.volume = isDeafened ? 0 : 1.0;
         audio.play().catch(() => {
           const resumeAudio = () => {
             if (audio) audio.play().catch(() => {});
@@ -877,35 +797,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           window.addEventListener("click", resumeAudio);
           window.addEventListener("touchstart", resumeAudio);
         });
-
-        // WebAudio volume boost (clean gain amplification WITHOUT any compressors or filters that cut off audio)
-        try {
-          const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-          if (AudioCtx && outputGainRef.current > 1.0) {
-            if (!remoteAudioCtxRef.current || remoteAudioCtxRef.current.state === "closed") {
-              remoteAudioCtxRef.current = new AudioCtx();
-            }
-            const rCtx = remoteAudioCtxRef.current;
-            if (rCtx.state === "suspended") {
-              rCtx.resume().catch(() => {});
-            }
-
-            const rSource = rCtx.createMediaStreamSource(remoteStream);
-            const rGain = rCtx.createGain();
-            rGain.gain.value = isDeafened ? 0 : outputGainRef.current;
-            remoteGainNodesRef.current[peerId] = rGain;
-
-            // Direct clean route: source -> gain -> destination (NO compressor, NO highpass, NO gating)
-            rSource.connect(rGain);
-            rGain.connect(rCtx.destination);
-
-            if (rCtx.state === "running") {
-              audio.muted = true; // Use amplified WebAudio node when running
-            }
-          }
-        } catch (webaudioErr) {
-          console.warn("WebAudio remote setup note:", webaudioErr);
-        }
       };
 
       pc.onconnectionstatechange = () => {
@@ -913,9 +804,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           if (pcsRef.current[peerId]) {
             pcsRef.current[peerId].close();
             delete pcsRef.current[peerId];
-          }
-          if (remoteGainNodesRef.current[peerId]) {
-            delete remoteGainNodesRef.current[peerId];
           }
           if (remoteAudiosRef.current[peerId]) {
             remoteAudiosRef.current[peerId].srcObject = null;
@@ -1390,8 +1278,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       try {
         const engine = new StudioAudioEngine({
           studioEnhancer: studioVoiceModeRef.current,
-          micGain: micGainRef.current,
-          micMonitoring: micMonitoringRef.current,
         });
         studioEngineRef.current = engine;
         const processedStream = engine.initialize(stream);
@@ -1494,9 +1380,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     const nextMuted = !isMuted;
     setIsMuted(nextMuted);
     isMutedRef.current = nextMuted;
-    if (micGainNodeRef.current) {
-      micGainNodeRef.current.gain.value = nextMuted || isDeafened ? 0 : micGain;
-    }
     if (rawStreamRef.current) {
       rawStreamRef.current.getAudioTracks().forEach((t) => (t.enabled = !nextMuted && !isDeafened));
     }
@@ -1527,9 +1410,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     const nextDeaf = !isDeafened;
     setIsDeafened(nextDeaf);
     isDeafenedRef.current = nextDeaf;
-    if (micGainNodeRef.current) {
-      micGainNodeRef.current.gain.value = isMuted || nextDeaf ? 0 : micGain;
-    }
     if (rawStreamRef.current) {
       rawStreamRef.current.getAudioTracks().forEach((t) => (t.enabled = !isMuted && !nextDeaf));
     }
@@ -1538,9 +1418,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
         .getAudioTracks()
         .forEach((t) => (t.enabled = !isMuted && !nextDeaf));
     }
-    Object.values(remoteGainNodesRef.current).forEach((gNode) => {
-      gNode.gain.value = nextDeaf ? 0 : outputGain;
-    });
     Object.values(remoteAudiosRef.current).forEach((audio) => {
       audio.muted = nextDeaf;
     });
@@ -1583,10 +1460,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     suspensionWord,
     suspensionCategory,
     triggerVoiceSuspension,
-    micGain,
-    setMicGain,
-    outputGain,
-    setOutputGain,
     micLevel,
     notificationPermission,
     requestNotificationPermission,
@@ -1600,8 +1473,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     toggleDeafen,
     studioVoiceMode,
     setStudioVoiceMode,
-    micMonitoring,
-    setMicMonitoring,
     echoCancellation,
     setEchoCancellation,
   };

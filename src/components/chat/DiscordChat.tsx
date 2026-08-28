@@ -129,10 +129,6 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
     suspensionAction,
     suspensionWord,
     suspensionCategory,
-    micGain,
-    setMicGain,
-    outputGain,
-    setOutputGain,
     micLevel,
     sendMessage,
     deleteMessage,
@@ -144,8 +140,6 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
     toggleDeafen,
     studioVoiceMode,
     setStudioVoiceMode,
-    micMonitoring,
-    setMicMonitoring,
     echoCancellation,
     setEchoCancellation,
     notificationPermission,
@@ -205,15 +199,9 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
         suspensionAction={suspensionAction}
         suspensionWord={suspensionWord}
         suspensionCategory={suspensionCategory}
-        micGain={micGain}
-        setMicGain={setMicGain}
-        outputGain={outputGain}
-        setOutputGain={setOutputGain}
         micLevel={micLevel}
         studioVoiceMode={studioVoiceMode}
         setStudioVoiceMode={setStudioVoiceMode}
-        micMonitoring={micMonitoring}
-        setMicMonitoring={setMicMonitoring}
         echoCancellation={echoCancellation}
         setEchoCancellation={setEchoCancellation}
         onJoinVoice={joinVoiceChannel}

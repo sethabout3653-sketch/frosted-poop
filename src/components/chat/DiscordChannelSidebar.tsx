@@ -12,11 +12,7 @@ import {
   PhoneOff,
   AlertCircle,
   ShieldAlert,
-  Sliders,
-  Sparkles,
   X,
-  Ear,
-  Waves,
 } from "lucide-react";
 import type { Channel, User, VoiceUser } from "@/types/chat";
 
@@ -36,15 +32,9 @@ interface Props {
   suspensionAction?: string;
   suspensionWord?: string;
   suspensionCategory?: string;
-  micGain?: number;
-  setMicGain?: (gain: number) => void;
-  outputGain?: number;
-  setOutputGain?: (gain: number) => void;
   micLevel?: number;
   studioVoiceMode?: boolean;
   setStudioVoiceMode?: (val: boolean) => void;
-  micMonitoring?: boolean;
-  setMicMonitoring?: (val: boolean) => void;
   echoCancellation?: boolean;
   setEchoCancellation?: (val: boolean) => void;
   onJoinVoice: (channelId: string) => void;
@@ -70,15 +60,9 @@ export function DiscordChannelSidebar({
   suspensionAction = "",
   suspensionWord = "",
   suspensionCategory = "",
-  micGain = 1.5,
-  setMicGain,
-  outputGain = 2.5,
-  setOutputGain,
   micLevel = 0,
   studioVoiceMode = true,
   setStudioVoiceMode,
-  micMonitoring = false,
-  setMicMonitoring,
   echoCancellation = true,
   setEchoCancellation,
   onJoinVoice,
@@ -89,7 +73,6 @@ export function DiscordChannelSidebar({
 }: Props) {
   const [textOpen, setTextOpen] = useState(true);
   const [voiceOpen, setVoiceOpen] = useState(true);
-  const [showAudioSettings, setShowAudioSettings] = useState(false);
 
   const textChannels = channels.filter((c) => c.type === "text");
   const voiceChannels = channels.filter((c) => c.type === "voice");
@@ -325,155 +308,9 @@ export function DiscordChannelSidebar({
               />
             </div>
             <span className="text-[9px] text-emerald-400 font-mono font-bold shrink-0">
-              {isMuted || isDeafened ? "MUTE" : `${Math.round(micGain * 100)}%`}
+              {isMuted || isDeafened ? "MUTE" : "LIVE"}
             </span>
           </div>
-
-          {/* Audio Booster Settings Popover */}
-          {showAudioSettings && (
-            <div className="flex flex-col gap-2.5 p-2.5 bg-[#141414] border border-neutral-700/80 rounded-lg mt-1 shadow-2xl animate-in fade-in zoom-in-95 duration-150 text-[11px]">
-              <div className="flex items-center justify-between border-b border-neutral-800 pb-1.5">
-                <div className="flex items-center gap-1 text-white font-bold">
-                  <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
-                  <span>Audio Controls</span>
-                </div>
-                <button
-                  onClick={() => setShowAudioSettings(false)}
-                  className="text-neutral-400 hover:text-white p-0.5 cursor-pointer"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-
-              {/* Studio Voice Enhancer Toggle */}
-              <div className="flex items-center justify-between py-1 border-t border-neutral-800/80">
-                <div className="flex items-center gap-1.5">
-                  <Sliders className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                  <div>
-                    <div className="flex items-center gap-1">
-                      <span className="text-[10px] font-semibold text-white">
-                        Studio Broadcast EQ
-                      </span>
-                      <span className="text-[8px] bg-emerald-500/20 text-emerald-300 font-bold px-1 rounded border border-emerald-500/30">
-                        HD
-                      </span>
-                    </div>
-                    <div className="text-[8px] text-neutral-400">
-                      Warmth, clarity boost & limiter on any mic
-                    </div>
-                  </div>
-                </div>
-                <button
-                  onClick={() =>
-                    setStudioVoiceMode && setStudioVoiceMode(!studioVoiceMode)
-                  }
-                  className={`h-5 w-9 rounded-full transition-colors cursor-pointer p-0.5 shrink-0 ${
-                    studioVoiceMode ? "bg-emerald-500" : "bg-neutral-800"
-                  }`}
-                >
-                  <div
-                    className={`h-4 w-4 rounded-full bg-white transition-transform ${
-                      studioVoiceMode ? "translate-x-4" : "translate-x-0"
-                    }`}
-                  />
-                </button>
-              </div>
-
-              {/* Mic Gain Slider */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-[10px] text-neutral-300">
-                  <span>Mic Volume Boost</span>
-                  <span className="font-mono text-emerald-400 font-bold">
-                    {Math.round(micGain * 100)}%
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min="1.0"
-                  max="5.0"
-                  step="0.25"
-                  value={micGain}
-                  onChange={(e) => setMicGain && setMicGain(parseFloat(e.target.value))}
-                  className="w-full h-1.5 bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                />
-                <div className="flex justify-between text-[8px] text-neutral-400">
-                  <span>100% (Normal)</span>
-                  <span>500% (Ultra High)</span>
-                </div>
-              </div>
-
-              {/* Output Gain Slider */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-[10px] text-neutral-300">
-                  <span>User Voices Volume Boost</span>
-                  <span className="font-mono text-emerald-400 font-bold">
-                    {Math.round(outputGain * 100)}%
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min="1.0"
-                  max="4.0"
-                  step="0.25"
-                  value={outputGain}
-                  onChange={(e) => setOutputGain && setOutputGain(parseFloat(e.target.value))}
-                  className="w-full h-1.5 bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                />
-                <div className="flex justify-between text-[8px] text-neutral-400">
-                  <span>100%</span>
-                  <span>400%</span>
-                </div>
-              </div>
-
-              {/* Live Mic Monitoring Toggle */}
-              <div className="flex items-center justify-between py-1 border-t border-neutral-800/80">
-                <div className="flex items-center gap-1.5">
-                  <Ear className="h-3.5 w-3.5 text-neutral-300" />
-                  <div>
-                    <div className="text-[10px] font-semibold text-white">Mic Monitoring</div>
-                    <div className="text-[8px] text-neutral-400">
-                      Hear your own voice in real-time
-                    </div>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setMicMonitoring && setMicMonitoring(!micMonitoring)}
-                  className={`h-5 w-9 rounded-full transition-colors cursor-pointer p-0.5 ${
-                    micMonitoring ? "bg-emerald-500" : "bg-neutral-800"
-                  }`}
-                >
-                  <div
-                    className={`h-4 w-4 rounded-full bg-white transition-transform ${
-                      micMonitoring ? "translate-x-4" : "translate-x-0"
-                    }`}
-                  />
-                </button>
-              </div>
-
-              {/* Hardware Echo Cancellation Toggle */}
-              <div className="flex items-center justify-between py-1 border-t border-neutral-800/80">
-                <div className="flex items-center gap-1.5">
-                  <Waves className="h-3.5 w-3.5 text-neutral-300" />
-                  <div>
-                    <div className="text-[10px] font-semibold text-white">Echo Cancellation</div>
-                    <div className="text-[8px] text-neutral-400">Recommended for speakers</div>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setEchoCancellation && setEchoCancellation(!echoCancellation)}
-                  className={`h-5 w-9 rounded-full transition-colors cursor-pointer p-0.5 ${
-                    echoCancellation ? "bg-emerald-500" : "bg-neutral-800"
-                  }`}
-                >
-                  <div
-                    className={`h-4 w-4 rounded-full bg-white transition-transform ${
-                      echoCancellation ? "translate-x-4" : "translate-x-0"
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
-          )}
 
           <div className="flex items-center justify-around mt-1">
             <button
@@ -497,17 +334,6 @@ export function DiscordChannelSidebar({
               title={isDeafened ? "Undeafen Audio" : "Deafen Audio"}
             >
               <Headphones className={`h-4 w-4 ${isDeafened ? "text-amber-400" : ""}`} />
-            </button>
-            <button
-              onClick={() => setShowAudioSettings(!showAudioSettings)}
-              className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all cursor-pointer ${
-                showAudioSettings
-                  ? "bg-white text-black font-bold"
-                  : "hover:bg-neutral-800 text-neutral-400 hover:text-white"
-              }`}
-              title="Audio Boost Settings"
-            >
-              <Sliders className="h-4 w-4" />
             </button>
             <button
               onClick={onLeaveVoice}
