@@ -1,7 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { User, Channel, ChatMessage, VoiceUser } from "@/types/chat";
 import { notificationManager } from "../lib/notifications";
-import { checkVoiceModeration, announceVoiceSuspension } from "../lib/voiceModeration";
+import {
+  checkVoiceModeration,
+  categorizeProfanity,
+  announceVoiceSuspension,
+} from "../lib/voiceModeration";
+import { StudioAudioEngine } from "../lib/studioAudioEngine";
 import { db } from "../lib/firebaseClient";
 import {
   collection,
@@ -32,7 +37,8 @@ const DEFAULT_CHANNELS: Channel[] = [
  * Optimizes WebRTC SDP to ensure crystal-clear, continuous voice transmission without cutting off:
  * - usedtx=0 (disables discontinuous transmission / silence clipping, prevents voice cutting off)
  * - useinbandfec=1 (in-band forward error correction, restores lost packets across Wi-Fi & cellular)
- * - maxaveragebitrate=128000 (studio voice bitrate with zero packet buffer congestion)
+ * - maxaveragebitrate=320000 (studio broadcast voice bitrate with zero packet buffer congestion)
+ * - ptime=20, minptime=10 (smooth, low-latency audio delivery)
  */
 function optimizeOpusSdp(sdp: string): string {
   return sdp.replace(/a=fmtp:(\d+) (.*)/g, (match, pt, params) => {
@@ -47,21 +53,35 @@ function optimizeOpusSdp(sdp: string): string {
         newParams += ";usedtx=0";
       }
       if (newParams.includes("maxaveragebitrate=")) {
-        newParams = newParams.replace(/maxaveragebitrate=\d+/g, "maxaveragebitrate=128000");
+        newParams = newParams.replace(/maxaveragebitrate=\d+/g, "maxaveragebitrate=320000");
       } else {
-        newParams += ";maxaveragebitrate=128000";
+        newParams += ";maxaveragebitrate=320000";
       }
-      // Remove any forced stereo, CBR, or low ptime parameters that cause packet drops and mic cutoffs
+      if (!newParams.includes("ptime=")) {
+        newParams += ";ptime=20";
+      }
+      if (!newParams.includes("minptime=")) {
+        newParams += ";minptime=10";
+      }
       newParams = newParams
         .replace(/;?stereo=\d+/g, "")
         .replace(/;?sprop-stereo=\d+/g, "")
-        .replace(/;?cbr=\d+/g, "")
-        .replace(/;?minptime=\d+/g, "")
-        .replace(/;?ptime=\d+/g, "");
+        .replace(/;?cbr=\d+/g, "");
       return `a=fmtp:${pt} ${newParams}`;
     }
     return match;
   });
+}
+
+// Helper to remove undefined properties before writing to Firestore
+function cleanFirestoreData<T extends Record<string, any>>(obj: T): T {
+  const clean: any = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      clean[key] = value;
+    }
+  }
+  return clean as T;
 }
 
 export function useDiscordChat({ token, currentUser, onLogout }: Props) {
@@ -75,10 +95,10 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const [currentVoiceChannelId, setCurrentVoiceChannelId] = useState<string | null>(null);
   const [voiceError, setVoiceError] = useState<string | null>(null);
 
-  // Audio Gain & Volume Boost States (Default 300% mic boost, 250% speaker boost)
+  // Audio Gain & Volume Boost States (Default 150% mic boost, 250% speaker boost)
   const [micGain, setMicGainState] = useState<number>(() => {
     const saved = localStorage.getItem("discord_mic_gain");
-    return saved ? parseFloat(saved) : 3.0;
+    return saved ? parseFloat(saved) : 1.5;
   });
   const [outputGain, setOutputGainState] = useState<number>(() => {
     const saved = localStorage.getItem("discord_output_gain");
@@ -86,7 +106,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   });
   const [micLevel, setMicLevel] = useState<number>(0);
 
-  // Studio Voice Quality & Monitoring Controls
+  // Studio Voice Quality Controls
   const [studioVoiceMode, setStudioVoiceModeState] = useState<boolean>(() => {
     const saved = localStorage.getItem("discord_studio_voice");
     return saved !== null ? saved === "true" : true;
@@ -102,7 +122,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const studioVoiceModeRef = useRef(studioVoiceMode);
   const micMonitoringRef = useRef(micMonitoring);
   const echoCancellationRef = useRef(echoCancellation);
-  const micMonitorGainRef = useRef<GainNode | null>(null);
+  const studioEngineRef = useRef<StudioAudioEngine | null>(null);
 
   useEffect(() => {
     studioVoiceModeRef.current = studioVoiceMode;
@@ -159,11 +179,23 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       return "";
     }
   });
+  const [suspensionCategory, setSuspensionCategory] = useState<string>(() => {
+    try {
+      return localStorage.getItem("discord_voice_suspension_category") || "";
+    } catch {
+      return "";
+    }
+  });
 
   const suspensionWordRef = useRef(suspensionWord);
   useEffect(() => {
     suspensionWordRef.current = suspensionWord;
   }, [suspensionWord]);
+
+  const suspensionCategoryRef = useRef(suspensionCategory);
+  useEffect(() => {
+    suspensionCategoryRef.current = suspensionCategory;
+  }, [suspensionCategory]);
 
   // Voice suspension countdown interval (1 minute timer)
   useEffect(() => {
@@ -177,6 +209,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           setSuspensionTimeLeft(0);
           setSuspensionAction("");
           setSuspensionWord("");
+          setSuspensionCategory("");
           return;
         }
 
@@ -190,16 +223,19 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           setSuspensionTimeLeft(0);
           setSuspensionAction("");
           setSuspensionWord("");
+          setSuspensionCategory("");
           try {
             localStorage.removeItem("discord_voice_suspended_until");
             localStorage.removeItem("discord_voice_suspension_action");
             localStorage.removeItem("discord_voice_suspension_word");
+            localStorage.removeItem("discord_voice_suspension_category");
           } catch {}
           if (currentUser?.id) {
             updateDoc(doc(db, "users", currentUser.id), {
               isSuspended: false,
               voiceSuspendedUntil: null,
               suspensionWord: null,
+              suspensionCategory: null,
               suspensionAction: null,
             }).catch(() => {});
           }
@@ -299,7 +335,12 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const setMicGain = useCallback(
     (newGain: number) => {
       setMicGainState(newGain);
-      localStorage.setItem("discord_mic_gain", newGain.toString());
+      try {
+        localStorage.setItem("discord_mic_gain", newGain.toString());
+      } catch {}
+      if (studioEngineRef.current) {
+        studioEngineRef.current.setMicGain(newGain);
+      }
       if (micGainNodeRef.current) {
         micGainNodeRef.current.gain.value = isMuted ? 0 : newGain;
       }
@@ -311,7 +352,9 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const setOutputGain = useCallback(
     (newGain: number) => {
       setOutputGainState(newGain);
-      localStorage.setItem("discord_output_gain", newGain.toString());
+      try {
+        localStorage.setItem("discord_output_gain", newGain.toString());
+      } catch {}
       Object.values(remoteGainNodesRef.current).forEach((gNode) => {
         gNode.gain.value = isDeafened ? 0 : newGain;
       });
@@ -321,20 +364,29 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
 
   const setStudioVoiceMode = useCallback((val: boolean) => {
     setStudioVoiceModeState(val);
-    localStorage.setItem("discord_studio_voice", val.toString());
+    try {
+      localStorage.setItem("discord_studio_voice", val.toString());
+    } catch {}
+    if (studioEngineRef.current) {
+      studioEngineRef.current.setStudioEnhancer(val);
+    }
   }, []);
 
   const setMicMonitoring = useCallback((val: boolean) => {
     setMicMonitoringState(val);
-    localStorage.setItem("discord_mic_monitoring", val.toString());
-    if (micMonitorGainRef.current) {
-      micMonitorGainRef.current.gain.value = val ? 0.85 : 0;
+    try {
+      localStorage.setItem("discord_mic_monitoring", val.toString());
+    } catch {}
+    if (studioEngineRef.current) {
+      studioEngineRef.current.setMicMonitoring(val);
     }
   }, []);
 
   const setEchoCancellation = useCallback((val: boolean) => {
     setEchoCancellationState(val);
-    localStorage.setItem("discord_echo_cancellation", val.toString());
+    try {
+      localStorage.setItem("discord_echo_cancellation", val.toString());
+    } catch {}
   }, []);
 
   // Audio track states (Mute/Deafen)
@@ -396,6 +448,11 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     recentMaxEnergyRef.current = 0;
     whisperBoosterStreamRef.current = null;
 
+    if (studioEngineRef.current) {
+      studioEngineRef.current.destroy();
+      studioEngineRef.current = null;
+    }
+
     if (animFrameRef.current) {
       cancelAnimationFrame(animFrameRef.current);
       animFrameRef.current = null;
@@ -410,7 +467,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     }
     analyserRef.current = null;
     micGainNodeRef.current = null;
-    micMonitorGainRef.current = null;
     remoteGainNodesRef.current = {};
 
     if (rawStreamRef.current) {
@@ -445,10 +501,11 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
 
   // Voice moderation suspension action trigger
   const triggerVoiceSuspension = useCallback(
-    async (word: string) => {
+    async (word: string, category?: string) => {
       const durationMs = 60 * 1000; // 1 minute
       const until = Date.now() + durationMs;
-      const actionText = `You have been suspended for saying "${word}"`;
+      const cat = category || categorizeProfanity(word) || "Derogatory & Prohibited Language";
+      const actionText = `You Have been suspended for violating moderation. Offensive Item: "${word}". Violation Type: ${cat}.`;
 
       // 1. Immediately disconnect and leave voice channel
       cleanupVoice();
@@ -457,6 +514,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       setIsSuspended(true);
       setSuspensionTimeLeft(60);
       setSuspensionWord(word);
+      setSuspensionCategory(cat);
       setSuspensionAction(actionText);
       setVoiceError(actionText);
 
@@ -464,6 +522,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       try {
         localStorage.setItem("discord_voice_suspended_until", until.toString());
         localStorage.setItem("discord_voice_suspension_word", word);
+        localStorage.setItem("discord_voice_suspension_category", cat);
         localStorage.setItem("discord_voice_suspension_action", actionText);
       } catch (e) {
         console.warn("LocalStorage save error:", e);
@@ -478,6 +537,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
             isSuspended: true,
             voiceSuspendedUntil: until,
             suspensionWord: word,
+            suspensionCategory: cat,
             suspensionAction: actionText,
           });
         } catch (err) {
@@ -485,8 +545,8 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
         }
       }
 
-      // 5. Execute action: Audible speech saying "You have been suspended for saying [word]"
-      announceVoiceSuspension(word);
+      // 5. Execute action: Audible speech saying "You Have been suspended for violating moderation" "Offensive Item [word]" "Violation Type: [category]"
+      announceVoiceSuspension(word, cat);
     },
     [cleanupVoice],
   );
@@ -496,7 +556,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     triggerVoiceSuspensionRef.current = triggerVoiceSuspension;
   }, [triggerVoiceSuspension]);
 
-  // Voice speech recognition for continuous voice moderation (handles masked words f***, s***, b****, ****, etc.)
+  // Voice speech recognition for continuous voice moderation (handles masked words ****, f***, s***, b****, whispers & slurs)
   const startSpeechRecognitionModeration = useCallback(() => {
     if (typeof window === "undefined") return;
     const SpeechRecognition =
@@ -520,7 +580,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
-      recognition.maxAlternatives = 5;
+      recognition.maxAlternatives = 10;
       recognition.lang = "en-US";
 
       recognition.onresult = (event: any) => {
@@ -528,14 +588,14 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           return;
         }
 
-        // 1. Check all individual results and alternatives
+        // 1. Check all individual results and alternatives (up to 10 hypotheses)
         for (let i = 0; i < event.results.length; i++) {
           const item = event.results[i];
           for (let a = 0; a < item.length; a++) {
             const transcript = item[a]?.transcript || "";
             const check = checkVoiceModeration(transcript);
             if (check.isViolating && check.matchedWord) {
-              triggerVoiceSuspensionRef.current(check.matchedWord);
+              triggerVoiceSuspensionRef.current(check.matchedWord, check.category);
               return;
             }
           }
@@ -548,7 +608,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
         }
         const fullCheck = checkVoiceModeration(fullTranscript);
         if (fullCheck.isViolating && fullCheck.matchedWord) {
-          triggerVoiceSuspensionRef.current(fullCheck.matchedWord);
+          triggerVoiceSuspensionRef.current(fullCheck.matchedWord, fullCheck.category);
           return;
         }
       };
@@ -576,7 +636,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
             ) {
               startSpeechRecognitionModeration();
             }
-          }, 60);
+          }, 50);
         }
       };
 
@@ -600,7 +660,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
               } catch {}
             }
           }
-        }, 1200);
+        }, 800);
       }
     } catch (e) {
       console.warn("Failed to initialize speech recognition moderation:", e);
@@ -688,7 +748,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
                     if (res.ok) {
                       const data = await res.json();
                       if (data.isViolating && data.matchedWord && !isSuspendedRef.current) {
-                        triggerVoiceSuspensionRef.current(data.matchedWord);
+                        triggerVoiceSuspensionRef.current(data.matchedWord, data.category);
                       }
                     }
                   } catch (e) {
@@ -770,7 +830,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
 
       pcsRef.current[peerId] = pc;
 
-      const streamToSend = rawStreamRef.current;
+      const streamToSend = processedStreamRef.current || rawStreamRef.current;
       if (streamToSend) {
         streamToSend.getAudioTracks().forEach((track) => {
           track.enabled = !isMuted && !isDeafened;
@@ -778,7 +838,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           try {
             const params = sender.getParameters();
             if (params.encodings && params.encodings.length > 0) {
-              params.encodings[0].maxBitrate = 128000;
+              params.encodings[0].maxBitrate = 320000;
               params.encodings[0].priority = "high";
               params.encodings[0].networkPriority = "high";
               sender.setParameters(params);
@@ -903,8 +963,8 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   useEffect(() => {
     if (!currentUser) return;
 
-    // 1. Listen for Real-Time Messages
-    const qMessages = query(collection(db, "messages"), orderBy("timestamp", "asc"), limit(200));
+    // 1. Listen for Real-Time Messages (Reliable Firestore Query)
+    const qMessages = query(collection(db, "messages"), limit(300));
     const unsubscribeMessages = onSnapshot(
       qMessages,
       (snapshot) => {
@@ -926,6 +986,9 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           });
         });
 
+        // Always sort chronologically
+        incomingMessages.sort((a, b) => a.timestamp - b.timestamp);
+
         setMessages(incomingMessages.filter((m) => m.channelId === activeChannelIdRef.current));
 
         if (!initialLoadDoneRef.current) {
@@ -939,6 +1002,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
                 notificationManager.notifyNewMessage({
                   senderName: m.displayName || m.username,
                   channelName: m.channelId === "general" ? "general" : m.channelId,
+                  channelId: m.channelId,
                   content: m.content,
                   avatarColor: m.avatarColor,
                 });
@@ -980,6 +1044,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
             isSuspended: !!data.isSuspended,
             voiceSuspendedUntil: data.voiceSuspendedUntil || null,
             suspensionWord: data.suspensionWord || null,
+            suspensionCategory: data.suspensionCategory || null,
             suspensionAction: data.suspensionAction || null,
           };
 
@@ -989,6 +1054,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
               setIsSuspended(true);
               setSuspensionTimeLeft(diff);
               if (data.suspensionWord) setSuspensionWord(data.suspensionWord);
+              if (data.suspensionCategory) setSuspensionCategory(data.suspensionCategory);
               if (data.suspensionAction) setSuspensionAction(data.suspensionAction);
             }
           }
@@ -1126,30 +1192,27 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   useEffect(() => {
     async function loadChannelMessages() {
       try {
-        const q = query(
-          collection(db, "messages"),
-          where("channelId", "==", activeChannelId),
-          orderBy("timestamp", "asc"),
-          limit(100),
-        );
-        const snap = await getDocs(q);
+        const snap = await getDocs(query(collection(db, "messages"), limit(300)));
         const msgs: ChatMessage[] = [];
         snap.forEach((d) => {
           const data = d.data();
-          msgs.push({
-            id: d.id,
-            channelId: data.channelId,
-            userId: data.userId,
-            username: data.username,
-            displayName: data.displayName,
-            avatarColor: data.avatarColor,
-            content: data.content,
-            attachmentUrl: data.attachmentUrl,
-            attachmentName: data.attachmentName,
-            timestamp: data.timestamp,
-            reactions: data.reactions || {},
-          });
+          if (data.channelId === activeChannelId) {
+            msgs.push({
+              id: d.id,
+              channelId: data.channelId,
+              userId: data.userId || "",
+              username: data.username || "Unknown",
+              displayName: data.displayName || data.username || "Unknown",
+              avatarColor: data.avatarColor || "#5865f2",
+              content: data.content || "",
+              attachmentUrl: data.attachmentUrl,
+              attachmentName: data.attachmentName,
+              timestamp: data.timestamp || Date.now(),
+              reactions: data.reactions || {},
+            });
+          }
         });
+        msgs.sort((a, b) => a.timestamp - b.timestamp);
         setMessages(msgs);
       } catch {}
     }
@@ -1168,17 +1231,24 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       username: currentUser.username,
       displayName: currentUser.displayName || currentUser.username,
       avatarColor: currentUser.avatarColor,
-      content,
-      attachmentUrl,
-      attachmentName,
+      content: content || "",
       timestamp: Date.now(),
       reactions: {},
     };
 
-    setMessages((prev) => [...prev, newMsg]);
+    if (attachmentUrl) {
+      newMsg.attachmentUrl = attachmentUrl;
+    }
+    if (attachmentName) {
+      newMsg.attachmentName = attachmentName;
+    }
+
+    setMessages((prev) => [...prev.filter((m) => m.id !== msgId), newMsg]);
+
+    const sanitizedMsg = cleanFirestoreData(newMsg);
 
     try {
-      await setDoc(doc(db, "messages", msgId), newMsg);
+      await setDoc(doc(db, "messages", msgId), sanitizedMsg);
     } catch (fsErr) {
       console.warn("Firestore write note:", fsErr);
     }
@@ -1193,9 +1263,9 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           },
           body: JSON.stringify({
             channelId: activeChannelId,
-            content,
-            attachmentUrl,
-            attachmentName,
+            content: content || "",
+            ...(attachmentUrl ? { attachmentUrl } : {}),
+            ...(attachmentName ? { attachmentName } : {}),
           }),
         });
       } catch {}
@@ -1209,25 +1279,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     } catch (err) {
       console.warn("Delete message error:", err);
     }
-  };
-
-  const clearAllMessages = async () => {
-    setMessages([]);
-    try {
-      const snap = await getDocs(collection(db, "messages"));
-      const deletePromises = snap.docs.map((d) => deleteDoc(doc(db, "messages", d.id)));
-      await Promise.all(deletePromises);
-    } catch (err) {
-      console.warn("Clear all messages in firestore error:", err);
-    }
-    try {
-      if (token) {
-        await fetch("/api/chat/messages/clear-all", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      }
-    } catch {}
   };
 
   const toggleReaction = async (messageId: string, emoji: string) => {
@@ -1296,14 +1347,18 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     // Voice Moderation: Block joining voice channels if currently suspended
     if (isSuspendedRef.current || suspensionTimeLeft > 0) {
       const word = suspensionWordRef.current || "prohibited word";
-      const errorMsg = `You have been suspended for saying "${word}". Voice chat suspended: ${suspensionTimeLeft}s remaining.`;
+      const cat =
+        suspensionCategoryRef.current ||
+        categorizeProfanity(word) ||
+        "Derogatory & Prohibited Language";
+      const errorMsg = `You Have been suspended for violating moderation. Offensive Item: "${word}" (${cat}). Voice chat suspended: ${suspensionTimeLeft}s remaining.`;
       setVoiceError(errorMsg);
       if (typeof window !== "undefined" && "speechSynthesis" in window) {
         try {
           window.speechSynthesis.cancel();
           window.speechSynthesis.speak(
             new SpeechSynthesisUtterance(
-              `You are currently suspended from voice chat for saying ${word}`,
+              `You Have been suspended for violating moderation. Offensive item: ${word}. Violation type: ${cat}.`,
             ),
           );
         } catch {}
@@ -1314,11 +1369,13 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     try {
       cleanupVoice();
 
-      // Universal audio constraints compatible with all microphones (USB, built-in, Bluetooth, headsets)
+      // Broadcast-grade audio constraints compatible with all microphones (USB, built-in, Bluetooth, headsets)
       const audioConstraints: MediaTrackConstraints = {
-        echoCancellation: echoCancellationRef.current,
-        noiseSuppression: true,
-        autoGainControl: true,
+        sampleRate: { ideal: 48000 },
+        channelCount: { ideal: 1 },
+        echoCancellation: { ideal: echoCancellationRef.current },
+        noiseSuppression: { ideal: false },
+        autoGainControl: { ideal: false },
       };
 
       let stream: MediaStream;
@@ -1328,34 +1385,22 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       }
       rawStreamRef.current = stream;
-      processedStreamRef.current = stream;
 
-      // Real-time Mic Activity Meter & Local Monitoring
+      // Initialize Studio Broadcast DSP Engine
       try {
-        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-        if (AudioCtx) {
-          const actx = new AudioCtx();
-          audioContextRef.current = actx;
-          if (actx.state === "suspended") {
-            actx.resume().catch(() => {});
-          }
+        const engine = new StudioAudioEngine({
+          studioEnhancer: studioVoiceModeRef.current,
+          micGain: micGainRef.current,
+          micMonitoring: micMonitoringRef.current,
+        });
+        studioEngineRef.current = engine;
+        const processedStream = engine.initialize(stream);
+        processedStreamRef.current = processedStream;
 
-          const rawSource = actx.createMediaStreamSource(stream);
-
-          // Local Mic Monitoring (Optional "Hear Myself", loopback directly to local speakers)
-          const monitorGain = actx.createGain();
-          monitorGain.gain.value = micMonitoringRef.current ? 0.85 : 0;
-          micMonitorGainRef.current = monitorGain;
-          rawSource.connect(monitorGain);
-          monitorGain.connect(actx.destination);
-
-          // Visual Audio Level Meter & Voice Activity Detection
-          const analyser = actx.createAnalyser();
-          analyser.fftSize = 512;
-          analyser.smoothingTimeConstant = 0.25;
-          rawSource.connect(analyser);
+        // Visual Audio Level Meter & Voice Activity Detection
+        const analyser = engine.getAnalyserNode();
+        if (analyser) {
           analyserRef.current = analyser;
-
           const dataArray = new Uint8Array(analyser.frequencyBinCount);
           let speakingHangover = 0;
 
@@ -1371,9 +1416,9 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
             setMicLevel(normalizedLevel);
             recentMaxEnergyRef.current = Math.max(recentMaxEnergyRef.current, average);
 
-            // Responsive threshold (1.5) + hangover (25 frames) so quiet whispers and trailing words are detected
-            if (average > 1.5) {
-              speakingHangover = 25;
+            // Responsive threshold + smooth hangover (30 frames) so quiet whispers and trailing words are detected
+            if (average > 1.2) {
+              speakingHangover = 30;
               setIsSelfSpeaking(true);
             } else if (speakingHangover > 0) {
               speakingHangover--;
@@ -1385,34 +1430,13 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
             animFrameRef.current = requestAnimationFrame(checkSpeaking);
           };
           checkSpeaking();
-
-          // Whisper Intelligibility Booster (Peaking Filter + 4.5x Gain + Dynamics Compressor)
-          const whisperFilter = actx.createBiquadFilter();
-          whisperFilter.type = "peaking";
-          whisperFilter.frequency.value = 2800; // Human whisper formant band (2k-3.5kHz)
-          whisperFilter.Q.value = 1.0;
-          whisperFilter.gain.value = 14; // +14dB boost
-
-          const whisperGain = actx.createGain();
-          whisperGain.gain.value = 4.5;
-
-          const whisperCompressor = actx.createDynamicsCompressor();
-          whisperCompressor.threshold.value = -45;
-          whisperCompressor.knee.value = 10;
-          whisperCompressor.ratio.value = 12;
-          whisperCompressor.attack.value = 0.003;
-          whisperCompressor.release.value = 0.25;
-
-          const whisperDest = actx.createMediaStreamDestination();
-          rawSource.connect(whisperFilter);
-          whisperFilter.connect(whisperGain);
-          whisperGain.connect(whisperCompressor);
-          whisperCompressor.connect(whisperDest);
-
-          whisperBoosterStreamRef.current = whisperDest.stream;
         }
+
+        // Whisper Intelligibility Stream for local speech moderation
+        whisperBoosterStreamRef.current = processedStream;
       } catch (audioErr) {
-        console.warn("Audio meter setup note:", audioErr);
+        console.warn("StudioAudioEngine setup note:", audioErr);
+        processedStreamRef.current = stream;
       }
 
       // Immediately register active voice channel synchronously to eliminate any moderation activation lag
@@ -1557,6 +1581,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     suspensionTimeLeft,
     suspensionAction,
     suspensionWord,
+    suspensionCategory,
     triggerVoiceSuspension,
     micGain,
     setMicGain,
@@ -1567,7 +1592,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     requestNotificationPermission,
     sendMessage,
     deleteMessage,
-    clearAllMessages,
     toggleReaction,
     sendTyping,
     joinVoiceChannel,

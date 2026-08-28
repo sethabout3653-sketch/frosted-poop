@@ -35,6 +35,7 @@ interface Props {
   suspensionTimeLeft?: number;
   suspensionAction?: string;
   suspensionWord?: string;
+  suspensionCategory?: string;
   micGain?: number;
   setMicGain?: (gain: number) => void;
   outputGain?: number;
@@ -68,7 +69,8 @@ export function DiscordChannelSidebar({
   suspensionTimeLeft = 0,
   suspensionAction = "",
   suspensionWord = "",
-  micGain = 3.0,
+  suspensionCategory = "",
+  micGain = 1.5,
   setMicGain,
   outputGain = 2.5,
   setOutputGain,
@@ -170,7 +172,7 @@ export function DiscordChannelSidebar({
 
         {/* VOICE MODERATION SUSPENSION BANNER */}
         {isSuspended && (
-          <div className="mx-1 mb-2 rounded-lg border border-rose-500/50 bg-rose-950/40 p-2.5 text-xs shadow-lg animate-in fade-in duration-200">
+          <div className="mx-1 mb-2 rounded-lg border border-rose-500/50 bg-rose-950/60 p-2.5 text-xs shadow-lg animate-in fade-in duration-200">
             <div className="flex items-start gap-2">
               <ShieldAlert className="h-4 w-4 shrink-0 text-rose-400 mt-0.5" />
               <div className="flex-1 min-w-0">
@@ -182,14 +184,25 @@ export function DiscordChannelSidebar({
                     00:{String(suspensionTimeLeft).padStart(2, "0")}
                   </span>
                 </div>
-                <p className="mt-1 text-white font-semibold text-[11px] leading-tight">
-                  You have been suspended for saying{" "}
-                  <span className="text-rose-300 underline font-mono">
-                    "{suspensionWord || "prohibited word"}"
-                  </span>
+                <p className="mt-1.5 text-white font-semibold text-[11px] leading-tight">
+                  You Have been suspended for violating moderation
                 </p>
-                <p className="mt-1 text-[10px] text-neutral-400 leading-snug">
-                  1 minute voice suspension. Text chat remains open and unmoderated.
+                <div className="mt-1.5 space-y-0.5 text-[10.5px]">
+                  <div className="flex items-baseline gap-1 text-rose-200">
+                    <span className="text-neutral-400">Offensive Item:</span>
+                    <span className="font-mono font-bold text-rose-300 underline">
+                      "{suspensionWord || "prohibited word"}"
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-1 text-rose-200">
+                    <span className="text-neutral-400">Violation Type:</span>
+                    <span className="font-medium text-rose-100 bg-rose-900/80 px-1.5 py-0.5 rounded border border-rose-500/30">
+                      {suspensionCategory || "Derogatory / Prohibited Language"}
+                    </span>
+                  </div>
+                </div>
+                <p className="mt-2 text-[9.5px] text-neutral-400 leading-snug">
+                  1 min voice suspension. Text chat remains open and unmoderated.
                 </p>
               </div>
             </div>
@@ -329,6 +342,40 @@ export function DiscordChannelSidebar({
                   className="text-neutral-400 hover:text-white p-0.5 cursor-pointer"
                 >
                   <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              {/* Studio Voice Enhancer Toggle */}
+              <div className="flex items-center justify-between py-1 border-t border-neutral-800/80">
+                <div className="flex items-center gap-1.5">
+                  <Sliders className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                  <div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] font-semibold text-white">
+                        Studio Broadcast EQ
+                      </span>
+                      <span className="text-[8px] bg-emerald-500/20 text-emerald-300 font-bold px-1 rounded border border-emerald-500/30">
+                        HD
+                      </span>
+                    </div>
+                    <div className="text-[8px] text-neutral-400">
+                      Warmth, clarity boost & limiter on any mic
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() =>
+                    setStudioVoiceMode && setStudioVoiceMode(!studioVoiceMode)
+                  }
+                  className={`h-5 w-9 rounded-full transition-colors cursor-pointer p-0.5 shrink-0 ${
+                    studioVoiceMode ? "bg-emerald-500" : "bg-neutral-800"
+                  }`}
+                >
+                  <div
+                    className={`h-4 w-4 rounded-full bg-white transition-transform ${
+                      studioVoiceMode ? "translate-x-4" : "translate-x-0"
+                    }`}
+                  />
                 </button>
               </div>
 

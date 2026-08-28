@@ -27,7 +27,6 @@ interface Props {
   typingUsers: string[];
   onSendMessage: (content: string, attachmentUrl?: string, attachmentName?: string) => void;
   onDeleteMessage?: (messageId: string) => void;
-  onClearAllMessages?: () => void;
   onToggleReaction: (messageId: string, emoji: string) => void;
   onSendTyping: (isTyping: boolean) => void;
   onToggleUserList: () => void;
@@ -74,7 +73,6 @@ export function DiscordMessageArea({
   typingUsers,
   onSendMessage,
   onDeleteMessage,
-  onClearAllMessages,
   onToggleReaction,
   onSendTyping,
   onToggleUserList,
@@ -88,8 +86,6 @@ export function DiscordMessageArea({
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null); // messageId or null for main input
   const [errorText, setErrorText] = useState<string | null>(null);
   const [notifFeedback, setNotifFeedback] = useState<string | null>(null);
-  const [showConfirmClear, setShowConfirmClear] = useState(false);
-  const [isClearing, setIsClearing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -286,18 +282,6 @@ export function DiscordMessageArea({
             </span>
           )}
 
-          {/* Clear All Messages Button */}
-          {onClearAllMessages && (
-            <button
-              onClick={() => setShowConfirmClear(true)}
-              title="Delete all current messages in chat"
-              className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-neutral-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              <span className="hidden lg:inline">Clear Chat</span>
-            </button>
-          )}
-
           <button
             onClick={onToggleUserList}
             title="Toggle Member List"
@@ -309,68 +293,6 @@ export function DiscordMessageArea({
           </button>
         </div>
       </div>
-
-      {/* Confirmation Modal to Clear All Messages */}
-      {showConfirmClear && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-150"
-          onClick={() => !isClearing && setShowConfirmClear(false)}
-        >
-          <div
-            className="relative flex flex-col max-w-md w-full rounded-2xl bg-[#141414] border border-neutral-800 p-5 shadow-2xl space-y-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-500/15 text-rose-400 border border-rose-500/25">
-                <Trash2 className="h-5 w-5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-base font-bold text-white">Clear All Chat Messages</h3>
-                <p className="mt-1 text-xs text-neutral-300 leading-relaxed">
-                  Are you sure you want to permanently delete all messages right now? This action
-                  wipes the message history from both the screen and the server.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-neutral-800">
-              <button
-                type="button"
-                disabled={isClearing}
-                onClick={() => setShowConfirmClear(false)}
-                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-neutral-300 hover:bg-neutral-800 transition cursor-pointer disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isClearing}
-                onClick={async () => {
-                  setIsClearing(true);
-                  if (onClearAllMessages) {
-                    await onClearAllMessages();
-                  }
-                  setIsClearing(false);
-                  setShowConfirmClear(false);
-                }}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow transition cursor-pointer disabled:opacity-50"
-              >
-                {isClearing ? (
-                  <>
-                    <div className="h-3 w-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                    <span>Clearing...</span>
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="h-3.5 w-3.5" />
-                    <span>Delete All Messages RN</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Notification Permission Banner if not enabled */}
       {notificationPermission === "default" && (

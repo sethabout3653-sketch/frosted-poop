@@ -1,5 +1,17 @@
 // Notification and Web Audio Sound Engine for Frosted Chat
 
+export interface InAppNotificationData {
+  id: string;
+  senderName: string;
+  channelName: string;
+  channelId?: string;
+  content: string;
+  avatarColor?: string;
+  timestamp: number;
+}
+
+type InAppListener = (data: InAppNotificationData) => void;
+
 class NotificationManager {
   private audioCtx: AudioContext | null = null;
   private originalTitle: string = document.title || "Frosted Games & Chat";
@@ -7,6 +19,7 @@ class NotificationManager {
   private titleInterval: number | null = null;
   private soundEnabled: boolean = true;
   private notificationsEnabled: boolean = true;
+  private inAppListeners: Set<InAppListener> = new Set();
 
   constructor() {
     // Keep track of user settings from localStorage
@@ -29,6 +42,87 @@ class NotificationManager {
           this.clearUnreadBadge();
         }
       });
+    }
+  }
+
+  public subscribeInApp(listener: InAppListener): () => void {
+    this.inAppListeners.add(listener);
+    return () => {
+      this.inAppListeners.delete(listener);
+    };
+  }
+
+  public notifyNewMessage(options: {
+    senderName: string;
+    channelName: string;
+    channelId?: string;
+    content: string;
+    avatarColor?: string;
+  }) {
+    const notifData: InAppNotificationData = {
+      id: `inapp-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      senderName: options.senderName,
+      channelName: options.channelName,
+      channelId: options.channelId || "general",
+      content: options.content,
+      avatarColor: options.avatarColor || "#5865f2",
+      timestamp: Date.now(),
+    };
+
+    // 1. Dispatch In-App Notification (Zero browser permission required)
+    this.inAppListeners.forEach((listener) => {
+      try {
+        listener(notifData);
+      } catch (err) {
+        console.warn("In-app notification listener error:", err);
+      }
+    });
+
+    if (typeof window !== "undefined") {
+      try {
+        window.dispatchEvent(new CustomEvent("frosted-in-app-notification", { detail: notifData }));
+      } catch (e) {
+        console.warn("In-app notification dispatch note:", e);
+      }
+    }
+
+    // 2. Play audio notification chime
+    this.playChime();
+
+    // 3. Flash document tab title for users on other tabs or windows
+    this.triggerTabFlash(options.senderName, options.content);
+
+    // 4. If OS / desktop notifications are already granted, also deliver desktop notification
+    if (
+      this.notificationsEnabled &&
+      this.isSupported() &&
+      typeof Notification !== "undefined" &&
+      Notification.permission === "granted"
+    ) {
+      try {
+        const notif = new Notification(`${options.senderName} (#${options.channelName})`, {
+          body: options.content.slice(0, 100),
+          icon: "https://api.iconify.design/lucide:message-square.svg?color=%23ffffff",
+          tag: "frosted-chat-msg",
+          silent: true,
+        });
+        notif.onclick = () => {
+          try {
+            window.focus();
+          } catch (e) {
+            console.warn("Window focus note:", e);
+          }
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("frosted-open-chat", { detail: { channelId: options.channelId } }),
+            );
+          }
+          notif.close();
+        };
+        setTimeout(() => notif.close(), 6000);
+      } catch (e) {
+        console.warn("Desktop notification display note:", e);
+      }
     }
   }
 

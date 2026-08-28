@@ -8,6 +8,7 @@ import { GamePlayer } from "./GamePlayer";
 import { FrostedSettingsModal } from "./FrostedSettingsModal";
 import { VerificationGate } from "./VerificationGate";
 import { DiscordChat } from "@/components/chat/DiscordChat";
+import { FrostedInAppNotification } from "@/components/chat/FrostedInAppNotification";
 import { notificationManager } from "@/lib/notifications";
 
 export function FrostedApp() {
@@ -30,9 +31,10 @@ export function FrostedApp() {
   const { favorites, toggleFavorite, recentlyPlayed, recordPlay, cloak, updateCloak } =
     useFrostedStore();
 
-  // Listen for open-chat event when a desktop notification is clicked
+  // Listen for open-chat event when a notification is clicked
   useEffect(() => {
-    const handleOpenChat = () => {
+    const handleOpenChat = (e: Event) => {
+      const customEvt = e as CustomEvent<{ channelId?: string }>;
       setActiveGame(null);
       setIsChatActive(true);
     };
@@ -49,7 +51,6 @@ export function FrostedApp() {
     } catch {
       /* silent */
     }
-    notificationManager.requestPermission().catch(() => {});
     setIsVerified(true);
   };
 
@@ -91,6 +92,17 @@ export function FrostedApp() {
 
   return (
     <div className="min-h-screen bg-[#050505] text-neutral-200 font-sans selection:bg-white selection:text-black overflow-x-hidden relative">
+      {/* In-App Floating Notifications (Zero browser permissions required) */}
+      <FrostedInAppNotification
+        onOpenChat={(channelId) => {
+          setActiveGame(null);
+          setIsChatActive(true);
+          if (channelId && typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("frosted-open-chat", { detail: { channelId } }));
+          }
+        }}
+      />
+
       {/* Navigation Header */}
       <FrostedNavbar
         searchQuery={searchQuery}

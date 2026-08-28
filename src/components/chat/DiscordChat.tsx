@@ -29,16 +29,42 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
   const [token, setToken] = useState<string | null>(() => {
     return localStorage.getItem("discord_chat_token");
   });
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [isVerifyingAuth, setIsVerifyingAuth] = useState<boolean>(true);
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const cached = localStorage.getItem("discord_cached_user");
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [isVerifyingAuth, setIsVerifyingAuth] = useState<boolean>(() => {
+    // If cached user already exists, auth is immediately ready
+    try {
+      return !localStorage.getItem("discord_cached_user");
+    } catch {
+      return true;
+    }
+  });
   const [showUserList, setShowUserList] = useState<boolean>(true);
 
-  // Re-authenticate session token on mount
+  // Re-authenticate session token on mount or background refresh
   useEffect(() => {
     async function checkAuth() {
       if (!token) {
         setIsVerifyingAuth(false);
         return;
+      }
+
+      // Check cached user session first for instant responsiveness
+      const cachedUserStr = localStorage.getItem("discord_cached_user");
+      if (cachedUserStr) {
+        try {
+          const cachedUser = JSON.parse(cachedUserStr);
+          if (cachedUser && cachedUser.id && cachedUser.username) {
+            setCurrentUser(cachedUser);
+            setIsVerifyingAuth(false);
+          }
+        } catch {}
       }
 
       try {
@@ -55,65 +81,17 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
           } catch {}
         }
 
-        if (!res) {
-          setIsVerifyingAuth(false);
-          return;
-        }
-
-        if (res.status === 404) {
-          try {
-            const fallbackRes = await fetch("/chat/me", {
-              headers: { Authorization: `Bearer ${token}` },
-            });
-            if (fallbackRes.ok) res = fallbackRes;
-          } catch {}
-        }
-
         if (res && res.ok) {
-          const text = await res.text();
-          try {
-            const data = JSON.parse(text);
-            if (data && data.user) {
-              setCurrentUser(data.user);
-              localStorage.setItem("discord_cached_user", JSON.stringify(data.user));
-              setIsVerifyingAuth(false);
-              return;
-            }
-          } catch {}
+          const data = await res.json();
+          if (data && data.user) {
+            setCurrentUser(data.user);
+            localStorage.setItem("discord_cached_user", JSON.stringify(data.user));
+            setIsVerifyingAuth(false);
+            return;
+          }
         }
-
-        // Fallback: check cached user session
-        const cachedUserStr = localStorage.getItem("discord_cached_user");
-        if (cachedUserStr) {
-          try {
-            const cachedUser = JSON.parse(cachedUserStr);
-            if (cachedUser && cachedUser.id && cachedUser.username) {
-              setCurrentUser(cachedUser);
-              setIsVerifyingAuth(false);
-              return;
-            }
-          } catch {}
-        }
-
-        // Token invalid or session expired
-        localStorage.removeItem("discord_chat_token");
-        localStorage.removeItem("discord_cached_user");
-        setToken(null);
       } catch (err: any) {
-        console.warn("Auth verify notice:", err?.message || err);
-        const cachedUserStr = localStorage.getItem("discord_cached_user");
-        if (cachedUserStr) {
-          try {
-            const cachedUser = JSON.parse(cachedUserStr);
-            if (cachedUser && cachedUser.id) {
-              setCurrentUser(cachedUser);
-              setIsVerifyingAuth(false);
-              return;
-            }
-          } catch {}
-        }
-        localStorage.removeItem("discord_chat_token");
-        setToken(null);
+        console.warn("Auth verify background note:", err?.message || err);
       } finally {
         setIsVerifyingAuth(false);
       }
@@ -150,6 +128,7 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
     suspensionTimeLeft,
     suspensionAction,
     suspensionWord,
+    suspensionCategory,
     micGain,
     setMicGain,
     outputGain,
@@ -157,7 +136,6 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
     micLevel,
     sendMessage,
     deleteMessage,
-    clearAllMessages,
     toggleReaction,
     sendTyping,
     joinVoiceChannel,
@@ -173,6 +151,19 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
     notificationPermission,
     requestNotificationPermission,
   } = useDiscordChat({ token, currentUser, onLogout: handleLogout });
+
+  useEffect(() => {
+    const handleOpenChatEvent = (e: Event) => {
+      const customEvt = e as CustomEvent<{ channelId?: string }>;
+      if (customEvt.detail?.channelId) {
+        setActiveChannelId(customEvt.detail.channelId);
+      }
+    };
+    window.addEventListener("frosted-open-chat", handleOpenChatEvent);
+    return () => {
+      window.removeEventListener("frosted-open-chat", handleOpenChatEvent);
+    };
+  }, [setActiveChannelId]);
 
   if (isVerifyingAuth) {
     return (
@@ -213,6 +204,7 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
         suspensionTimeLeft={suspensionTimeLeft}
         suspensionAction={suspensionAction}
         suspensionWord={suspensionWord}
+        suspensionCategory={suspensionCategory}
         micGain={micGain}
         setMicGain={setMicGain}
         outputGain={outputGain}
@@ -234,19 +226,30 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
       {/* 3. Main Message Area */}
       <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
         {isSuspended && (
-          <div className="flex items-center justify-between border-b border-rose-500/30 bg-rose-950/70 px-4 py-2 text-xs text-rose-200 shadow-inner">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between border-b border-rose-500/30 bg-rose-950/70 px-4 py-2.5 text-xs text-rose-200 shadow-inner">
+            <div className="flex items-center gap-2.5 min-w-0">
               <ShieldAlert className="h-4 w-4 text-rose-400 shrink-0" />
-              <span>
-                <strong className="text-white font-semibold">Voice Moderation:</strong> You have
-                been suspended for saying{" "}
-                <span className="font-mono font-bold text-rose-300 underline">
-                  "{suspensionWord || "prohibited word"}"
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="font-semibold text-white">
+                  You Have been suspended for violating moderation
                 </span>
-                . Voice channels are restricted for 1 minute.
-              </span>
+                <span className="text-neutral-500">•</span>
+                <span className="text-rose-200">
+                  Offensive Item:{" "}
+                  <span className="font-mono font-bold text-rose-300 underline">
+                    "{suspensionWord || "prohibited word"}"
+                  </span>
+                </span>
+                <span className="text-neutral-500">•</span>
+                <span className="text-rose-200">
+                  Violation Type:{" "}
+                  <span className="font-medium text-rose-100 bg-rose-900/80 px-2 py-0.5 rounded border border-rose-500/40">
+                    {suspensionCategory || "Derogatory / Prohibited Language"}
+                  </span>
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 shrink-0 ml-3">
               <span className="text-[11px] text-neutral-400">Remaining:</span>
               <span className="font-mono text-xs font-bold text-rose-300 bg-rose-900/60 px-2 py-0.5 rounded border border-rose-500/30">
                 00:{String(suspensionTimeLeft).padStart(2, "0")}
@@ -261,7 +264,6 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
           typingUsers={typingUsers}
           onSendMessage={sendMessage}
           onDeleteMessage={deleteMessage}
-          onClearAllMessages={clearAllMessages}
           onToggleReaction={toggleReaction}
           onSendTyping={sendTyping}
           onToggleUserList={() => setShowUserList(!showUserList)}

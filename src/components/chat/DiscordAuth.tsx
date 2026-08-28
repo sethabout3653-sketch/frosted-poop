@@ -46,9 +46,6 @@ export function DiscordAuth({ onLoginSuccess }: Props) {
       return;
     }
 
-    // Request notification permission during user gesture
-    notificationManager.requestPermission().catch(() => {});
-
     try {
       let loggedInUser: User | null = null;
       let sessionToken = "";
