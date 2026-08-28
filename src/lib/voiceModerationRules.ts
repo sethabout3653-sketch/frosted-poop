@@ -88,8 +88,8 @@ export const PROHIBITED_WORDS = [
 ];
 
 // Boundaries
-const B_START = "(?:^|[^a-zA-Z0-9])";
-const B_END = "(?=$|[^a-zA-Z0-9])";
+const B_START = "(?:^|[^a-zA-Z0-9\\*])";
+const B_END = "(?=$|[^a-zA-Z0-9\\*])";
 const M = "[\\*\\-#@_]";
 
 interface MaskedPattern {
@@ -98,10 +98,38 @@ interface MaskedPattern {
 }
 
 const MASKED_AND_WHISPER_PATTERNS: MaskedPattern[] = [
+  // Contextual phrases with asterisks or masked symbols
+  {
+    regex: new RegExp(
+      B_START + "(?:what\\s+the|mother|shut\\s+the|get\\s+the)\\s+" + M + "{2,8}" + B_END,
+      "i",
+    ),
+    word: "fuck",
+  },
+  {
+    regex: new RegExp(B_START + M + "{2,8}\\s+(?:you|u|off|this|that|up)" + B_END, "i"),
+    word: "fuck",
+  },
+  {
+    regex: new RegExp(
+      B_START + "(?:holy|piece\\s+of|bull|full\\s+of)\\s+" + M + "{2,8}" + B_END,
+      "i",
+    ),
+    word: "shit",
+  },
+  {
+    regex: new RegExp(B_START + "(?:son\\s+of\\s+a|dumb|stupid)\\s+" + M + "{2,8}" + B_END, "i"),
+    word: "bitch",
+  },
+  {
+    regex: new RegExp(B_START + "(?:suck\\s+my|lick\\s+my)\\s+" + M + "{2,8}" + B_END, "i"),
+    word: "dick",
+  },
+
   // Fuck and variants (f*ck, f**k, f***, f***ing, f*cker, motherf*cker, fak, fok, phuck)
   {
     regex: new RegExp(
-      B_START + "(?:mother)?(?:f|ph)" + M + "{1,6}(?:ing|ed|er|ers|s|in)?" + B_END,
+      B_START + "(?:mother)?(?:f|ph)" + M + "{1,8}(?:ing|ed|er|ers|s|in|g)?" + B_END,
       "i",
     ),
     word: "fuck",
@@ -117,8 +145,11 @@ const MASKED_AND_WHISPER_PATTERNS: MaskedPattern[] = [
     regex: new RegExp(B_START + "(?:mother)?(?:f|ph)" + M + "+k(?:ing|ed|er|ers|s)?" + B_END, "i"),
     word: "fuck",
   },
-  { regex: new RegExp(B_START + "(?:mother)?(?:f|ph)" + M + "{2,6}" + B_END, "i"), word: "fuck" },
-  { regex: new RegExp(B_START + "(?:fak|fok|fock|phuck|fuk|fawk)" + B_END, "i"), word: "fuck" },
+  { regex: new RegExp(B_START + "(?:mother)?(?:f|ph)" + M + "{2,8}" + B_END, "i"), word: "fuck" },
+  {
+    regex: new RegExp(B_START + "(?:fak|fok|fock|phuck|fuk|fawk|feck)" + B_END, "i"),
+    word: "fuck",
+  },
   {
     regex: new RegExp(B_START + "(?:duck|funk)\\s+(?:you|u|off|this|that|up)" + B_END, "i"),
     word: "fuck",
@@ -126,14 +157,17 @@ const MASKED_AND_WHISPER_PATTERNS: MaskedPattern[] = [
 
   // Shit and variants (sh*t, s***, s**t, bullsh*t, sh*tty, chit, shyt)
   {
-    regex: new RegExp(B_START + "(?:bull|dip|horse)?sh?" + M + "{1,6}t(?:s|ty|ting)?" + B_END, "i"),
+    regex: new RegExp(
+      B_START + "(?:bull|dip|horse)?sh?" + M + "{1,8}t?(?:s|ty|ting)?" + B_END,
+      "i",
+    ),
     word: "shit",
   },
   {
     regex: new RegExp(B_START + "(?:bull|dip|horse)?sh[iy\\*\\-#@_]+t(?:s|ty|ting)?" + B_END, "i"),
     word: "shit",
   },
-  { regex: new RegExp(B_START + "s" + M + "{2,6}" + B_END, "i"), word: "shit" },
+  { regex: new RegExp(B_START + "s" + M + "{2,8}" + B_END, "i"), word: "shit" },
   { regex: new RegExp(B_START + "(?:chit|shyt|sheit)" + B_END, "i"), word: "shit" },
   {
     regex: new RegExp(B_START + "(?:holy|piece\\s+of|bull|full\\s+of)\\s+sheet" + B_END, "i"),
@@ -141,9 +175,9 @@ const MASKED_AND_WHISPER_PATTERNS: MaskedPattern[] = [
   },
 
   // Bitch and variants (b*tch, b****, b***ing, b**ch, bish)
-  { regex: new RegExp(B_START + "b" + M + "{1,6}ch?(?:es|ing)?" + B_END, "i"), word: "bitch" },
+  { regex: new RegExp(B_START + "b" + M + "{1,8}(?:ch|es|ing)?" + B_END, "i"), word: "bitch" },
   { regex: new RegExp(B_START + "b[iy\\*\\-#@_]+tch(?:es|ing)?" + B_END, "i"), word: "bitch" },
-  { regex: new RegExp(B_START + "b" + M + "{2,6}" + B_END, "i"), word: "bitch" },
+  { regex: new RegExp(B_START + "b" + M + "{2,8}" + B_END, "i"), word: "bitch" },
   { regex: new RegExp(B_START + "(?:bish|bytch|beetch)" + B_END, "i"), word: "bitch" },
   {
     regex: new RegExp(B_START + "(?:son\\s+of\\s+a|dumb|stupid)\\s+beach" + B_END, "i"),
@@ -151,37 +185,52 @@ const MASKED_AND_WHISPER_PATTERNS: MaskedPattern[] = [
   },
 
   // Cunt and variants (c*nt, c***, c**t) - strictly requires ending in "nt", never "an" or "ant"
-  { regex: new RegExp(B_START + "c" + M + "{1,6}nts?" + B_END, "i"), word: "cunt" },
+  { regex: new RegExp(B_START + "c" + M + "{1,8}nts?" + B_END, "i"), word: "cunt" },
   { regex: new RegExp(B_START + "c[u\\*\\-#@_]+nts?" + B_END, "i"), word: "cunt" },
-  { regex: new RegExp(B_START + "c" + M + "{2,6}" + B_END, "i"), word: "cunt" },
+  { regex: new RegExp(B_START + "c" + M + "{2,8}" + B_END, "i"), word: "cunt" },
 
-  // Dick and variants (d*ck, d***, d**k, dik) - requires "i", "y" or mask, never "u" (duck) or "o" (dock)
-  { regex: new RegExp(B_START + "d" + M + "{1,6}ck?s?" + B_END, "i"), word: "dick" },
+  // Dick and variants (d*ck, d***, d**k, dik)
+  { regex: new RegExp(B_START + "d" + M + "{1,8}ck?s?" + B_END, "i"), word: "dick" },
   { regex: new RegExp(B_START + "d[iy\\*\\-#@_]+cks?" + B_END, "i"), word: "dick" },
-  { regex: new RegExp(B_START + "d" + M + "{2,6}" + B_END, "i"), word: "dick" },
+  { regex: new RegExp(B_START + "d" + M + "{2,8}" + B_END, "i"), word: "dick" },
   { regex: new RegExp(B_START + "(?:dik|dyk)" + B_END, "i"), word: "dick" },
 
   // Pussy and variants (p*ssy, p***, p**sy)
-  { regex: new RegExp(B_START + "p" + M + "{1,6}ss?y?s?" + B_END, "i"), word: "pussy" },
+  { regex: new RegExp(B_START + "p" + M + "{1,8}ss?y?s?" + B_END, "i"), word: "pussy" },
   { regex: new RegExp(B_START + "p[u\\*\\-#@_]+ss(?:y|ies)" + B_END, "i"), word: "pussy" },
-  { regex: new RegExp(B_START + "p" + M + "{2,6}" + B_END, "i"), word: "pussy" },
+  { regex: new RegExp(B_START + "p" + M + "{2,8}" + B_END, "i"), word: "pussy" },
 
   // Asshole and variants (a**hole, a*shole, a***, ashole, azzhole)
-  { regex: new RegExp(B_START + "a" + M + "{1,6}(?:hole|ss)?s?" + B_END, "i"), word: "asshole" },
+  { regex: new RegExp(B_START + "a" + M + "{1,8}(?:hole|ss)?s?" + B_END, "i"), word: "asshole" },
   { regex: new RegExp(B_START + "ass[\\*\\-#@_]*hole" + B_END, "i"), word: "asshole" },
   { regex: new RegExp(B_START + "(?:ashole|azzhole|a-hole)" + B_END, "i"), word: "asshole" },
 
   // Slurs (n-word, f-slur, retard)
-  { regex: new RegExp(B_START + "n" + M + "{1,6}(?:er|ga|gg|a|ers|gas)?" + B_END, "i"), word: "n-word" },
-  { regex: new RegExp(B_START + "n[i1e\\*\\-#@_]+gg[a3e\\*\\-#@_]+r?s?" + B_END, "i"), word: "n-word" },
-  { regex: new RegExp(B_START + "n" + M + "{2,6}" + B_END, "i"), word: "n-word" },
+  {
+    regex: new RegExp(B_START + "n" + M + "{1,8}(?:er|ga|gg|a|ers|gas)?" + B_END, "i"),
+    word: "n-word",
+  },
+  {
+    regex: new RegExp(B_START + "n[i1e\\*\\-#@_]+gg[a3e\\*\\-#@_]+r?s?" + B_END, "i"),
+    word: "n-word",
+  },
+  { regex: new RegExp(B_START + "n" + M + "{2,8}" + B_END, "i"), word: "n-word" },
   { regex: new RegExp(B_START + "(?:n-word|the\\s+n\\s+word)" + B_END, "i"), word: "n-word" },
-  { regex: new RegExp(B_START + "f" + M + "{1,6}(?:g|got|gots)?" + B_END, "i"), word: "slur" },
+  { regex: new RegExp(B_START + "f" + M + "{1,8}(?:got|gots)" + B_END, "i"), word: "slur" },
   { regex: new RegExp(B_START + "f[a@\\*\\-#@_]+gg?[o0\\*\\-#@_]+ts?" + B_END, "i"), word: "slur" },
-  { regex: new RegExp(B_START + "f" + M + "{2,6}" + B_END, "i"), word: "slur" },
-  { regex: new RegExp(B_START + "r" + M + "{1,6}(?:d|ded|ds)?" + B_END, "i"), word: "retard" },
-  { regex: new RegExp(B_START + "r[e3\\*\\-#@_]+t[a@\\*\\-#@_]+rd(?:ed|s)?" + B_END, "i"), word: "retard" },
-  { regex: new RegExp(B_START + "r" + M + "{2,6}" + B_END, "i"), word: "retard" },
+  { regex: new RegExp(B_START + "r" + M + "{1,8}(?:d|ded|ds)?" + B_END, "i"), word: "retard" },
+  {
+    regex: new RegExp(B_START + "r[e3\\*\\-#@_]+t[a@\\*\\-#@_]+rd(?:ed|s)?" + B_END, "i"),
+    word: "retard",
+  },
+  { regex: new RegExp(B_START + "r" + M + "{2,8}" + B_END, "i"), word: "retard" },
+
+  // Pure asterisks tokens (Google Chrome Speech-to-Text profanity censor masking)
+  { regex: new RegExp(B_START + "\\*{4}" + B_END), word: "fuck" },
+  { regex: new RegExp(B_START + "\\*{5}" + B_END), word: "bitch" },
+  { regex: new RegExp(B_START + "\\*{6,8}" + B_END), word: "asshole" },
+  { regex: new RegExp(B_START + "\\*{3}" + B_END), word: "profanity" },
+  { regex: new RegExp(B_START + "\\*{2,}" + B_END), word: "profanity" },
 ];
 
 function escapeRegex(str: string): string {

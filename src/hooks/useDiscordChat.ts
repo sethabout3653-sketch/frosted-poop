@@ -496,7 +496,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     triggerVoiceSuspensionRef.current = triggerVoiceSuspension;
   }, [triggerVoiceSuspension]);
 
-  // Voice speech recognition for continuous voice moderation (handles masked words f***, s***, b****, etc.)
+  // Voice speech recognition for continuous voice moderation (handles masked words f***, s***, b****, ****, etc.)
   const startSpeechRecognitionModeration = useCallback(() => {
     if (typeof window === "undefined") return;
     const SpeechRecognition =
@@ -527,7 +527,9 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
         if (isMutedRef.current || isDeafenedRef.current || isSuspendedRef.current) {
           return;
         }
-        for (let i = event.resultIndex; i < event.results.length; i++) {
+
+        // 1. Check all individual results and alternatives
+        for (let i = 0; i < event.results.length; i++) {
           const item = event.results[i];
           for (let a = 0; a < item.length; a++) {
             const transcript = item[a]?.transcript || "";
@@ -538,6 +540,17 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
             }
           }
         }
+
+        // 2. Check full combined utterance across all results
+        let fullTranscript = "";
+        for (let i = 0; i < event.results.length; i++) {
+          fullTranscript += " " + (event.results[i][0]?.transcript || "");
+        }
+        const fullCheck = checkVoiceModeration(fullTranscript);
+        if (fullCheck.isViolating && fullCheck.matchedWord) {
+          triggerVoiceSuspensionRef.current(fullCheck.matchedWord);
+          return;
+        }
       };
 
       recognition.onerror = (event: any) => {
@@ -547,16 +560,23 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       };
 
       recognition.onend = () => {
-        // Keep speech recognition running as long as user is actively in voice, unmuted, and not suspended
+        // Keep speech recognition running cleanly as long as user is actively in voice, unmuted, and not suspended
         if (
           currentVoiceChannelIdRef.current &&
           !isMutedRef.current &&
           !isDeafenedRef.current &&
           !isSuspendedRef.current
         ) {
-          try {
-            recognition.start();
-          } catch {}
+          window.setTimeout(() => {
+            if (
+              currentVoiceChannelIdRef.current &&
+              !isMutedRef.current &&
+              !isDeafenedRef.current &&
+              !isSuspendedRef.current
+            ) {
+              startSpeechRecognitionModeration();
+            }
+          }, 60);
         }
       };
 
@@ -570,14 +590,17 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
             currentVoiceChannelIdRef.current &&
             !isMutedRef.current &&
             !isDeafenedRef.current &&
-            !isSuspendedRef.current &&
-            speechRecognitionRef.current
+            !isSuspendedRef.current
           ) {
-            try {
-              speechRecognitionRef.current.start();
-            } catch {}
+            if (!speechRecognitionRef.current) {
+              startSpeechRecognitionModeration();
+            } else {
+              try {
+                speechRecognitionRef.current.start();
+              } catch {}
+            }
           }
-        }, 3000);
+        }, 1200);
       }
     } catch (e) {
       console.warn("Failed to initialize speech recognition moderation:", e);
@@ -607,78 +630,105 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
         mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
       }
 
-      let audioChunks: Blob[] = [];
-      const recorder = new MediaRecorder(whisperStream, {
-        mimeType,
-        audioBitsPerSecond: 32000,
-      });
-
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-          audioChunks.push(e.data);
-        }
-      };
-
-      recorder.start(1000);
-      mediaRecorderRef.current = recorder;
-
-      // Periodically analyze audio slices when whisper or speech energy is detected
-      whisperAudioIntervalRef.current = window.setInterval(() => {
+      const runRecordingCycle = () => {
         if (
           isMutedRef.current ||
           isDeafenedRef.current ||
           isSuspendedRef.current ||
-          !currentVoiceChannelIdRef.current ||
-          isAnalyzingAudioRef.current
+          !currentVoiceChannelIdRef.current
         ) {
-          audioChunks = [];
-          recentMaxEnergyRef.current = 0;
+          whisperAudioIntervalRef.current = window.setTimeout(runRecordingCycle, 1000);
           return;
         }
 
-        // Only send if there was acoustic energy above silence
-        if (recentMaxEnergyRef.current < 1.0 || audioChunks.length === 0) {
-          audioChunks = [];
-          return;
-        }
+        try {
+          const chunks: Blob[] = [];
+          const recorder = new MediaRecorder(whisperStream, {
+            mimeType,
+            audioBitsPerSecond: 32000,
+          });
 
-        const audioBlob = new Blob(audioChunks, { type: mimeType });
-        audioChunks = [];
-        recentMaxEnergyRef.current = 0;
+          recorder.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) {
+              chunks.push(e.data);
+            }
+          };
 
-        if (audioBlob.size < 1200) return;
+          recorder.onstop = () => {
+            if (
+              !isMutedRef.current &&
+              !isDeafenedRef.current &&
+              !isSuspendedRef.current &&
+              currentVoiceChannelIdRef.current &&
+              recentMaxEnergyRef.current >= 1.0 &&
+              chunks.length > 0 &&
+              !isAnalyzingAudioRef.current
+            ) {
+              const audioBlob = new Blob(chunks, { type: mimeType });
+              recentMaxEnergyRef.current = 0;
 
-        isAnalyzingAudioRef.current = true;
-        const reader = new FileReader();
-        reader.onloadend = async () => {
-          try {
-            const rawResult = reader.result as string;
-            const base64 = rawResult.split(",")[1];
-            if (!base64) return;
+              if (audioBlob.size >= 1000) {
+                isAnalyzingAudioRef.current = true;
+                const reader = new FileReader();
+                reader.onloadend = async () => {
+                  try {
+                    const rawResult = reader.result as string;
+                    const base64 = rawResult.split(",")[1];
+                    if (!base64) return;
 
-            const res = await fetch("/api/chat/voice-moderate-audio", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                audio: base64,
-                mimeType,
-              }),
-            });
+                    const res = await fetch("/api/chat/voice-moderate-audio", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        audio: base64,
+                        mimeType,
+                      }),
+                    });
 
-            if (res.ok) {
-              const data = await res.json();
-              if (data.isViolating && data.matchedWord && !isSuspendedRef.current) {
-                triggerVoiceSuspensionRef.current(data.matchedWord);
+                    if (res.ok) {
+                      const data = await res.json();
+                      if (data.isViolating && data.matchedWord && !isSuspendedRef.current) {
+                        triggerVoiceSuspensionRef.current(data.matchedWord);
+                      }
+                    }
+                  } catch (e) {
+                    console.warn("Whisper audio moderation warning:", e);
+                  } finally {
+                    isAnalyzingAudioRef.current = false;
+                  }
+                };
+                reader.readAsDataURL(audioBlob);
               }
             }
-          } catch (e) {
-            console.warn("Whisper audio moderation warning:", e);
-          } finally {
-            isAnalyzingAudioRef.current = false;
-          }
-        };
-        reader.readAsDataURL(audioBlob);
-      }, 2800);
+
+            // Schedule next cycle immediately
+            if (
+              !isMutedRef.current &&
+              !isDeafenedRef.current &&
+              !isSuspendedRef.current &&
+              currentVoiceChannelIdRef.current
+            ) {
+              whisperAudioIntervalRef.current = window.setTimeout(runRecordingCycle, 150);
+            }
+          };
+
+          recorder.start();
+          mediaRecorderRef.current = recorder;
+
+          // Record 2.2 seconds slice then stop to produce complete valid WebM header
+          window.setTimeout(() => {
+            try {
+              if (recorder.state === "recording") {
+                recorder.stop();
+              }
+            } catch {}
+          }, 2200);
+        } catch (err) {
+          whisperAudioIntervalRef.current = window.setTimeout(runRecordingCycle, 1200);
+        }
+      };
+
+      runRecordingCycle();
     } catch (err) {
       console.warn("Could not start whisper audio recorder:", err);
     }
@@ -1360,18 +1410,25 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           whisperCompressor.connect(whisperDest);
 
           whisperBoosterStreamRef.current = whisperDest.stream;
-
-          // Start whisper audio recorder on whisper-boosted stream
-          if (!isMuted && !isDeafened && !isSuspendedRef.current) {
-            startAudioWhisperModeration(whisperDest.stream);
-          }
         }
       } catch (audioErr) {
         console.warn("Audio meter setup note:", audioErr);
       }
 
-      // Voice presence update in Firestore
-      await updateDoc(doc(db, "users", currentUser.id), {
+      // Immediately register active voice channel synchronously to eliminate any moderation activation lag
+      currentVoiceChannelIdRef.current = voiceChannelId;
+      setCurrentVoiceChannelId(voiceChannelId);
+
+      // Start continuous voice moderation recognition IMMEDIATELY on active unmuted microphone
+      if (!isMuted && !isDeafened && !isSuspendedRef.current) {
+        startSpeechRecognitionModeration();
+        if (whisperBoosterStreamRef.current) {
+          startAudioWhisperModeration(whisperBoosterStreamRef.current);
+        }
+      }
+
+      // Voice presence update in Firestore (runs asynchronously in background without blocking moderation)
+      updateDoc(doc(db, "users", currentUser.id), {
         currentVoiceChannelId: voiceChannelId,
         isMuted,
         isDeafened,
@@ -1391,13 +1448,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           { merge: true },
         );
       });
-
-      setCurrentVoiceChannelId(voiceChannelId);
-
-      // Start continuous voice moderation recognition on active unmuted microphone
-      if (!isMuted && !isDeafened && !isSuspendedRef.current) {
-        startSpeechRecognitionModeration();
-      }
     } catch (err: any) {
       console.error("Microphone access error:", err);
       setVoiceError(err.message || "Failed to access microphone.");
@@ -1419,6 +1469,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const toggleMute = () => {
     const nextMuted = !isMuted;
     setIsMuted(nextMuted);
+    isMutedRef.current = nextMuted;
     if (micGainNodeRef.current) {
       micGainNodeRef.current.gain.value = nextMuted || isDeafened ? 0 : micGain;
     }
@@ -1434,34 +1485,24 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       updateDoc(doc(db, "users", currentUser.id), { isMuted: nextMuted }).catch(() => {});
     }
 
-    if (speechRecognitionRef.current) {
-      if (nextMuted) {
+    if (nextMuted) {
+      if (speechRecognitionRef.current) {
         try {
           speechRecognitionRef.current.abort();
         } catch {}
-      } else if (!isDeafened && !isSuspended) {
-        try {
-          speechRecognitionRef.current.start();
-        } catch {}
       }
-    } else if (!nextMuted && !isDeafened && !isSuspended && currentVoiceChannelId) {
+    } else if (!isDeafened && !isSuspended && currentVoiceChannelIdRef.current) {
       startSpeechRecognitionModeration();
-    }
-
-    if (
-      !nextMuted &&
-      !isDeafened &&
-      !isSuspended &&
-      currentVoiceChannelId &&
-      whisperBoosterStreamRef.current
-    ) {
-      startAudioWhisperModeration(whisperBoosterStreamRef.current);
+      if (whisperBoosterStreamRef.current) {
+        startAudioWhisperModeration(whisperBoosterStreamRef.current);
+      }
     }
   };
 
   const toggleDeafen = () => {
     const nextDeaf = !isDeafened;
     setIsDeafened(nextDeaf);
+    isDeafenedRef.current = nextDeaf;
     if (micGainNodeRef.current) {
       micGainNodeRef.current.gain.value = isMuted || nextDeaf ? 0 : micGain;
     }
@@ -1483,28 +1524,17 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       updateDoc(doc(db, "users", currentUser.id), { isDeafened: nextDeaf }).catch(() => {});
     }
 
-    if (speechRecognitionRef.current) {
-      if (nextDeaf) {
+    if (nextDeaf) {
+      if (speechRecognitionRef.current) {
         try {
           speechRecognitionRef.current.abort();
         } catch {}
-      } else if (!isMuted && !isSuspended) {
-        try {
-          speechRecognitionRef.current.start();
-        } catch {}
       }
-    } else if (!nextDeaf && !isMuted && !isSuspended && currentVoiceChannelId) {
+    } else if (!isMuted && !isSuspended && currentVoiceChannelIdRef.current) {
       startSpeechRecognitionModeration();
-    }
-
-    if (
-      !nextDeaf &&
-      !isMuted &&
-      !isSuspended &&
-      currentVoiceChannelId &&
-      whisperBoosterStreamRef.current
-    ) {
-      startAudioWhisperModeration(whisperBoosterStreamRef.current);
+      if (whisperBoosterStreamRef.current) {
+        startAudioWhisperModeration(whisperBoosterStreamRef.current);
+      }
     }
   };
 
