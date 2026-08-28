@@ -28,56 +28,35 @@ const DEFAULT_CHANNELS: Channel[] = [
 ];
 
 /**
- * Optimizes WebRTC SDP to boost Opus voice audio quality to Studio Hi-Fi grade:
- * - usedtx=0 (disables discontinuous silence clipping, prevents voice cutting out)
- * - maxaveragebitrate=510000 (maximum fidelity Opus bitrate, up to 510kbps)
- * - stereo=1; sprop-stereo=1 (dual channel stereo transmission)
- * - useinbandfec=1 (forward error correction packet recovery)
- * - cbr=1 (constant bitrate transmission, completely smooth jitter-free)
- * - maxplaybackrate=48000 (full 48kHz audio reproduction)
- * - ptime=20, minptime=10 (low latency 10ms-20ms packet framing)
+ * Optimizes WebRTC SDP to ensure crystal-clear, continuous voice transmission without cutting off:
+ * - usedtx=0 (disables discontinuous transmission / silence clipping, prevents voice cutting off)
+ * - useinbandfec=1 (in-band forward error correction, restores lost packets across Wi-Fi & cellular)
+ * - maxaveragebitrate=128000 (studio voice bitrate with zero packet buffer congestion)
  */
 function optimizeOpusSdp(sdp: string): string {
   return sdp.replace(/a=fmtp:(\d+) (.*)/g, (match, pt, params) => {
     if (sdp.includes(`a=rtpmap:${pt} opus/48000`)) {
       let newParams = params;
+      if (!newParams.includes("useinbandfec=")) {
+        newParams += ";useinbandfec=1";
+      }
       if (newParams.includes("usedtx=")) {
         newParams = newParams.replace(/usedtx=\d+/g, "usedtx=0");
       } else {
         newParams += ";usedtx=0";
       }
       if (newParams.includes("maxaveragebitrate=")) {
-        newParams = newParams.replace(/maxaveragebitrate=\d+/g, "maxaveragebitrate=510000");
+        newParams = newParams.replace(/maxaveragebitrate=\d+/g, "maxaveragebitrate=128000");
       } else {
-        newParams += ";maxaveragebitrate=510000";
+        newParams += ";maxaveragebitrate=128000";
       }
-      if (newParams.includes("stereo=")) {
-        newParams = newParams.replace(/stereo=\d+/g, "stereo=1");
-      } else {
-        newParams += ";stereo=1";
-      }
-      if (newParams.includes("sprop-stereo=")) {
-        newParams = newParams.replace(/sprop-stereo=\d+/g, "sprop-stereo=1");
-      } else {
-        newParams += ";sprop-stereo=1";
-      }
-      if (!newParams.includes("useinbandfec=")) {
-        newParams += ";useinbandfec=1";
-      }
-      if (!newParams.includes("cbr=")) {
-        newParams += ";cbr=1";
-      }
-      if (newParams.includes("maxplaybackrate=")) {
-        newParams = newParams.replace(/maxplaybackrate=\d+/g, "maxplaybackrate=48000");
-      } else {
-        newParams += ";maxplaybackrate=48000";
-      }
-      if (!newParams.includes("minptime=")) {
-        newParams += ";minptime=10";
-      }
-      if (!newParams.includes("ptime=")) {
-        newParams += ";ptime=20";
-      }
+      // Remove any forced stereo, CBR, or low ptime parameters that cause packet drops and mic cutoffs
+      newParams = newParams
+        .replace(/;?stereo=\d+/g, "")
+        .replace(/;?sprop-stereo=\d+/g, "")
+        .replace(/;?cbr=\d+/g, "")
+        .replace(/;?minptime=\d+/g, "")
+        .replace(/;?ptime=\d+/g, "");
       return `a=fmtp:${pt} ${newParams}`;
     }
     return match;
@@ -405,17 +384,17 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
 
       pcsRef.current[peerId] = pc;
 
-      const streamToSend = processedStreamRef.current || rawStreamRef.current;
+      const streamToSend = rawStreamRef.current;
       if (streamToSend) {
         streamToSend.getAudioTracks().forEach((track) => {
+          track.enabled = !isMuted && !isDeafened;
           const sender = pc.addTrack(track, streamToSend);
           try {
             const params = sender.getParameters();
             if (params.encodings && params.encodings.length > 0) {
-              params.encodings[0].maxBitrate = 510000;
+              params.encodings[0].maxBitrate = 128000;
               params.encodings[0].priority = "high";
               params.encodings[0].networkPriority = "high";
-              (params.encodings[0] as any).dtx = "disabled";
               sender.setParameters(params);
             }
           } catch {}
@@ -431,67 +410,56 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       pc.ontrack = (event) => {
         const [remoteStream] = event.streams;
 
-        try {
-          const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-          if (!remoteAudioCtxRef.current || remoteAudioCtxRef.current.state === "closed") {
-            remoteAudioCtxRef.current = new AudioCtx({
-              sampleRate: 48000,
-              latencyHint: "interactive",
-            });
-          }
-          const rCtx = remoteAudioCtxRef.current;
-          if (rCtx.state === "suspended") {
-            rCtx.resume().catch(() => {});
-          }
-
-          const rSource = rCtx.createMediaStreamSource(remoteStream);
-
-          // Studio Remote Audio Pipeline (48kHz Hi-Fi Filter + Dynamics Compressor + Dynamic Gain)
-          const rHighpass = rCtx.createBiquadFilter();
-          rHighpass.type = "highpass";
-          rHighpass.frequency.value = 75;
-          rHighpass.Q.value = 0.7;
-
-          const rCompressor = rCtx.createDynamicsCompressor();
-          rCompressor.threshold.value = -18;
-          rCompressor.knee.value = 10;
-          rCompressor.ratio.value = 3.0;
-          rCompressor.attack.value = 0.004;
-          rCompressor.release.value = 0.12;
-
-          const rGain = rCtx.createGain();
-          rGain.gain.value = isDeafened ? 0 : outputGainRef.current;
-          remoteGainNodesRef.current[peerId] = rGain;
-
-          rSource.connect(rHighpass);
-          rHighpass.connect(rCompressor);
-          rCompressor.connect(rGain);
-          rGain.connect(rCtx.destination);
-        } catch (webaudioErr) {
-          console.warn("WebAudio remote setup note:", webaudioErr);
-        }
-
+        // Native HTMLAudioElement is the most reliable, zero-cutoff playback engine
         let audio = remoteAudiosRef.current[peerId];
         if (!audio) {
           audio = document.createElement("audio");
           audio.autoplay = true;
           (audio as any).playsInline = true;
-          audio.volume = 1.0;
           document.body.appendChild(audio);
           remoteAudiosRef.current[peerId] = audio;
         }
         audio.srcObject = remoteStream;
-        audio.muted = Boolean(remoteAudioCtxRef.current);
+        audio.muted = isDeafened;
+        audio.volume = isDeafened ? 0 : Math.min(1.0, Math.max(0.1, outputGainRef.current / 2.5));
         audio.play().catch(() => {
           const resumeAudio = () => {
-            audio.play().catch(() => {});
-            if (remoteAudioCtxRef.current && remoteAudioCtxRef.current.state === "suspended") {
-              remoteAudioCtxRef.current.resume().catch(() => {});
-            }
+            if (audio) audio.play().catch(() => {});
             window.removeEventListener("click", resumeAudio);
+            window.removeEventListener("touchstart", resumeAudio);
           };
           window.addEventListener("click", resumeAudio);
+          window.addEventListener("touchstart", resumeAudio);
         });
+
+        // WebAudio volume boost (clean gain amplification WITHOUT any compressors or filters that cut off audio)
+        try {
+          const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+          if (AudioCtx && outputGainRef.current > 1.0) {
+            if (!remoteAudioCtxRef.current || remoteAudioCtxRef.current.state === "closed") {
+              remoteAudioCtxRef.current = new AudioCtx();
+            }
+            const rCtx = remoteAudioCtxRef.current;
+            if (rCtx.state === "suspended") {
+              rCtx.resume().catch(() => {});
+            }
+
+            const rSource = rCtx.createMediaStreamSource(remoteStream);
+            const rGain = rCtx.createGain();
+            rGain.gain.value = isDeafened ? 0 : outputGainRef.current;
+            remoteGainNodesRef.current[peerId] = rGain;
+
+            // Direct clean route: source -> gain -> destination (NO compressor, NO highpass, NO gating)
+            rSource.connect(rGain);
+            rGain.connect(rCtx.destination);
+
+            if (rCtx.state === "running") {
+              audio.muted = true; // Use amplified WebAudio node when running
+            }
+          }
+        } catch (webaudioErr) {
+          console.warn("WebAudio remote setup note:", webaudioErr);
+        }
       };
 
       pc.onconnectionstatechange = () => {
@@ -513,7 +481,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
 
       return pc;
     },
-    [isDeafened, sendSignal],
+    [isMuted, isDeafened, sendSignal],
   );
 
   // Incoming RTC Signal Handler
@@ -928,14 +896,11 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     try {
       cleanupVoice();
 
-      // High-Fidelity Studio Audio Constraints (48kHz, 24-bit, uncompressed, optional echo cancel)
+      // Universal audio constraints compatible with all microphones (USB, built-in, Bluetooth, headsets)
       const audioConstraints: MediaTrackConstraints = {
-        sampleRate: { ideal: 48000, min: 44100 },
-        sampleSize: { ideal: 24, min: 16 },
-        channelCount: { ideal: 2, min: 1 },
         echoCancellation: echoCancellationRef.current,
-        noiseSuppression: false, // Disabled to prevent frequency cutoffs and metallic voice artifacting
-        autoGainControl: false, // Disabled to eliminate volume jumping/pumping
+        noiseSuppression: true,
+        autoGainControl: true,
       };
 
       let stream: MediaStream;
@@ -945,15 +910,13 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       }
       rawStreamRef.current = stream;
+      processedStreamRef.current = stream;
 
-      // Studio DSP Audio Pipeline (48kHz Uncompressed Broadcast Output)
+      // Real-time Mic Activity Meter & Local Monitoring
       try {
         const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
         if (AudioCtx) {
-          const actx = new AudioCtx({
-            sampleRate: 48000,
-            latencyHint: "interactive",
-          });
+          const actx = new AudioCtx();
           audioContextRef.current = actx;
           if (actx.state === "suspended") {
             actx.resume().catch(() => {});
@@ -961,63 +924,18 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
 
           const rawSource = actx.createMediaStreamSource(stream);
 
-          // 1. Studio Highpass Rumble Filter (<75Hz table vibrations / low hum cut)
-          const highpass = actx.createBiquadFilter();
-          highpass.type = "highpass";
-          highpass.frequency.value = 75;
-          highpass.Q.value = 0.7;
-
-          // 2. Studio Low-End Warmth EQ (+1.0dB at 240Hz for broadcast vocal fullness)
-          const warmthEQ = actx.createBiquadFilter();
-          warmthEQ.type = "peaking";
-          warmthEQ.frequency.value = 240;
-          warmthEQ.Q.value = 0.9;
-          warmthEQ.gain.value = 1.0;
-
-          // 3. Studio Vocal Presence EQ (+2.5dB at 3500Hz for crystal clear articulation)
-          const clarityEQ = actx.createBiquadFilter();
-          clarityEQ.type = "peaking";
-          clarityEQ.frequency.value = 3500;
-          clarityEQ.Q.value = 1.0;
-          clarityEQ.gain.value = 2.5;
-
-          // 4. Studio Broadcast Dynamics Compressor (levels quiet speech, prevents shouting clipping)
-          const compressor = actx.createDynamicsCompressor();
-          compressor.threshold.value = -18;
-          compressor.knee.value = 12;
-          compressor.ratio.value = 3.5;
-          compressor.attack.value = 0.003;
-          compressor.release.value = 0.1;
-
-          // 5. Hardware Gain Amplifier (User-controlled 100%-500%)
-          const micGainNode = actx.createGain();
-          micGainNode.gain.value = isMuted || isDeafened ? 0 : micGainRef.current;
-          micGainNodeRef.current = micGainNode;
-
-          // 6. WebRTC Outbound Destination Stream (High-Fi Output)
-          const destination = actx.createMediaStreamDestination();
-
-          rawSource.connect(highpass);
-          highpass.connect(warmthEQ);
-          warmthEQ.connect(clarityEQ);
-          clarityEQ.connect(compressor);
-          compressor.connect(micGainNode);
-          micGainNode.connect(destination);
-
-          // 7. Mic Monitoring Loopback (Hear Myself in real-time)
+          // Local Mic Monitoring (Optional "Hear Myself", loopback directly to local speakers)
           const monitorGain = actx.createGain();
           monitorGain.gain.value = micMonitoringRef.current ? 0.85 : 0;
           micMonitorGainRef.current = monitorGain;
-          micGainNode.connect(monitorGain);
+          rawSource.connect(monitorGain);
           monitorGain.connect(actx.destination);
 
-          processedStreamRef.current = destination.stream;
-
-          // 8. Visual Audio Meter (Connected to post-compressor studio vocal signal)
+          // Visual Audio Level Meter & Voice Activity Detection
           const analyser = actx.createAnalyser();
           analyser.fftSize = 512;
           analyser.smoothingTimeConstant = 0.25;
-          compressor.connect(analyser);
+          rawSource.connect(analyser);
           analyserRef.current = analyser;
 
           const dataArray = new Uint8Array(analyser.frequencyBinCount);
@@ -1034,8 +952,9 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
             const normalizedLevel = Math.min(100, Math.round((average / 128) * 100));
             setMicLevel(normalizedLevel);
 
-            if (average > 8) {
-              speakingHangover = 15;
+            // Responsive threshold (4) + hangover (22 frames) so quiet speech and trailing words are never cut off
+            if (average > 4) {
+              speakingHangover = 22;
               setIsSelfSpeaking(true);
             } else if (speakingHangover > 0) {
               speakingHangover--;
@@ -1049,8 +968,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           checkSpeaking();
         }
       } catch (audioErr) {
-        console.warn("Audio boost setup note:", audioErr);
-        processedStreamRef.current = stream;
+        console.warn("Audio meter setup note:", audioErr);
       }
 
       // Voice presence update in Firestore

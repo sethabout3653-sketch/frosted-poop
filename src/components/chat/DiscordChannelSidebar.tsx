@@ -15,7 +15,6 @@ import {
   Sliders,
   Sparkles,
   X,
-  Radio,
   Ear,
   Waves,
 } from "lucide-react";
@@ -259,15 +258,6 @@ export function DiscordChannelSidebar({
               </span>
             </div>
 
-            {/* Hi-Fi Studio Quality Pill */}
-            <div className="flex items-center justify-between px-1 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-[9px] text-emerald-300">
-              <div className="flex items-center gap-1 font-mono font-semibold">
-                <Radio className="h-2.5 w-2.5 text-emerald-400 animate-pulse" />
-                <span>Hi-Fi 510kbps Opus</span>
-              </div>
-              <span className="font-mono text-[8px] text-neutral-400">48kHz • 24-bit</span>
-            </div>
-
             {/* Live Mic Activity Bar */}
             <div className="flex items-center gap-1.5 mt-0.5 px-1">
               <span className="text-[9px] text-neutral-400 uppercase font-bold tracking-wider shrink-0">
@@ -290,7 +280,7 @@ export function DiscordChannelSidebar({
                 <div className="flex items-center justify-between border-b border-neutral-800 pb-1.5">
                   <div className="flex items-center gap-1 text-white font-bold">
                     <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
-                    <span>Studio Audio Controls</span>
+                    <span>Audio Controls</span>
                   </div>
                   <button
                     onClick={() => setShowAudioSettings(false)}
@@ -390,11 +380,6 @@ export function DiscordChannelSidebar({
                       }`}
                     />
                   </button>
-                </div>
-
-                {/* Quality Specs Footer */}
-                <div className="rounded bg-neutral-900/90 p-1.5 text-[9px] text-neutral-400 border border-neutral-800">
-                  <span className="font-semibold text-neutral-200">Studio DSP Active:</span> 48kHz sample rate, 510kbps CBR Opus, 75Hz rumble cut, vocal presence EQ, and broadcast dynamics leveling.
                 </div>
               </div>
             )}
