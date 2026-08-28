@@ -34,6 +34,7 @@ interface Props {
   isSuspended?: boolean;
   suspensionTimeLeft?: number;
   suspensionAction?: string;
+  suspensionWord?: string;
   micGain?: number;
   setMicGain?: (gain: number) => void;
   outputGain?: number;
@@ -66,6 +67,7 @@ export function DiscordChannelSidebar({
   isSuspended = false,
   suspensionTimeLeft = 0,
   suspensionAction = "",
+  suspensionWord = "",
   micGain = 3.0,
   setMicGain,
   outputGain = 2.5,
@@ -166,6 +168,34 @@ export function DiscordChannelSidebar({
           )}
         </div>
 
+        {/* VOICE MODERATION SUSPENSION BANNER */}
+        {isSuspended && (
+          <div className="mx-1 mb-2 rounded-lg border border-rose-500/50 bg-rose-950/40 p-2.5 text-xs shadow-lg animate-in fade-in duration-200">
+            <div className="flex items-start gap-2">
+              <ShieldAlert className="h-4 w-4 shrink-0 text-rose-400 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-rose-400">
+                    Voice Suspended
+                  </span>
+                  <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300">
+                    00:{String(suspensionTimeLeft).padStart(2, "0")}
+                  </span>
+                </div>
+                <p className="mt-1 text-white font-semibold text-[11px] leading-tight">
+                  You have been suspended for saying{" "}
+                  <span className="text-rose-300 underline font-mono">
+                    "{suspensionWord || "prohibited word"}"
+                  </span>
+                </p>
+                <p className="mt-1 text-[10px] text-neutral-400 leading-snug">
+                  1 minute voice suspension. Text chat remains open and unmoderated.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* VOICE CHANNELS */}
         <div>
           <button
@@ -193,20 +223,32 @@ export function DiscordChannelSidebar({
                     <button
                       onClick={() => onJoinVoice(ch.id)}
                       className={`group flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all ${
-                        isUserInThisVoice
+                        isSuspended
+                          ? "opacity-60 cursor-not-allowed hover:bg-transparent"
+                          : isUserInThisVoice
                           ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 font-semibold cursor-pointer"
                           : "text-neutral-400 hover:bg-[#161616] hover:text-white cursor-pointer"
                       }`}
                     >
                       <Volume2
-                        className={`h-4 w-4 ${isUserInThisVoice ? "text-emerald-400" : "text-neutral-500 group-hover:text-white"}`}
+                        className={`h-4 w-4 ${
+                          isSuspended
+                            ? "text-neutral-600"
+                            : isUserInThisVoice
+                            ? "text-emerald-400"
+                            : "text-neutral-500 group-hover:text-white"
+                        }`}
                       />
                       <span className="truncate flex-1 text-left">{ch.name}</span>
-                      {isUserInThisVoice && (
+                      {isSuspended ? (
+                        <span className="text-[10px] px-1.5 py-0.5 bg-rose-500/20 text-rose-300 rounded font-mono font-bold">
+                          Suspended
+                        </span>
+                      ) : isUserInThisVoice ? (
                         <span className="text-[10px] px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 rounded font-bold uppercase">
                           Live
                         </span>
-                      )}
+                      ) : null}
                     </button>
 
                     {/* Occupants list */}

@@ -149,6 +149,7 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
     isSuspended,
     suspensionTimeLeft,
     suspensionAction,
+    suspensionWord,
     micGain,
     setMicGain,
     outputGain,
@@ -211,6 +212,7 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
         isSuspended={isSuspended}
         suspensionTimeLeft={suspensionTimeLeft}
         suspensionAction={suspensionAction}
+        suspensionWord={suspensionWord}
         micGain={micGain}
         setMicGain={setMicGain}
         outputGain={outputGain}
@@ -230,21 +232,43 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
       />
 
       {/* 3. Main Message Area */}
-      <DiscordMessageArea
-        activeChannel={activeChannel}
-        messages={messages}
-        currentUser={currentUser}
-        typingUsers={typingUsers}
-        onSendMessage={sendMessage}
-        onDeleteMessage={deleteMessage}
-        onClearAllMessages={clearAllMessages}
-        onToggleReaction={toggleReaction}
-        onSendTyping={sendTyping}
-        onToggleUserList={() => setShowUserList(!showUserList)}
-        showUserList={showUserList}
-        notificationPermission={notificationPermission}
-        onRequestNotificationPermission={requestNotificationPermission}
-      />
+      <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
+        {isSuspended && (
+          <div className="flex items-center justify-between border-b border-rose-500/30 bg-rose-950/70 px-4 py-2 text-xs text-rose-200 shadow-inner">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="h-4 w-4 text-rose-400 shrink-0" />
+              <span>
+                <strong className="text-white font-semibold">Voice Moderation:</strong> You have been suspended for saying{" "}
+                <span className="font-mono font-bold text-rose-300 underline">
+                  "{suspensionWord || "prohibited word"}"
+                </span>
+                . Voice channels are restricted for 1 minute.
+              </span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-[11px] text-neutral-400">Remaining:</span>
+              <span className="font-mono text-xs font-bold text-rose-300 bg-rose-900/60 px-2 py-0.5 rounded border border-rose-500/30">
+                00:{String(suspensionTimeLeft).padStart(2, "0")}
+              </span>
+            </div>
+          </div>
+        )}
+        <DiscordMessageArea
+          activeChannel={activeChannel}
+          messages={messages}
+          currentUser={currentUser}
+          typingUsers={typingUsers}
+          onSendMessage={sendMessage}
+          onDeleteMessage={deleteMessage}
+          onClearAllMessages={clearAllMessages}
+          onToggleReaction={toggleReaction}
+          onSendTyping={sendTyping}
+          onToggleUserList={() => setShowUserList(!showUserList)}
+          showUserList={showUserList}
+          notificationPermission={notificationPermission}
+          onRequestNotificationPermission={requestNotificationPermission}
+        />
+      </div>
 
       {/* 4. Right Online Members List */}
       {showUserList && <DiscordUserList users={onlineUsers} currentUserId={currentUser.id} />}

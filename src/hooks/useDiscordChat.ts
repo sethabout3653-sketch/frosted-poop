@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { User, Channel, ChatMessage, VoiceUser } from "@/types/chat";
 import { notificationManager } from "../lib/notifications";
+import { checkVoiceModeration, announceVoiceSuspension } from "../lib/voiceModeration";
 import { db } from "../lib/firebaseClient";
 import {
   collection,
@@ -125,24 +126,91 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const [isDeafened, setIsDeafened] = useState(false);
   const [isSelfSpeaking, setIsSelfSpeaking] = useState(false);
 
-  // Moderation disabled - clear any previous suspension states
-  const [isSuspended] = useState<boolean>(false);
-  const [suspensionTimeLeft] = useState<number>(0);
-  const [suspensionAction] = useState<string>("");
-
-  useEffect(() => {
+  // Voice Chat Moderation State (1-minute suspension upon saying vulgar words or slurs)
+  const [isSuspended, setIsSuspended] = useState<boolean>(() => {
     try {
-      localStorage.removeItem("discord_suspended_until");
-      localStorage.removeItem("discord_suspension_action");
-    } catch {}
-    if (currentUser?.id) {
-      updateDoc(doc(db, "users", currentUser.id), {
-        isSuspended: false,
-        suspendedUntil: null,
-        suspensionAction: null,
-      }).catch(() => {});
+      const until = localStorage.getItem("discord_voice_suspended_until");
+      return !!until && parseInt(until, 10) > Date.now();
+    } catch {
+      return false;
     }
-  }, [currentUser?.id]);
+  });
+  const [suspensionTimeLeft, setSuspensionTimeLeft] = useState<number>(() => {
+    try {
+      const until = localStorage.getItem("discord_voice_suspended_until");
+      if (until) {
+        const diff = Math.ceil((parseInt(until, 10) - Date.now()) / 1000);
+        return diff > 0 ? diff : 0;
+      }
+    } catch {}
+    return 0;
+  });
+  const [suspensionAction, setSuspensionAction] = useState<string>(() => {
+    try {
+      return localStorage.getItem("discord_voice_suspension_action") || "";
+    } catch {
+      return "";
+    }
+  });
+  const [suspensionWord, setSuspensionWord] = useState<string>(() => {
+    try {
+      return localStorage.getItem("discord_voice_suspension_word") || "";
+    } catch {
+      return "";
+    }
+  });
+
+  const suspensionWordRef = useRef(suspensionWord);
+  useEffect(() => {
+    suspensionWordRef.current = suspensionWord;
+  }, [suspensionWord]);
+
+  // Voice suspension countdown interval (1 minute timer)
+  useEffect(() => {
+    if (!isSuspended && suspensionTimeLeft <= 0) return;
+
+    const timer = window.setInterval(() => {
+      try {
+        const savedUntil = localStorage.getItem("discord_voice_suspended_until");
+        if (!savedUntil) {
+          setIsSuspended(false);
+          setSuspensionTimeLeft(0);
+          setSuspensionAction("");
+          setSuspensionWord("");
+          return;
+        }
+
+        const diff = Math.ceil((parseInt(savedUntil, 10) - Date.now()) / 1000);
+        if (diff > 0) {
+          setIsSuspended(true);
+          setSuspensionTimeLeft(diff);
+        } else {
+          // Suspension ended after 1 minute
+          setIsSuspended(false);
+          setSuspensionTimeLeft(0);
+          setSuspensionAction("");
+          setSuspensionWord("");
+          try {
+            localStorage.removeItem("discord_voice_suspended_until");
+            localStorage.removeItem("discord_voice_suspension_action");
+            localStorage.removeItem("discord_voice_suspension_word");
+          } catch {}
+          if (currentUser?.id) {
+            updateDoc(doc(db, "users", currentUser.id), {
+              isSuspended: false,
+              voiceSuspendedUntil: null,
+              suspensionWord: null,
+              suspensionAction: null,
+            }).catch(() => {});
+          }
+        }
+      } catch (err) {
+        console.warn("Countdown timer tick error:", err);
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isSuspended, suspensionTimeLeft, currentUser?.id]);
 
   // Audio & WebRTC Refs
   const rawStreamRef = useRef<MediaStream | null>(null);
@@ -347,6 +415,127 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       cleanupVoice();
     };
   }, [cleanupVoice]);
+
+  // Voice moderation suspension action trigger
+  const triggerVoiceSuspension = useCallback(
+    async (word: string) => {
+      const durationMs = 60 * 1000; // 1 minute
+      const until = Date.now() + durationMs;
+      const actionText = `You have been suspended for saying "${word}"`;
+
+      // 1. Immediately disconnect and leave voice channel
+      cleanupVoice();
+
+      // 2. Update local state
+      setIsSuspended(true);
+      setSuspensionTimeLeft(60);
+      setSuspensionWord(word);
+      setSuspensionAction(actionText);
+      setVoiceError(actionText);
+
+      // 3. Persist in localStorage for cross-refresh persistence
+      try {
+        localStorage.setItem("discord_voice_suspended_until", until.toString());
+        localStorage.setItem("discord_voice_suspension_word", word);
+        localStorage.setItem("discord_voice_suspension_action", actionText);
+      } catch (e) {
+        console.warn("LocalStorage save error:", e);
+      }
+
+      // 4. Update Firestore user state
+      if (currentUserRef.current?.id) {
+        try {
+          await updateDoc(doc(db, "users", currentUserRef.current.id), {
+            currentVoiceChannelId: null,
+            isSpeaking: false,
+            isSuspended: true,
+            voiceSuspendedUntil: until,
+            suspensionWord: word,
+            suspensionAction: actionText,
+          });
+        } catch (err) {
+          console.warn("Firestore user suspension update note:", err);
+        }
+      }
+
+      // 5. Execute action: Audible speech saying "You have been suspended for saying [word]"
+      announceVoiceSuspension(word);
+    },
+    [cleanupVoice],
+  );
+
+  const triggerVoiceSuspensionRef = useRef(triggerVoiceSuspension);
+  useEffect(() => {
+    triggerVoiceSuspensionRef.current = triggerVoiceSuspension;
+  }, [triggerVoiceSuspension]);
+
+  // Voice speech recognition for continuous voice moderation
+  const startSpeechRecognitionModeration = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      console.warn("SpeechRecognition not supported in browser");
+      return;
+    }
+
+    if (speechRecognitionRef.current) {
+      try {
+        speechRecognitionRef.current.onresult = null;
+        speechRecognitionRef.current.onerror = null;
+        speechRecognitionRef.current.onend = null;
+        speechRecognitionRef.current.abort();
+      } catch {}
+      speechRecognitionRef.current = null;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+      recognition.lang = "en-US";
+
+      recognition.onresult = (event: any) => {
+        if (isMutedRef.current || isDeafenedRef.current || isSuspendedRef.current) {
+          return;
+        }
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0]?.transcript || "";
+          const check = checkVoiceModeration(transcript);
+          if (check.isViolating && check.matchedWord) {
+            triggerVoiceSuspensionRef.current(check.matchedWord);
+            break;
+          }
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        if (event.error !== "no-speech" && event.error !== "aborted") {
+          console.warn("Speech recognition notice:", event.error);
+        }
+      };
+
+      recognition.onend = () => {
+        // Keep speech recognition running as long as user is actively in voice, unmuted, and not suspended
+        if (
+          currentVoiceChannelIdRef.current &&
+          !isMutedRef.current &&
+          !isDeafenedRef.current &&
+          !isSuspendedRef.current
+        ) {
+          try {
+            recognition.start();
+          } catch {}
+        }
+      };
+
+      recognition.start();
+      speechRecognitionRef.current = recognition;
+    } catch (e) {
+      console.warn("Failed to initialize speech recognition moderation:", e);
+    }
+  }, []);
 
   // WebRTC Signal Sender
   const sendSignal = useCallback(async (targetPeerId: string, signalData: any) => {
@@ -591,7 +780,21 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
             isMuted: !!data.isMuted,
             isDeafened: !!data.isDeafened,
             isSpeaking: !!data.isSpeaking,
+            isSuspended: !!data.isSuspended,
+            voiceSuspendedUntil: data.voiceSuspendedUntil || null,
+            suspensionWord: data.suspensionWord || null,
+            suspensionAction: data.suspensionAction || null,
           };
+
+          if (docSnap.id === currentUserRef.current?.id) {
+            if (data.voiceSuspendedUntil && data.voiceSuspendedUntil > now) {
+              const diff = Math.ceil((data.voiceSuspendedUntil - now) / 1000);
+              setIsSuspended(true);
+              setSuspensionTimeLeft(diff);
+              if (data.suspensionWord) setSuspensionWord(data.suspensionWord);
+              if (data.suspensionAction) setSuspensionAction(data.suspensionAction);
+            }
+          }
 
           if (isOnline || docSnap.id === currentUserRef.current?.id) {
             userList.push(u);
@@ -893,6 +1096,24 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     if (!currentUser) return;
     setVoiceError(null);
 
+    // Voice Moderation: Block joining voice channels if currently suspended
+    if (isSuspendedRef.current || suspensionTimeLeft > 0) {
+      const word = suspensionWordRef.current || "prohibited word";
+      const errorMsg = `You have been suspended for saying "${word}". Voice chat suspended: ${suspensionTimeLeft}s remaining.`;
+      setVoiceError(errorMsg);
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        try {
+          window.speechSynthesis.cancel();
+          window.speechSynthesis.speak(
+            new SpeechSynthesisUtterance(
+              `You are currently suspended from voice chat for saying ${word}`,
+            ),
+          );
+        } catch {}
+      }
+      return;
+    }
+
     try {
       cleanupVoice();
 
@@ -994,6 +1215,11 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       });
 
       setCurrentVoiceChannelId(voiceChannelId);
+
+      // Start continuous voice moderation recognition on active unmuted microphone
+      if (!isMuted && !isDeafened && !isSuspendedRef.current) {
+        startSpeechRecognitionModeration();
+      }
     } catch (err: any) {
       console.error("Microphone access error:", err);
       setVoiceError(err.message || "Failed to access microphone.");
@@ -1035,11 +1261,13 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
         try {
           speechRecognitionRef.current.abort();
         } catch {}
-      } else {
+      } else if (!isDeafened && !isSuspended) {
         try {
           speechRecognitionRef.current.start();
         } catch {}
       }
+    } else if (!nextMuted && !isDeafened && !isSuspended && currentVoiceChannelId) {
+      startSpeechRecognitionModeration();
     }
   };
 
@@ -1072,11 +1300,13 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
         try {
           speechRecognitionRef.current.abort();
         } catch {}
-      } else if (!isMuted) {
+      } else if (!isMuted && !isSuspended) {
         try {
           speechRecognitionRef.current.start();
         } catch {}
       }
+    } else if (!nextDeaf && !isMuted && !isSuspended && currentVoiceChannelId) {
+      startSpeechRecognitionModeration();
     }
   };
 
@@ -1098,6 +1328,8 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     isSuspended,
     suspensionTimeLeft,
     suspensionAction,
+    suspensionWord,
+    triggerVoiceSuspension,
     micGain,
     setMicGain,
     outputGain,
