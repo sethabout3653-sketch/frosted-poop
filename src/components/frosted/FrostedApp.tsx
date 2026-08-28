@@ -9,6 +9,7 @@ import { FrostedSettingsModal } from "./FrostedSettingsModal";
 import { VerificationGate } from "./VerificationGate";
 import { DiscordChat } from "@/components/chat/DiscordChat";
 import { FrostedInAppNotification } from "@/components/chat/FrostedInAppNotification";
+import { FrostedSoundboard } from "./FrostedSoundboard";
 import { notificationManager } from "@/lib/notifications";
 
 export function FrostedApp() {
@@ -27,6 +28,7 @@ export function FrostedApp() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isChatActive, setIsChatActive] = useState(false);
+  const [isSoundboardActive, setIsSoundboardActive] = useState(false);
 
   const { favorites, toggleFavorite, recentlyPlayed, recordPlay, cloak, updateCloak } =
     useFrostedStore();
@@ -36,6 +38,7 @@ export function FrostedApp() {
     const handleOpenChat = (e: Event) => {
       const customEvt = e as CustomEvent<{ channelId?: string }>;
       setActiveGame(null);
+      setIsSoundboardActive(false);
       setIsChatActive(true);
     };
     window.addEventListener("frosted-open-chat", handleOpenChat);
@@ -62,6 +65,7 @@ export function FrostedApp() {
 
   const handleSelectGame = (game: Game) => {
     setIsChatActive(false);
+    setIsSoundboardActive(false);
     setActiveGame(game);
     recordPlay({
       id: game.id,
@@ -75,12 +79,14 @@ export function FrostedApp() {
   const handleRandomGame = () => {
     if (gamesList.length === 0) return;
     setIsChatActive(false);
+    setIsSoundboardActive(false);
     const randomIndex = Math.floor(Math.random() * gamesList.length);
     handleSelectGame(gamesList[randomIndex]);
   };
 
   const handleHome = () => {
     setIsChatActive(false);
+    setIsSoundboardActive(false);
     setActiveGame(null);
     setSearchQuery("");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -96,6 +102,7 @@ export function FrostedApp() {
       <FrostedInAppNotification
         onOpenChat={(channelId) => {
           setActiveGame(null);
+          setIsSoundboardActive(false);
           setIsChatActive(true);
           if (channelId && typeof window !== "undefined") {
             window.dispatchEvent(new CustomEvent("frosted-open-chat", { detail: { channelId } }));
@@ -112,19 +119,33 @@ export function FrostedApp() {
         onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
         onOpenChat={() => {
           setActiveGame(null);
+          setIsSoundboardActive(false);
           setIsChatActive(!isChatActive);
+        }}
+        onOpenSoundboard={() => {
+          setActiveGame(null);
+          setIsChatActive(false);
+          setIsSoundboardActive(!isSoundboardActive);
         }}
         activeGame={activeGame}
         isChatActive={isChatActive}
+        isSoundboardActive={isSoundboardActive}
       />
 
-      {/* Persistent Discord Chat Container (Maintains Cloud Firestore Sync) */}
+      {/* Persistent Discord Chat Container */}
       <div className={isChatActive ? "block" : "hidden"}>
         <DiscordChat onReturnToGames={() => setIsChatActive(false)} />
       </div>
 
-      {/* Main View: Game Player or Library Grid when Chat view is inactive */}
-      {!isChatActive && (
+      {/* Soundboard View Container */}
+      {isSoundboardActive && (
+        <main>
+          <FrostedSoundboard onBackToLibrary={() => setIsSoundboardActive(false)} />
+        </main>
+      )}
+
+      {/* Main View: Game Player or Library Grid when Chat & Soundboard views are inactive */}
+      {!isChatActive && !isSoundboardActive && (
         <main>
           {activeGame ? (
             <GamePlayer

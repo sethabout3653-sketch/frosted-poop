@@ -23,7 +23,9 @@ export function VerificationGate({ onVerified }: Props) {
       if (window.grecaptcha && window.grecaptcha.render && containerRef.current) {
         try {
           containerRef.current.innerHTML = "";
-          widgetIdRef.current = window.grecaptcha.render(containerRef.current, {
+          const targetEl = document.createElement("div");
+          containerRef.current.appendChild(targetEl);
+          widgetIdRef.current = window.grecaptcha.render(targetEl, {
             sitekey: SITE_KEY.trim(),
             theme: "dark",
             callback: (_token: string) => {
@@ -40,8 +42,10 @@ export function VerificationGate({ onVerified }: Props) {
               setErrorMessage("Domain not authorized or invalid key in Google Console.");
             },
           });
-        } catch (err: any) {
+        } catch (err: unknown) {
           console.error("reCAPTCHA Render Error:", err);
+          setStatus("error");
+          setErrorMessage("reCAPTCHA could not be rendered on this domain.");
         }
       }
     };
