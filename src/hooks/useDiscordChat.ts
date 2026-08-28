@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { User, Channel, ChatMessage, VoiceUser } from "@/types/chat";
 import { notificationManager } from "../lib/notifications";
-import { isInappropriateContent, analyzeContent } from "../lib/moderation";
 import { db } from "../lib/firebaseClient";
 import {
   collection,
@@ -29,12 +28,14 @@ const DEFAULT_CHANNELS: Channel[] = [
 ];
 
 /**
- * Optimizes WebRTC SDP to boost Opus voice audio quality and gain:
- * - usedtx=0 (disables discontinuous silence clipping)
- * - maxaveragebitrate=510000 (maximum fidelity Opus bitrate)
- * - stereo=0; sprop-stereo=0 (focused mono vocal transmission)
- * - useinbandfec=1 (packet recovery)
- * - cbr=1 (constant bitrate transmission)
+ * Optimizes WebRTC SDP to boost Opus voice audio quality to Studio Hi-Fi grade:
+ * - usedtx=0 (disables discontinuous silence clipping, prevents voice cutting out)
+ * - maxaveragebitrate=510000 (maximum fidelity Opus bitrate, up to 510kbps)
+ * - stereo=1; sprop-stereo=1 (dual channel stereo transmission)
+ * - useinbandfec=1 (forward error correction packet recovery)
+ * - cbr=1 (constant bitrate transmission, completely smooth jitter-free)
+ * - maxplaybackrate=48000 (full 48kHz audio reproduction)
+ * - ptime=20, minptime=10 (low latency 10ms-20ms packet framing)
  */
 function optimizeOpusSdp(sdp: string): string {
   return sdp.replace(/a=fmtp:(\d+) (.*)/g, (match, pt, params) => {
@@ -50,14 +51,32 @@ function optimizeOpusSdp(sdp: string): string {
       } else {
         newParams += ";maxaveragebitrate=510000";
       }
+      if (newParams.includes("stereo=")) {
+        newParams = newParams.replace(/stereo=\d+/g, "stereo=1");
+      } else {
+        newParams += ";stereo=1";
+      }
+      if (newParams.includes("sprop-stereo=")) {
+        newParams = newParams.replace(/sprop-stereo=\d+/g, "sprop-stereo=1");
+      } else {
+        newParams += ";sprop-stereo=1";
+      }
       if (!newParams.includes("useinbandfec=")) {
         newParams += ";useinbandfec=1";
       }
       if (!newParams.includes("cbr=")) {
         newParams += ";cbr=1";
       }
-      if (!newParams.includes("maxplaybackrate=")) {
+      if (newParams.includes("maxplaybackrate=")) {
+        newParams = newParams.replace(/maxplaybackrate=\d+/g, "maxplaybackrate=48000");
+      } else {
         newParams += ";maxplaybackrate=48000";
+      }
+      if (!newParams.includes("minptime=")) {
+        newParams += ";minptime=10";
+      }
+      if (!newParams.includes("ptime=")) {
+        newParams += ";ptime=20";
       }
       return `a=fmtp:${pt} ${newParams}`;
     }
@@ -87,6 +106,36 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   });
   const [micLevel, setMicLevel] = useState<number>(0);
 
+  // Studio Voice Quality & Monitoring Controls
+  const [studioVoiceMode, setStudioVoiceModeState] = useState<boolean>(() => {
+    const saved = localStorage.getItem("discord_studio_voice");
+    return saved !== null ? saved === "true" : true;
+  });
+  const [micMonitoring, setMicMonitoringState] = useState<boolean>(() => {
+    return localStorage.getItem("discord_mic_monitoring") === "true";
+  });
+  const [echoCancellation, setEchoCancellationState] = useState<boolean>(() => {
+    const saved = localStorage.getItem("discord_echo_cancellation");
+    return saved !== null ? saved === "true" : true;
+  });
+
+  const studioVoiceModeRef = useRef(studioVoiceMode);
+  const micMonitoringRef = useRef(micMonitoring);
+  const echoCancellationRef = useRef(echoCancellation);
+  const micMonitorGainRef = useRef<GainNode | null>(null);
+
+  useEffect(() => {
+    studioVoiceModeRef.current = studioVoiceMode;
+  }, [studioVoiceMode]);
+
+  useEffect(() => {
+    micMonitoringRef.current = micMonitoring;
+  }, [micMonitoring]);
+
+  useEffect(() => {
+    echoCancellationRef.current = echoCancellation;
+  }, [echoCancellation]);
+
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
     () => {
       return notificationManager.getPermission();
@@ -97,26 +146,24 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const [isDeafened, setIsDeafened] = useState(false);
   const [isSelfSpeaking, setIsSelfSpeaking] = useState(false);
 
-  // Suspension state (persisted across reloads for security)
-  const [isSuspended, setIsSuspended] = useState<boolean>(() => {
-    const savedUntil = localStorage.getItem("discord_suspended_until");
-    if (savedUntil) {
-      const remaining = Math.ceil((parseInt(savedUntil, 10) - Date.now()) / 1000);
-      return remaining > 0;
+  // Moderation disabled - clear any previous suspension states
+  const [isSuspended] = useState<boolean>(false);
+  const [suspensionTimeLeft] = useState<number>(0);
+  const [suspensionAction] = useState<string>("");
+
+  useEffect(() => {
+    try {
+      localStorage.removeItem("discord_suspended_until");
+      localStorage.removeItem("discord_suspension_action");
+    } catch {}
+    if (currentUser?.id) {
+      updateDoc(doc(db, "users", currentUser.id), {
+        isSuspended: false,
+        suspendedUntil: null,
+        suspensionAction: null,
+      }).catch(() => {});
     }
-    return false;
-  });
-  const [suspensionTimeLeft, setSuspensionTimeLeft] = useState<number>(() => {
-    const savedUntil = localStorage.getItem("discord_suspended_until");
-    if (savedUntil) {
-      const remaining = Math.ceil((parseInt(savedUntil, 10) - Date.now()) / 1000);
-      return remaining > 0 ? remaining : 0;
-    }
-    return 0;
-  });
-  const [suspensionAction, setSuspensionAction] = useState<string>(() => {
-    return localStorage.getItem("discord_suspension_action") || "";
-  });
+  }, [currentUser?.id]);
 
   // Audio & WebRTC Refs
   const rawStreamRef = useRef<MediaStream | null>(null);
@@ -219,31 +266,23 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     [isDeafened],
   );
 
-  // Suspension countdown
-  useEffect(() => {
-    if (isSuspended && suspensionTimeLeft > 0) {
-      const timer = window.setInterval(() => {
-        setSuspensionTimeLeft((prev) => {
-          if (prev <= 1) {
-            setIsSuspended(false);
-            setSuspensionAction("");
-            localStorage.removeItem("discord_suspended_until");
-            localStorage.removeItem("discord_suspension_action");
-            if (currentUserRef.current) {
-              updateDoc(doc(db, "users", currentUserRef.current.id), {
-                isSuspended: false,
-                suspendedUntil: null,
-                suspensionAction: null,
-              }).catch(() => {});
-            }
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-      return () => window.clearInterval(timer);
+  const setStudioVoiceMode = useCallback((val: boolean) => {
+    setStudioVoiceModeState(val);
+    localStorage.setItem("discord_studio_voice", val.toString());
+  }, []);
+
+  const setMicMonitoring = useCallback((val: boolean) => {
+    setMicMonitoringState(val);
+    localStorage.setItem("discord_mic_monitoring", val.toString());
+    if (micMonitorGainRef.current) {
+      micMonitorGainRef.current.gain.value = val ? 0.85 : 0;
     }
-  }, [isSuspended, suspensionTimeLeft]);
+  }, []);
+
+  const setEchoCancellation = useCallback((val: boolean) => {
+    setEchoCancellationState(val);
+    localStorage.setItem("discord_echo_cancellation", val.toString());
+  }, []);
 
   // Audio track states (Mute/Deafen)
   useEffect(() => {
@@ -297,6 +336,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     }
     analyserRef.current = null;
     micGainNodeRef.current = null;
+    micMonitorGainRef.current = null;
     remoteGainNodesRef.current = {};
 
     if (rawStreamRef.current) {
@@ -321,34 +361,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     setIsSelfSpeaking(false);
     setMicLevel(0);
   }, []);
-
-  // Trigger Voice Suspension when inappropriate content is spoken
-  const triggerVoiceSuspension = useCallback(
-    (actionDescription = "Inappropriate microphone activity") => {
-      cleanupVoice();
-
-      const durationSeconds = 60;
-      const suspendedUntil = Date.now() + durationSeconds * 1000;
-      localStorage.setItem("discord_suspended_until", String(suspendedUntil));
-      localStorage.setItem("discord_suspension_action", actionDescription);
-
-      setIsSuspended(true);
-      setSuspensionTimeLeft(durationSeconds);
-      setSuspensionAction(actionDescription);
-      setVoiceError(`You have been suspended for: ${actionDescription}`);
-
-      if (currentUserRef.current) {
-        updateDoc(doc(db, "users", currentUserRef.current.id), {
-          currentVoiceChannelId: null,
-          isSpeaking: false,
-          isSuspended: true,
-          suspendedUntil,
-          suspensionAction: actionDescription,
-        }).catch(() => {});
-      }
-    },
-    [cleanupVoice],
-  );
 
   // Clean up on unmount
   useEffect(() => {
@@ -403,6 +415,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
               params.encodings[0].maxBitrate = 510000;
               params.encodings[0].priority = "high";
               params.encodings[0].networkPriority = "high";
+              (params.encodings[0] as any).dtx = "disabled";
               sender.setParameters(params);
             }
           } catch {}
@@ -421,7 +434,10 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
         try {
           const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
           if (!remoteAudioCtxRef.current || remoteAudioCtxRef.current.state === "closed") {
-            remoteAudioCtxRef.current = new AudioCtx();
+            remoteAudioCtxRef.current = new AudioCtx({
+              sampleRate: 48000,
+              latencyHint: "interactive",
+            });
           }
           const rCtx = remoteAudioCtxRef.current;
           if (rCtx.state === "suspended") {
@@ -429,11 +445,27 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           }
 
           const rSource = rCtx.createMediaStreamSource(remoteStream);
+
+          // Studio Remote Audio Pipeline (48kHz Hi-Fi Filter + Dynamics Compressor + Dynamic Gain)
+          const rHighpass = rCtx.createBiquadFilter();
+          rHighpass.type = "highpass";
+          rHighpass.frequency.value = 75;
+          rHighpass.Q.value = 0.7;
+
+          const rCompressor = rCtx.createDynamicsCompressor();
+          rCompressor.threshold.value = -18;
+          rCompressor.knee.value = 10;
+          rCompressor.ratio.value = 3.0;
+          rCompressor.attack.value = 0.004;
+          rCompressor.release.value = 0.12;
+
           const rGain = rCtx.createGain();
           rGain.gain.value = isDeafened ? 0 : outputGainRef.current;
           remoteGainNodesRef.current[peerId] = rGain;
 
-          rSource.connect(rGain);
+          rSource.connect(rHighpass);
+          rHighpass.connect(rCompressor);
+          rCompressor.connect(rGain);
           rGain.connect(rCtx.destination);
         } catch (webaudioErr) {
           console.warn("WebAudio remote setup note:", webaudioErr);
@@ -811,6 +843,25 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     }
   };
 
+  const clearAllMessages = async () => {
+    setMessages([]);
+    try {
+      const snap = await getDocs(collection(db, "messages"));
+      const deletePromises = snap.docs.map((d) => deleteDoc(doc(db, "messages", d.id)));
+      await Promise.all(deletePromises);
+    } catch (err) {
+      console.warn("Clear all messages in firestore error:", err);
+    }
+    try {
+      if (token) {
+        await fetch("/api/chat/messages/clear-all", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
+    } catch {}
+  };
+
   const toggleReaction = async (messageId: string, emoji: string) => {
     if (!currentUser) return;
     const username = currentUser.username;
@@ -868,42 +919,23 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     } catch {}
   };
 
-  // --- Voice Actions & Real-Time Moderation ---
+  // --- Voice Actions ---
 
   const joinVoiceChannel = async (voiceChannelId: string) => {
-    // Check local suspension timer
-    const savedUntil = localStorage.getItem("discord_suspended_until");
-    if (savedUntil) {
-      const remaining = Math.ceil((parseInt(savedUntil, 10) - Date.now()) / 1000);
-      if (remaining > 0) {
-        setIsSuspended(true);
-        setSuspensionTimeLeft(remaining);
-        setVoiceError(
-          `You are suspended from voice channels for ${remaining} more seconds due to inappropriate content.`,
-        );
-        return;
-      }
-    }
-
-    if (isSuspended) {
-      setVoiceError(
-        `You are suspended from voice channels for ${suspensionTimeLeft} more seconds due to inappropriate content.`,
-      );
-      return;
-    }
     if (!currentUser) return;
     setVoiceError(null);
 
     try {
       cleanupVoice();
 
-      // High-Fidelity Uncompressed Audio Constraints
+      // High-Fidelity Studio Audio Constraints (48kHz, 24-bit, uncompressed, optional echo cancel)
       const audioConstraints: MediaTrackConstraints = {
-        echoCancellation: true,
-        noiseSuppression: false,
-        autoGainControl: false,
-        channelCount: 1,
-        sampleRate: 48000,
+        sampleRate: { ideal: 48000, min: 44100 },
+        sampleSize: { ideal: 24, min: 16 },
+        channelCount: { ideal: 2, min: 1 },
+        echoCancellation: echoCancellationRef.current,
+        noiseSuppression: false, // Disabled to prevent frequency cutoffs and metallic voice artifacting
+        autoGainControl: false, // Disabled to eliminate volume jumping/pumping
       };
 
       let stream: MediaStream;
@@ -914,11 +946,14 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       }
       rawStreamRef.current = stream;
 
-      // Studio Gain Pipeline (Uncompressed Dynamic Audio Output)
+      // Studio DSP Audio Pipeline (48kHz Uncompressed Broadcast Output)
       try {
         const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
         if (AudioCtx) {
-          const actx = new AudioCtx();
+          const actx = new AudioCtx({
+            sampleRate: 48000,
+            latencyHint: "interactive",
+          });
           audioContextRef.current = actx;
           if (actx.state === "suspended") {
             actx.resume().catch(() => {});
@@ -926,24 +961,63 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
 
           const rawSource = actx.createMediaStreamSource(stream);
 
-          // 1. Microphone Hardware Gain Amplifier (Direct Uncompressed Stream)
+          // 1. Studio Highpass Rumble Filter (<75Hz table vibrations / low hum cut)
+          const highpass = actx.createBiquadFilter();
+          highpass.type = "highpass";
+          highpass.frequency.value = 75;
+          highpass.Q.value = 0.7;
+
+          // 2. Studio Low-End Warmth EQ (+1.0dB at 240Hz for broadcast vocal fullness)
+          const warmthEQ = actx.createBiquadFilter();
+          warmthEQ.type = "peaking";
+          warmthEQ.frequency.value = 240;
+          warmthEQ.Q.value = 0.9;
+          warmthEQ.gain.value = 1.0;
+
+          // 3. Studio Vocal Presence EQ (+2.5dB at 3500Hz for crystal clear articulation)
+          const clarityEQ = actx.createBiquadFilter();
+          clarityEQ.type = "peaking";
+          clarityEQ.frequency.value = 3500;
+          clarityEQ.Q.value = 1.0;
+          clarityEQ.gain.value = 2.5;
+
+          // 4. Studio Broadcast Dynamics Compressor (levels quiet speech, prevents shouting clipping)
+          const compressor = actx.createDynamicsCompressor();
+          compressor.threshold.value = -18;
+          compressor.knee.value = 12;
+          compressor.ratio.value = 3.5;
+          compressor.attack.value = 0.003;
+          compressor.release.value = 0.1;
+
+          // 5. Hardware Gain Amplifier (User-controlled 100%-500%)
           const micGainNode = actx.createGain();
-          micGainNode.gain.value = isMuted || isDeafened ? 0 : micGain;
+          micGainNode.gain.value = isMuted || isDeafened ? 0 : micGainRef.current;
           micGainNodeRef.current = micGainNode;
 
-          // 2. WebRTC Destination Stream (Raw Uncompressed Dynamic Output)
+          // 6. WebRTC Outbound Destination Stream (High-Fi Output)
           const destination = actx.createMediaStreamDestination();
 
-          rawSource.connect(micGainNode);
+          rawSource.connect(highpass);
+          highpass.connect(warmthEQ);
+          warmthEQ.connect(clarityEQ);
+          clarityEQ.connect(compressor);
+          compressor.connect(micGainNode);
           micGainNode.connect(destination);
+
+          // 7. Mic Monitoring Loopback (Hear Myself in real-time)
+          const monitorGain = actx.createGain();
+          monitorGain.gain.value = micMonitoringRef.current ? 0.85 : 0;
+          micMonitorGainRef.current = monitorGain;
+          micGainNode.connect(monitorGain);
+          monitorGain.connect(actx.destination);
 
           processedStreamRef.current = destination.stream;
 
-          // 3. Visual Audio Meter (Direct Uncompressed Tap)
+          // 8. Visual Audio Meter (Connected to post-compressor studio vocal signal)
           const analyser = actx.createAnalyser();
           analyser.fftSize = 512;
-          analyser.smoothingTimeConstant = 0.3;
-          micGainNode.connect(analyser);
+          analyser.smoothingTimeConstant = 0.25;
+          compressor.connect(analyser);
           analyserRef.current = analyser;
 
           const dataArray = new Uint8Array(analyser.frequencyBinCount);
@@ -977,61 +1051,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       } catch (audioErr) {
         console.warn("Audio boost setup note:", audioErr);
         processedStreamRef.current = stream;
-      }
-
-      // --- REAL-TIME MICROPHONE SPEECH MODERATION ---
-      try {
-        const SpeechRec =
-          (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-        if (SpeechRec) {
-          const recognition = new SpeechRec();
-          recognition.continuous = true;
-          recognition.interimResults = true;
-          recognition.lang = "en-US";
-          recognition.maxAlternatives = 1;
-
-          recognition.onresult = (event: any) => {
-            if (isMutedRef.current || isDeafenedRef.current) return;
-
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
-              const transcript = event.results[i][0]?.transcript || "";
-              if (transcript) {
-                const modResult = analyzeContent(transcript);
-                if (modResult.isViolating) {
-                  console.warn("Inappropriate speech detected on microphone:", modResult);
-                  triggerVoiceSuspension(modResult.actionDescription || `Saying "${transcript}"`);
-                  break;
-                }
-              }
-            }
-          };
-
-          recognition.onerror = (event: any) => {
-            // Ignore benign aborted errors
-            if (event.error !== "aborted" && event.error !== "no-speech") {
-              console.warn("Speech recognition notice:", event.error);
-            }
-          };
-
-          recognition.onend = () => {
-            // Restart if still active in voice channel and not suspended
-            if (
-              currentVoiceChannelIdRef.current &&
-              !isSuspendedRef.current &&
-              !isMutedRef.current &&
-              !isDeafenedRef.current
-            ) {
-              try {
-                recognition.start();
-              } catch {}
-            }
-          };
-
-          speechRecognitionRef.current = recognition;
-          recognition.start();
-        }
-      } catch (recErr) {
-        console.warn("Speech recognition initialization note:", recErr);
       }
 
       // Voice presence update in Firestore
@@ -1170,11 +1189,18 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     requestNotificationPermission,
     sendMessage,
     deleteMessage,
+    clearAllMessages,
     toggleReaction,
     sendTyping,
     joinVoiceChannel,
     leaveVoiceChannel,
     toggleMute,
     toggleDeafen,
+    studioVoiceMode,
+    setStudioVoiceMode,
+    micMonitoring,
+    setMicMonitoring,
+    echoCancellation,
+    setEchoCancellation,
   };
 }

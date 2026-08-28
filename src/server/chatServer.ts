@@ -484,6 +484,22 @@ chatRouter.post("/reaction", async (req, res) => {
   }
 });
 
+// POST /api/chat/messages/clear-all
+chatRouter.post("/messages/clear-all", async (_req, res) => {
+  try {
+    const snap = await getDocs(collection(db, "messages"));
+    let count = 0;
+    for (const d of snap.docs) {
+      await deleteDoc(doc(db, "messages", d.id));
+      count++;
+    }
+    return res.json({ success: true, count });
+  } catch (err: any) {
+    console.error("Clear messages error:", err);
+    return res.status(500).json({ error: "Failed to clear messages" });
+  }
+});
+
 // POST /api/chat/typing
 chatRouter.post("/typing", async (req, res) => {
   try {
@@ -638,226 +654,7 @@ function getAi() {
   return aiInstance;
 }
 
-import { isInappropriateContent } from "../lib/moderation";
-
-const ADULT_KEYWORDS = [
-  "porn",
-  "pornhub",
-  "xvideos",
-  "xhamster",
-  "redtube",
-  "youporn",
-  "chaturbate",
-  "onlyfans",
-  "hentai",
-  "rule34",
-  "brazzers",
-  "phub",
-  "pussy",
-  "cock",
-  "anal",
-  "vagina",
-  "blowjob",
-  "milf",
-  "tits",
-  "sex",
-  "naked",
-  "erotic",
-  "orgasm",
-];
-
-function isLocalAdultCheck(urlStr: string): { isAdult: boolean; reason: string } | null {
-  if (isInappropriateContent(urlStr)) {
-    return { isAdult: true, reason: "URL contains explicit or inappropriate language" };
-  }
-
-  try {
-    let checkUrl = urlStr;
-    if (!/^https?:\/\//i.test(checkUrl)) {
-      checkUrl = "http://" + checkUrl;
-    }
-    const parsed = new URL(checkUrl);
-    const domain = parsed.hostname.toLowerCase();
-    const pathname = parsed.pathname.toLowerCase();
-
-    for (const kw of ADULT_KEYWORDS) {
-      if (
-        domain.includes(kw) ||
-        pathname.includes("/" + kw) ||
-        pathname.includes("-" + kw) ||
-        pathname.includes(kw + "-") ||
-        pathname.includes(kw + "/")
-      ) {
-        return { isAdult: true, reason: `URL matched forbidden adult domain/keyword: ${kw}` };
-      }
-    }
-  } catch {
-    // Ignore
-  }
-  return null;
-}
-
-async function scrapeUrlMetadata(
-  urlStr: string,
-): Promise<{ title: string; meta: string; sample: string }> {
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000); // 4 second timeout
-
-    const response = await fetch(urlStr, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      },
-    });
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      return { title: "", meta: "", sample: `HTTP Error: ${response.status}` };
-    }
-
-    const html = await response.text();
-
-    // Extract title
-    const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-    const title = titleMatch ? titleMatch[1].trim() : "";
-
-    // Extract meta tags
-    const metaTags: string[] = [];
-    const metaRegex =
-      /<meta\s+[^>]*name=["'](description|keywords)["'][^>]*content=["']([\s\S]*?)["'][^>]*>/gi;
-    let match;
-    while ((match = metaRegex.exec(html)) !== null) {
-      metaTags.push(`${match[1]}: ${match[2]}`);
-    }
-
-    const propertyRegex =
-      /<meta\s+[^>]*property=["']og:(title|description)["'][^>]*content=["']([\s\S]*?)["'][^>]*>/gi;
-    while ((match = propertyRegex.exec(html)) !== null) {
-      metaTags.push(`og:${match[1]}: ${match[2]}`);
-    }
-
-    // Extract body sample
-    const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-    let bodyText = bodyMatch ? bodyMatch[1] : html;
-    bodyText = bodyText
-      .replace(/<script[^>]*>([\s\S]*?)<\/script>/gi, "")
-      .replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, "")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    const sample = bodyText.substring(0, 1500);
-
-    return {
-      title,
-      meta: metaTags.slice(0, 10).join("\n"),
-      sample,
-    };
-  } catch (err: any) {
-    console.error("Failed to scrape site metadata for:", urlStr, err?.message || err);
-    return {
-      title: "",
-      meta: "",
-      sample: `Unreachable or failed to fetch: ${err?.message || err}`,
-    };
-  }
-}
-
-const systemPrompt = `You are an automated URL content classification system.
-Your job is to analyze the metadata of a webpage to determine if it is an adult website, pornographic, sexually explicit, NSFW (Not Safe For Work) content, adult dating, or highly suggestive 18+ content.
-You must be conservative: block obvious pornography, erotic content, adult toys, explicit chats, or direct pornography portals.
-Do NOT block safe websites, educational platforms, general blogs, news sites, or standard online services unless they contain explicit sexual materials.
-
-Analyze the given URL, Domain, Scraped Title, Metadata, and Page Sample, then decide whether it should be blocked or allowed.
-You MUST respond strictly in the following JSON format:
-{
-  "isAdult": boolean,
-  "reason": string
-}`;
-
-chatRouter.post("/moderate-link", async (req, res) => {
-  try {
-    const { url } = req.body;
-    if (!url) {
-      return res.status(400).json({ allowed: true, error: "Missing url" });
-    }
-
-    let normalizedUrl = String(url).trim();
-    if (!/^https?:\/\//i.test(normalizedUrl)) {
-      normalizedUrl = "http://" + normalizedUrl;
-    }
-
-    let parsedUrl: URL;
-    try {
-      parsedUrl = new URL(normalizedUrl);
-    } catch {
-      return res.json({ allowed: true, reason: "Invalid URL" });
-    }
-
-    const domain = parsedUrl.hostname;
-
-    // Fast local fast-pass domains check
-    const localCheck = isLocalAdultCheck(normalizedUrl);
-    if (localCheck && localCheck.isAdult) {
-      console.warn("Local adult domain blocklist hit:", normalizedUrl);
-      return res.json({ allowed: false, reason: localCheck.reason });
-    }
-
-    // Scrape metadata
-    const scraped = await scrapeUrlMetadata(normalizedUrl);
-
-    // Call Gemini to classify
-    const ai = getAi();
-
-    const userContent = `URL: ${normalizedUrl}
-Domain: ${domain}
-Scraped Title: ${scraped.title}
-Scraped Meta Tags:
-${scraped.meta}
-Scraped Page Content Sample:
-${scraped.sample}`;
-
-    const response = await ai.models.generateContent({
-      model: "gemini-3.7-flash",
-      contents: userContent,
-      config: {
-        systemInstruction: systemPrompt,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            isAdult: { type: Type.BOOLEAN },
-            reason: { type: Type.STRING },
-          },
-          required: ["isAdult", "reason"],
-        },
-      },
-    });
-
-    const text = response.text?.trim() || "{}";
-    let classification: { isAdult: boolean; reason: string } = { isAdult: false, reason: "" };
-    try {
-      classification = JSON.parse(text);
-    } catch (e) {
-      console.error("Failed to parse Gemini classification JSON:", text, e);
-    }
-
-    if (classification.isAdult) {
-      console.warn(
-        `Blocked link to adult content: ${normalizedUrl}. Reason: ${classification.reason}`,
-      );
-      return res.json({
-        allowed: false,
-        reason: classification.reason || "Adult content detected",
-      });
-    }
-
-    return res.json({ allowed: true });
-  } catch (err: any) {
-    console.error("Error in /moderate-link:", err);
-    // On error, let it pass to avoid breaking normal URL usage
-    return res.json({ allowed: true });
-  }
+// Link moderation disabled - all links allowed
+chatRouter.post("/moderate-link", async (_req, res) => {
+  return res.json({ allowed: true });
 });

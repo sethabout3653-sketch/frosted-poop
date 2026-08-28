@@ -156,12 +156,19 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
     micLevel,
     sendMessage,
     deleteMessage,
+    clearAllMessages,
     toggleReaction,
     sendTyping,
     joinVoiceChannel,
     leaveVoiceChannel,
     toggleMute,
     toggleDeafen,
+    studioVoiceMode,
+    setStudioVoiceMode,
+    micMonitoring,
+    setMicMonitoring,
+    echoCancellation,
+    setEchoCancellation,
     notificationPermission,
     requestNotificationPermission,
   } = useDiscordChat({ token, currentUser, onLogout: handleLogout });
@@ -209,6 +216,12 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
         outputGain={outputGain}
         setOutputGain={setOutputGain}
         micLevel={micLevel}
+        studioVoiceMode={studioVoiceMode}
+        setStudioVoiceMode={setStudioVoiceMode}
+        micMonitoring={micMonitoring}
+        setMicMonitoring={setMicMonitoring}
+        echoCancellation={echoCancellation}
+        setEchoCancellation={setEchoCancellation}
         onJoinVoice={joinVoiceChannel}
         onLeaveVoice={leaveVoiceChannel}
         onToggleMute={toggleMute}
@@ -224,6 +237,7 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
         typingUsers={typingUsers}
         onSendMessage={sendMessage}
         onDeleteMessage={deleteMessage}
+        onClearAllMessages={clearAllMessages}
         onToggleReaction={toggleReaction}
         onSendTyping={sendTyping}
         onToggleUserList={() => setShowUserList(!showUserList)}

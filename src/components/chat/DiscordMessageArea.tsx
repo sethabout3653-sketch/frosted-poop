@@ -13,9 +13,11 @@ import {
   BellRing,
   BellOff,
   Trash2,
+  Download,
+  Eye,
+  ExternalLink,
 } from "lucide-react";
 import type { Channel, ChatMessage, User } from "@/types/chat";
-import { isInappropriateContent, analyzeContent } from "../../lib/moderation";
 import { notificationManager } from "../../lib/notifications";
 
 interface Props {
@@ -25,6 +27,7 @@ interface Props {
   typingUsers: string[];
   onSendMessage: (content: string, attachmentUrl?: string, attachmentName?: string) => void;
   onDeleteMessage?: (messageId: string) => void;
+  onClearAllMessages?: () => void;
   onToggleReaction: (messageId: string, emoji: string) => void;
   onSendTyping: (isTyping: boolean) => void;
   onToggleUserList: () => void;
@@ -71,6 +74,7 @@ export function DiscordMessageArea({
   typingUsers,
   onSendMessage,
   onDeleteMessage,
+  onClearAllMessages,
   onToggleReaction,
   onSendTyping,
   onToggleUserList,
@@ -80,13 +84,53 @@ export function DiscordMessageArea({
 }: Props) {
   const [inputText, setInputText] = useState("");
   const [attachment, setAttachment] = useState<{ url: string; name: string } | null>(null);
+  const [selectedImage, setSelectedImage] = useState<{ url: string; name: string } | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null); // messageId or null for main input
   const [errorText, setErrorText] = useState<string | null>(null);
-  const [isCheckingLinks, setIsCheckingLinks] = useState(false);
   const [notifFeedback, setNotifFeedback] = useState<string | null>(null);
+  const [showConfirmClear, setShowConfirmClear] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const typingTimerRef = useRef<any>(null);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const downloadImage = async (url: string, filename?: string) => {
+    const safeFilename = filename || `download-${Date.now()}.png`;
+    try {
+      if (url.startsWith("data:")) {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = safeFilename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        return;
+      }
+
+      // Fetch as blob for instant direct file download
+      const response = await fetch(url, { mode: "cors" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = safeFilename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 4000);
+    } catch (err) {
+      console.warn("Direct blob download fallback to link download:", err);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = safeFilename;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+  };
 
   const handleNotificationClick = async () => {
     if (onRequestNotificationPermission) {
@@ -128,52 +172,10 @@ export function DiscordMessageArea({
     }, 2000);
   };
 
-  const handleSend = async (e: React.FormEvent) => {
+  const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
-    if (isCheckingLinks) return;
     const trimmedInput = inputText.trim();
     if (!trimmedInput && !attachment) return;
-
-    const modResult = analyzeContent(trimmedInput);
-    if (modResult.isViolating) {
-      setErrorText(`Message blocked: ${modResult.actionDescription || "Inappropriate content"}`);
-      return;
-    }
-
-    // Extract links
-    const urlRegex =
-      /((?:https?:\/\/|www\.)[^\s]+|\b[a-zA-Z0-9-]+\.(?:com|org|net|gov|edu|mil|co|io|me|us|info|biz|tv|cc|xyz|club|link|adult|sex|porn|pro|online|site|net)\b[^\s]*)/gi;
-    const urls = trimmedInput.match(urlRegex) || [];
-
-    if (urls.length > 0) {
-      setIsCheckingLinks(true);
-      setErrorText(null);
-      try {
-        for (const url of urls) {
-          const checkRes = await fetch("/api/chat/moderate-link", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${localStorage.getItem("discord_chat_token") || ""}`,
-            },
-            body: JSON.stringify({ url }),
-          });
-
-          if (checkRes.ok) {
-            const data = await checkRes.json();
-            if (data.allowed === false) {
-              setErrorText("detected inappropriate content try sending something else");
-              setIsCheckingLinks(false);
-              return;
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Link verification failed:", err);
-      } finally {
-        setIsCheckingLinks(false);
-      }
-    }
 
     onSendMessage(trimmedInput, attachment?.url, attachment?.name);
     setInputText("");
@@ -192,10 +194,43 @@ export function DiscordMessageArea({
     const reader = new FileReader();
     reader.onload = (event) => {
       if (event.target?.result) {
-        setAttachment({
-          url: event.target.result as string,
-          name: file.name,
-        });
+        const result = event.target.result as string;
+        // If image file is larger than 750KB, scale down slightly to comfortably fit Firestore 1MB limits
+        if (file.type.startsWith("image/") && file.size > 750 * 1024) {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            let { width, height } = img;
+            const maxDim = 1920;
+            if (width > maxDim || height > maxDim) {
+              if (width > height) {
+                height = Math.round((height * maxDim) / width);
+                width = maxDim;
+              } else {
+                width = Math.round((width * maxDim) / height);
+                height = maxDim;
+              }
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            ctx?.drawImage(img, 0, 0, width, height);
+            const optimized = canvas.toDataURL(
+              file.type === "image/png" ? "image/png" : "image/jpeg",
+              0.92,
+            );
+            setAttachment({
+              url: optimized,
+              name: file.name,
+            });
+          };
+          img.src = result;
+        } else {
+          setAttachment({
+            url: result,
+            name: file.name,
+          });
+        }
       }
     };
     reader.readAsDataURL(file);
@@ -251,6 +286,18 @@ export function DiscordMessageArea({
             </span>
           )}
 
+          {/* Clear All Messages Button */}
+          {onClearAllMessages && (
+            <button
+              onClick={() => setShowConfirmClear(true)}
+              title="Delete all current messages in chat"
+              className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-neutral-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span className="hidden lg:inline">Clear Chat</span>
+            </button>
+          )}
+
           <button
             onClick={onToggleUserList}
             title="Toggle Member List"
@@ -262,6 +309,68 @@ export function DiscordMessageArea({
           </button>
         </div>
       </div>
+
+      {/* Confirmation Modal to Clear All Messages */}
+      {showConfirmClear && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-150"
+          onClick={() => !isClearing && setShowConfirmClear(false)}
+        >
+          <div
+            className="relative flex flex-col max-w-md w-full rounded-2xl bg-[#141414] border border-neutral-800 p-5 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-500/15 text-rose-400 border border-rose-500/25">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-bold text-white">Clear All Chat Messages</h3>
+                <p className="mt-1 text-xs text-neutral-300 leading-relaxed">
+                  Are you sure you want to permanently delete all messages right now? This action
+                  wipes the message history from both the screen and the server.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-neutral-800">
+              <button
+                type="button"
+                disabled={isClearing}
+                onClick={() => setShowConfirmClear(false)}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-neutral-300 hover:bg-neutral-800 transition cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isClearing}
+                onClick={async () => {
+                  setIsClearing(true);
+                  if (onClearAllMessages) {
+                    await onClearAllMessages();
+                  }
+                  setIsClearing(false);
+                  setShowConfirmClear(false);
+                }}
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow transition cursor-pointer disabled:opacity-50"
+              >
+                {isClearing ? (
+                  <>
+                    <div className="h-3 w-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                    <span>Clearing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>Delete All Messages RN</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Notification Permission Banner if not enabled */}
       {notificationPermission === "default" && (
@@ -346,28 +455,158 @@ export function DiscordMessageArea({
                   </p>
                 )}
 
-                {/* Attachment Preview */}
-                {msg.attachmentUrl && (
-                  <div className="mt-2 max-w-sm overflow-hidden rounded-xl border border-neutral-800 bg-[#121212] p-1.5">
-                    {msg.attachmentUrl.startsWith("data:image") ||
-                    msg.attachmentUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
-                      <img
-                        src={msg.attachmentUrl}
-                        alt={msg.attachmentName || "Attachment"}
-                        className="max-h-60 w-full object-cover rounded-lg"
-                      />
-                    ) : (
-                      <a
-                        href={msg.attachmentUrl}
-                        download={msg.attachmentName || "download"}
-                        className="flex items-center gap-2 p-2 text-xs text-white hover:underline font-mono"
+                {/* Attachment Preview with Download & Fullscreen Preview */}
+                {msg.attachmentUrl &&
+                  (() => {
+                    const isImage =
+                      msg.attachmentUrl.startsWith("data:image") ||
+                      Boolean(msg.attachmentUrl.match(/\.(jpeg|jpg|gif|png|webp|svg)(\?.*)?$/i));
+                    const filename = msg.attachmentName || (isImage ? "image.png" : "attachment");
+
+                    return (
+                      <div
+                        id={`attachment-${msg.id}`}
+                        className="mt-2 max-w-md overflow-hidden rounded-xl border border-neutral-800 bg-[#121212] group/img shadow-md transition-all hover:border-neutral-700"
                       >
-                        <Paperclip className="h-4 w-4" />
-                        <span>{msg.attachmentName || "Download Attachment"}</span>
-                      </a>
-                    )}
-                  </div>
-                )}
+                        {isImage ? (
+                          <div>
+                            {/* Clickable Image Preview */}
+                            <div
+                              onClick={() =>
+                                setSelectedImage({ url: msg.attachmentUrl!, name: filename })
+                              }
+                              className="relative cursor-zoom-in overflow-hidden bg-black/50 flex items-center justify-center min-h-[140px] max-h-80"
+                              title="Click to view full image"
+                            >
+                              <img
+                                src={msg.attachmentUrl}
+                                alt={filename}
+                                className="max-h-80 w-full object-contain transition-transform duration-200 group-hover/img:scale-[1.01]"
+                                loading="lazy"
+                              />
+
+                              {/* Hover Quick Download Badge */}
+                              <div className="absolute top-2 right-2 opacity-0 group-hover/img:opacity-100 transition-opacity duration-150">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    downloadImage(msg.attachmentUrl!, filename);
+                                  }}
+                                  className="flex items-center gap-1.5 rounded-lg bg-black/85 px-3 py-1.5 text-xs font-semibold text-white shadow-xl backdrop-blur-md hover:bg-black hover:scale-105 border border-white/20 transition-all cursor-pointer"
+                                  title="Download Image"
+                                >
+                                  <Download className="h-3.5 w-3.5 text-emerald-400" />
+                                  <span>Download</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Bottom Info & Download Bar */}
+                            <div className="flex items-center justify-between gap-3 border-t border-neutral-800/80 bg-[#161616] px-3 py-2">
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <ImageIcon className="h-4 w-4 text-neutral-400 shrink-0" />
+                                <span
+                                  className="truncate text-xs font-mono text-neutral-300"
+                                  title={filename}
+                                >
+                                  {filename}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setSelectedImage({ url: msg.attachmentUrl!, name: filename })
+                                  }
+                                  className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-neutral-400 hover:bg-neutral-800 hover:text-white transition-colors cursor-pointer"
+                                >
+                                  <Eye className="h-3.5 w-3.5" />
+                                  <span>View</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => downloadImage(msg.attachmentUrl!, filename)}
+                                  className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-500 active:scale-95 transition-all cursor-pointer"
+                                  title="Download image to your device"
+                                >
+                                  <Download className="h-3.5 w-3.5" />
+                                  <span>Download</span>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between p-3">
+                            <div className="flex items-center gap-2 min-w-0 flex-1 mr-3">
+                              <Paperclip className="h-4 w-4 text-neutral-400 shrink-0" />
+                              <span
+                                className="truncate text-xs font-mono text-neutral-200"
+                                title={filename}
+                              >
+                                {filename}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => downloadImage(msg.attachmentUrl!, filename)}
+                              className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-500 transition-all cursor-pointer shrink-0"
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                              <span>Download</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                {/* Inline Image Link Preview if image URL posted in text without attachment */}
+                {!msg.attachmentUrl &&
+                  (() => {
+                    const imgUrlMatch = msg.content?.match(
+                      /https?:\/\/[^\s]+\.(?:jpeg|jpg|gif|png|webp|svg)(?:\?[^\s]*)?/i,
+                    );
+                    if (!imgUrlMatch) return null;
+                    const imgUrl = imgUrlMatch[0];
+                    const urlFilename = imgUrl.split("/").pop()?.split("?")[0] || "image.png";
+
+                    return (
+                      <div className="mt-2 max-w-md overflow-hidden rounded-xl border border-neutral-800 bg-[#121212] group/img shadow-md">
+                        <div
+                          onClick={() => setSelectedImage({ url: imgUrl, name: urlFilename })}
+                          className="relative cursor-zoom-in overflow-hidden bg-black/50 flex items-center justify-center max-h-72"
+                          title="Click to view full image"
+                        >
+                          <img
+                            src={imgUrl}
+                            alt={urlFilename}
+                            className="max-h-72 w-full object-contain hover:scale-[1.01] transition-transform duration-200"
+                            loading="lazy"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between gap-3 border-t border-neutral-800/80 bg-[#161616] px-3 py-2">
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <ImageIcon className="h-4 w-4 text-neutral-400 shrink-0" />
+                            <span className="truncate text-xs font-mono text-neutral-300">
+                              {urlFilename}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => downloadImage(imgUrl, urlFilename)}
+                            className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-500 active:scale-95 transition-all cursor-pointer shrink-0"
+                            title="Download image"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            <span>Download</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                 {/* Reactions */}
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -504,13 +743,8 @@ export function DiscordMessageArea({
               type="text"
               value={inputText}
               onChange={handleInputChange}
-              disabled={isCheckingLinks}
-              placeholder={
-                isCheckingLinks
-                  ? "Verifying link safety..."
-                  : `Message #${activeChannel?.name || "channel"}...`
-              }
-              className="flex-1 bg-transparent text-xs text-white placeholder-neutral-500 outline-none disabled:opacity-50"
+              placeholder={`Message #${activeChannel?.name || "channel"}...`}
+              className="flex-1 bg-transparent text-xs text-white placeholder-neutral-500 outline-none"
             />
 
             {/* Quick Emoji Buttons */}
@@ -528,19 +762,78 @@ export function DiscordMessageArea({
 
               <button
                 type="submit"
-                disabled={(!inputText.trim() && !attachment) || isCheckingLinks}
+                disabled={!inputText.trim() && !attachment}
                 className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-black hover:bg-neutral-200 transition-colors disabled:opacity-30 cursor-pointer ml-1"
               >
-                {isCheckingLinks ? (
-                  <div className="h-4 w-4 rounded-full border-2 border-black border-t-transparent animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
+                <Send className="h-4 w-4" />
               </button>
             </div>
           </div>
         </form>
       </div>
+
+      {/* Fullscreen Image Lightbox Modal */}
+      {selectedImage && (
+        <div
+          id="image-lightbox-modal"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-150"
+          onClick={() => setSelectedImage(null)}
+        >
+          <div
+            className="relative flex flex-col max-w-4xl w-full max-h-[92vh] rounded-2xl bg-[#121212] border border-neutral-800 shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-800 bg-[#161616]">
+              <div className="flex items-center gap-2 min-w-0 flex-1 mr-4">
+                <ImageIcon className="h-4 w-4 text-neutral-400 shrink-0" />
+                <span className="text-xs font-mono text-white truncate">{selectedImage.name}</span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => downloadImage(selectedImage.url, selectedImage.name)}
+                  className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow hover:bg-emerald-500 active:scale-95 transition-all cursor-pointer"
+                >
+                  <Download className="h-4 w-4" />
+                  <span>Download Image</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedImage(null)}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 hover:bg-neutral-800 hover:text-white transition-colors cursor-pointer"
+                  title="Close (Esc)"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body / Image Stage */}
+            <div className="flex flex-1 items-center justify-center overflow-auto p-4 bg-black/60 min-h-[300px]">
+              <img
+                src={selectedImage.url}
+                alt={selectedImage.name}
+                className="max-h-[72vh] max-w-full object-contain rounded-lg shadow-lg select-none"
+              />
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-between px-4 py-2 text-[11px] text-neutral-400 border-t border-neutral-800 bg-[#161616]">
+              <span>Click Download to save image directly to your device</span>
+              <a
+                href={selectedImage.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-white underline inline-flex items-center gap-1"
+              >
+                <span>Open original in new tab</span>
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

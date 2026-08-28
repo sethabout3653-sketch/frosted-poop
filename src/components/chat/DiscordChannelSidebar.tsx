@@ -15,6 +15,9 @@ import {
   Sliders,
   Sparkles,
   X,
+  Radio,
+  Ear,
+  Waves,
 } from "lucide-react";
 import type { Channel, User, VoiceUser } from "@/types/chat";
 
@@ -37,6 +40,12 @@ interface Props {
   outputGain?: number;
   setOutputGain?: (gain: number) => void;
   micLevel?: number;
+  studioVoiceMode?: boolean;
+  setStudioVoiceMode?: (val: boolean) => void;
+  micMonitoring?: boolean;
+  setMicMonitoring?: (val: boolean) => void;
+  echoCancellation?: boolean;
+  setEchoCancellation?: (val: boolean) => void;
   onJoinVoice: (channelId: string) => void;
   onLeaveVoice: () => void;
   onToggleMute: () => void;
@@ -63,6 +72,12 @@ export function DiscordChannelSidebar({
   outputGain = 2.5,
   setOutputGain,
   micLevel = 0,
+  studioVoiceMode = true,
+  setStudioVoiceMode,
+  micMonitoring = false,
+  setMicMonitoring,
+  echoCancellation = true,
+  setEchoCancellation,
   onJoinVoice,
   onLeaveVoice,
   onToggleMute,
@@ -178,17 +193,14 @@ export function DiscordChannelSidebar({
                   <div key={ch.id} className="space-y-0.5">
                     <button
                       onClick={() => onJoinVoice(ch.id)}
-                      disabled={isSuspended}
                       className={`group flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all ${
-                        isSuspended
-                          ? "opacity-40 cursor-not-allowed text-neutral-600"
-                          : isUserInThisVoice
-                            ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 font-semibold cursor-pointer"
-                            : "text-neutral-400 hover:bg-[#161616] hover:text-white cursor-pointer"
+                        isUserInThisVoice
+                          ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 font-semibold cursor-pointer"
+                          : "text-neutral-400 hover:bg-[#161616] hover:text-white cursor-pointer"
                       }`}
                     >
                       <Volume2
-                        className={`h-4 w-4 ${isSuspended ? "text-neutral-600" : isUserInThisVoice ? "text-emerald-400" : "text-neutral-500 group-hover:text-white"}`}
+                        className={`h-4 w-4 ${isUserInThisVoice ? "text-emerald-400" : "text-neutral-500 group-hover:text-white"}`}
                       />
                       <span className="truncate flex-1 text-left">{ch.name}</span>
                       {isUserInThisVoice && (
@@ -231,36 +243,8 @@ export function DiscordChannelSidebar({
         </div>
       </div>
 
-      {/* Voice Status Controls Panel OR Voice Suspension Panel */}
-      {isSuspended ? (
-        <div className="flex flex-col gap-2 border-t border-rose-900/50 bg-[#160b0d] p-3 mx-1 rounded-t-lg shadow-inner select-none animate-in slide-in-from-bottom duration-300">
-          <div className="flex items-center gap-1.5 text-rose-400">
-            <ShieldAlert className="h-4 w-4 shrink-0 animate-pulse text-rose-500" />
-            <span className="text-[11px] font-black uppercase tracking-wider text-rose-300">
-              Voice Suspended
-            </span>
-          </div>
-
-          <div className="rounded-md border border-rose-800/40 bg-rose-950/40 p-2 text-[11px]">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-rose-300">
-              You have been suspended for:
-            </p>
-            <p className="mt-1 font-extrabold text-white text-xs leading-snug break-words">
-              {suspensionAction || "Inappropriate microphone activity"}
-            </p>
-          </div>
-
-          <div className="flex items-center justify-between bg-rose-950/30 border border-rose-800/30 rounded p-1.5">
-            <span className="text-[10px] text-rose-300 font-bold uppercase tracking-wider">
-              Restoring In
-            </span>
-            <span className="text-xs font-black text-white bg-rose-800/60 px-2 py-0.5 rounded font-mono animate-pulse">
-              {suspensionTimeLeft}s
-            </span>
-          </div>
-        </div>
-      ) : (
-        currentVoiceChannelId && (
+      {/* Voice Status Controls Panel */}
+      {currentVoiceChannelId && (
           <div className="flex flex-col gap-1.5 border-t border-neutral-800 bg-[#0c0c0c] p-2.5 mx-1 rounded-t-lg shadow-inner">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-emerald-400 shrink-0">
@@ -275,8 +259,17 @@ export function DiscordChannelSidebar({
               </span>
             </div>
 
+            {/* Hi-Fi Studio Quality Pill */}
+            <div className="flex items-center justify-between px-1 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-[9px] text-emerald-300">
+              <div className="flex items-center gap-1 font-mono font-semibold">
+                <Radio className="h-2.5 w-2.5 text-emerald-400 animate-pulse" />
+                <span>Hi-Fi 510kbps Opus</span>
+              </div>
+              <span className="font-mono text-[8px] text-neutral-400">48kHz • 24-bit</span>
+            </div>
+
             {/* Live Mic Activity Bar */}
-            <div className="flex items-center gap-1.5 mt-1 px-1">
+            <div className="flex items-center gap-1.5 mt-0.5 px-1">
               <span className="text-[9px] text-neutral-400 uppercase font-bold tracking-wider shrink-0">
                 Mic
               </span>
@@ -293,24 +286,24 @@ export function DiscordChannelSidebar({
 
             {/* Audio Booster Settings Popover */}
             {showAudioSettings && (
-              <div className="flex flex-col gap-2.5 p-2 bg-[#141414] border border-neutral-800 rounded-lg mt-1 animate-in fade-in zoom-in-95 duration-150 text-[11px]">
-                <div className="flex items-center justify-between border-b border-neutral-800 pb-1">
+              <div className="flex flex-col gap-2.5 p-2.5 bg-[#141414] border border-neutral-700/80 rounded-lg mt-1 shadow-2xl animate-in fade-in zoom-in-95 duration-150 text-[11px]">
+                <div className="flex items-center justify-between border-b border-neutral-800 pb-1.5">
                   <div className="flex items-center gap-1 text-white font-bold">
-                    <Sparkles className="h-3 w-3 text-emerald-400" />
-                    <span>Audio Amplifier</span>
+                    <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
+                    <span>Studio Audio Controls</span>
                   </div>
                   <button
                     onClick={() => setShowAudioSettings(false)}
-                    className="text-neutral-400 hover:text-white p-0.5"
+                    className="text-neutral-400 hover:text-white p-0.5 cursor-pointer"
                   >
-                    <X className="h-3 w-3" />
+                    <X className="h-3.5 w-3.5" />
                   </button>
                 </div>
 
                 {/* Mic Gain Slider */}
                 <div className="space-y-1">
                   <div className="flex justify-between text-[10px] text-neutral-300">
-                    <span>Mic Boost (Gain)</span>
+                    <span>Mic Volume Boost</span>
                     <span className="font-mono text-emerald-400 font-bold">
                       {Math.round(micGain * 100)}%
                     </span>
@@ -325,15 +318,15 @@ export function DiscordChannelSidebar({
                     className="w-full h-1.5 bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
                   />
                   <div className="flex justify-between text-[8px] text-neutral-400">
-                    <span>Normal (100%)</span>
-                    <span>Ultra Boost (500%)</span>
+                    <span>100% (Normal)</span>
+                    <span>500% (Ultra High)</span>
                   </div>
                 </div>
 
                 {/* Output Gain Slider */}
                 <div className="space-y-1">
                   <div className="flex justify-between text-[10px] text-neutral-300">
-                    <span>Voice Output Boost</span>
+                    <span>User Voices Volume Boost</span>
                     <span className="font-mono text-emerald-400 font-bold">
                       {Math.round(outputGain * 100)}%
                     </span>
@@ -351,6 +344,57 @@ export function DiscordChannelSidebar({
                     <span>100%</span>
                     <span>400%</span>
                   </div>
+                </div>
+
+                {/* Live Mic Monitoring Toggle */}
+                <div className="flex items-center justify-between py-1 border-t border-neutral-800/80">
+                  <div className="flex items-center gap-1.5">
+                    <Ear className="h-3.5 w-3.5 text-neutral-300" />
+                    <div>
+                      <div className="text-[10px] font-semibold text-white">Mic Monitoring</div>
+                      <div className="text-[8px] text-neutral-400">Hear your own voice in real-time</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setMicMonitoring && setMicMonitoring(!micMonitoring)}
+                    className={`h-5 w-9 rounded-full transition-colors cursor-pointer p-0.5 ${
+                      micMonitoring ? "bg-emerald-500" : "bg-neutral-800"
+                    }`}
+                  >
+                    <div
+                      className={`h-4 w-4 rounded-full bg-white transition-transform ${
+                        micMonitoring ? "translate-x-4" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Hardware Echo Cancellation Toggle */}
+                <div className="flex items-center justify-between py-1 border-t border-neutral-800/80">
+                  <div className="flex items-center gap-1.5">
+                    <Waves className="h-3.5 w-3.5 text-neutral-300" />
+                    <div>
+                      <div className="text-[10px] font-semibold text-white">Echo Cancellation</div>
+                      <div className="text-[8px] text-neutral-400">Recommended for speakers</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setEchoCancellation && setEchoCancellation(!echoCancellation)}
+                    className={`h-5 w-9 rounded-full transition-colors cursor-pointer p-0.5 ${
+                      echoCancellation ? "bg-emerald-500" : "bg-neutral-800"
+                    }`}
+                  >
+                    <div
+                      className={`h-4 w-4 rounded-full bg-white transition-transform ${
+                        echoCancellation ? "translate-x-4" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Quality Specs Footer */}
+                <div className="rounded bg-neutral-900/90 p-1.5 text-[9px] text-neutral-400 border border-neutral-800">
+                  <span className="font-semibold text-neutral-200">Studio DSP Active:</span> 48kHz sample rate, 510kbps CBR Opus, 75Hz rumble cut, vocal presence EQ, and broadcast dynamics leveling.
                 </div>
               </div>
             )}
@@ -398,8 +442,7 @@ export function DiscordChannelSidebar({
               </button>
             </div>
           </div>
-        )
-      )}
+        )}
 
       {/* User Status Bar at Bottom */}
       {currentUser && (
