@@ -238,7 +238,8 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
             <div className="flex items-center gap-2">
               <ShieldAlert className="h-4 w-4 text-rose-400 shrink-0" />
               <span>
-                <strong className="text-white font-semibold">Voice Moderation:</strong> You have been suspended for saying{" "}
+                <strong className="text-white font-semibold">Voice Moderation:</strong> You have
+                been suspended for saying{" "}
                 <span className="font-mono font-bold text-rose-300 underline">
                   "{suspensionWord || "prohibited word"}"
                 </span>

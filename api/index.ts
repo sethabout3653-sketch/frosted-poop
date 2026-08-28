@@ -75,8 +75,14 @@ app.use((req, _res, next) => {
     }
   }
 
-  const matchedHeader = (req.headers["x-matched-path"] || req.headers["x-now-route-matches"]) as string | undefined;
-  if (matchedHeader && (matchedHeader.includes("/chat") || matchedHeader.includes("/public") || matchedHeader.includes("/health"))) {
+  const matchedHeader = (req.headers["x-matched-path"] || req.headers["x-now-route-matches"]) as
+    string | undefined;
+  if (
+    matchedHeader &&
+    (matchedHeader.includes("/chat") ||
+      matchedHeader.includes("/public") ||
+      matchedHeader.includes("/health"))
+  ) {
     url = matchedHeader;
   }
 

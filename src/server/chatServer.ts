@@ -18,6 +18,7 @@ import {
   limit,
 } from "firebase/firestore";
 import { GoogleGenAI, Type } from "@google/genai";
+import { checkVoiceModeration } from "../lib/voiceModerationRules.js";
 
 export const chatRouter = Router();
 
@@ -657,4 +658,97 @@ function getAi() {
 // Link moderation disabled - all links allowed
 chatRouter.post("/moderate-link", async (_req, res) => {
   return res.json({ allowed: true });
+});
+
+// Fast text-based voice moderation endpoint (isomorphic backup)
+chatRouter.post("/voice-moderate-text", async (req, res) => {
+  const { transcript } = req.body || {};
+  const check = checkVoiceModeration(String(transcript || ""));
+  return res.json(check);
+});
+
+// Advanced Multimodal Audio Voice Moderation (Catches faint, whispered, mumbled, or masked words)
+chatRouter.post("/voice-moderate-audio", async (req, res) => {
+  try {
+    const { audio, mimeType } = req.body || {};
+    if (!audio || typeof audio !== "string" || audio.length < 50) {
+      return res.json({ isViolating: false, matchedWord: "" });
+    }
+
+    const ai = getAi();
+    const cleanMime = mimeType || "audio/webm";
+
+    const prompt = `You are a voice chat safety engine. Listen to this audio recording, paying special attention to faint speech, quiet speech, whispered speech, or mumbling.
+Check if ANY prohibited profanity, vulgar words, or slurs were spoken or whispered.
+Prohibited list includes: fuck (and derivatives), shit, bitch, cunt, dick, pussy, asshole, bastard, whore, slut, twat, and slurs (n-word / nigga / nigger, f-slurs, ableist slurs like retard).
+
+Respond strictly in JSON format:
+{
+  "transcript": string,
+  "isViolating": boolean,
+  "matchedWord": string or null
+}`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.1-flash-lite",
+      contents: {
+        parts: [
+          {
+            inlineData: {
+              mimeType: cleanMime,
+              data: audio,
+            },
+          },
+          {
+            text: prompt,
+          },
+        ],
+      },
+      config: {
+        responseMimeType: "application/json",
+      },
+    });
+
+    const text = response.text?.trim() || "{}";
+    let parsed: any = {};
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      const isViolating = /"isViolating"\s*:\s*true/i.test(text);
+      const match = text.match(/"matchedWord"\s*:\s*"([^"]+)"/i);
+      parsed = {
+        isViolating,
+        matchedWord: match ? match[1] : isViolating ? "prohibited word" : null,
+      };
+    }
+
+    if (parsed.isViolating && parsed.matchedWord) {
+      return res.json({
+        isViolating: true,
+        matchedWord: String(parsed.matchedWord).toLowerCase().trim(),
+        transcript: parsed.transcript || "",
+      });
+    }
+
+    // Also run rules engine on the transcribed text to catch any censored or masked forms
+    if (parsed.transcript) {
+      const textCheck = checkVoiceModeration(parsed.transcript);
+      if (textCheck.isViolating) {
+        return res.json({
+          isViolating: true,
+          matchedWord: textCheck.matchedWord,
+          transcript: parsed.transcript,
+        });
+      }
+    }
+
+    return res.json({
+      isViolating: false,
+      matchedWord: "",
+      transcript: parsed.transcript || "",
+    });
+  } catch (err: any) {
+    console.warn("Voice audio moderation service warning:", err?.message || err);
+    return res.json({ isViolating: false, matchedWord: "" });
+  }
 });

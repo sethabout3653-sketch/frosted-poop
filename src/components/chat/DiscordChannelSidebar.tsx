@@ -226,8 +226,8 @@ export function DiscordChannelSidebar({
                         isSuspended
                           ? "opacity-60 cursor-not-allowed hover:bg-transparent"
                           : isUserInThisVoice
-                          ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 font-semibold cursor-pointer"
-                          : "text-neutral-400 hover:bg-[#161616] hover:text-white cursor-pointer"
+                            ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 font-semibold cursor-pointer"
+                            : "text-neutral-400 hover:bg-[#161616] hover:text-white cursor-pointer"
                       }`}
                     >
                       <Volume2
@@ -235,8 +235,8 @@ export function DiscordChannelSidebar({
                           isSuspended
                             ? "text-neutral-600"
                             : isUserInThisVoice
-                            ? "text-emerald-400"
-                            : "text-neutral-500 group-hover:text-white"
+                              ? "text-emerald-400"
+                              : "text-neutral-500 group-hover:text-white"
                         }`}
                       />
                       <span className="truncate flex-1 text-left">{ch.name}</span>
@@ -286,190 +286,192 @@ export function DiscordChannelSidebar({
 
       {/* Voice Status Controls Panel */}
       {currentVoiceChannelId && (
-          <div className="flex flex-col gap-1.5 border-t border-neutral-800 bg-[#0c0c0c] p-2.5 mx-1 rounded-t-lg shadow-inner">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-emerald-400 shrink-0">
-                <div className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </div>
-                <span className="text-[11px] font-bold tracking-tight">Voice Connected</span>
+        <div className="flex flex-col gap-1.5 border-t border-neutral-800 bg-[#0c0c0c] p-2.5 mx-1 rounded-t-lg shadow-inner">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-emerald-400 shrink-0">
+              <div className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
               </div>
-              <span className="text-[10px] text-neutral-400 font-semibold truncate max-w-[90px] text-right">
-                {channels.find((c) => c.id === currentVoiceChannelId)?.name || "General Voice"}
-              </span>
+              <span className="text-[11px] font-bold tracking-tight">Voice Connected</span>
             </div>
-
-            {/* Live Mic Activity Bar */}
-            <div className="flex items-center gap-1.5 mt-0.5 px-1">
-              <span className="text-[9px] text-neutral-400 uppercase font-bold tracking-wider shrink-0">
-                Mic
-              </span>
-              <div className="flex-1 h-1.5 bg-neutral-800 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-emerald-500 to-green-400 transition-all duration-75"
-                  style={{ width: `${isMuted || isDeafened ? 0 : micLevel}%` }}
-                />
-              </div>
-              <span className="text-[9px] text-emerald-400 font-mono font-bold shrink-0">
-                {isMuted || isDeafened ? "MUTE" : `${Math.round(micGain * 100)}%`}
-              </span>
-            </div>
-
-            {/* Audio Booster Settings Popover */}
-            {showAudioSettings && (
-              <div className="flex flex-col gap-2.5 p-2.5 bg-[#141414] border border-neutral-700/80 rounded-lg mt-1 shadow-2xl animate-in fade-in zoom-in-95 duration-150 text-[11px]">
-                <div className="flex items-center justify-between border-b border-neutral-800 pb-1.5">
-                  <div className="flex items-center gap-1 text-white font-bold">
-                    <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
-                    <span>Audio Controls</span>
-                  </div>
-                  <button
-                    onClick={() => setShowAudioSettings(false)}
-                    className="text-neutral-400 hover:text-white p-0.5 cursor-pointer"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-
-                {/* Mic Gain Slider */}
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[10px] text-neutral-300">
-                    <span>Mic Volume Boost</span>
-                    <span className="font-mono text-emerald-400 font-bold">
-                      {Math.round(micGain * 100)}%
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="1.0"
-                    max="5.0"
-                    step="0.25"
-                    value={micGain}
-                    onChange={(e) => setMicGain && setMicGain(parseFloat(e.target.value))}
-                    className="w-full h-1.5 bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                  />
-                  <div className="flex justify-between text-[8px] text-neutral-400">
-                    <span>100% (Normal)</span>
-                    <span>500% (Ultra High)</span>
-                  </div>
-                </div>
-
-                {/* Output Gain Slider */}
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[10px] text-neutral-300">
-                    <span>User Voices Volume Boost</span>
-                    <span className="font-mono text-emerald-400 font-bold">
-                      {Math.round(outputGain * 100)}%
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="1.0"
-                    max="4.0"
-                    step="0.25"
-                    value={outputGain}
-                    onChange={(e) => setOutputGain && setOutputGain(parseFloat(e.target.value))}
-                    className="w-full h-1.5 bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                  />
-                  <div className="flex justify-between text-[8px] text-neutral-400">
-                    <span>100%</span>
-                    <span>400%</span>
-                  </div>
-                </div>
-
-                {/* Live Mic Monitoring Toggle */}
-                <div className="flex items-center justify-between py-1 border-t border-neutral-800/80">
-                  <div className="flex items-center gap-1.5">
-                    <Ear className="h-3.5 w-3.5 text-neutral-300" />
-                    <div>
-                      <div className="text-[10px] font-semibold text-white">Mic Monitoring</div>
-                      <div className="text-[8px] text-neutral-400">Hear your own voice in real-time</div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setMicMonitoring && setMicMonitoring(!micMonitoring)}
-                    className={`h-5 w-9 rounded-full transition-colors cursor-pointer p-0.5 ${
-                      micMonitoring ? "bg-emerald-500" : "bg-neutral-800"
-                    }`}
-                  >
-                    <div
-                      className={`h-4 w-4 rounded-full bg-white transition-transform ${
-                        micMonitoring ? "translate-x-4" : "translate-x-0"
-                      }`}
-                    />
-                  </button>
-                </div>
-
-                {/* Hardware Echo Cancellation Toggle */}
-                <div className="flex items-center justify-between py-1 border-t border-neutral-800/80">
-                  <div className="flex items-center gap-1.5">
-                    <Waves className="h-3.5 w-3.5 text-neutral-300" />
-                    <div>
-                      <div className="text-[10px] font-semibold text-white">Echo Cancellation</div>
-                      <div className="text-[8px] text-neutral-400">Recommended for speakers</div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setEchoCancellation && setEchoCancellation(!echoCancellation)}
-                    className={`h-5 w-9 rounded-full transition-colors cursor-pointer p-0.5 ${
-                      echoCancellation ? "bg-emerald-500" : "bg-neutral-800"
-                    }`}
-                  >
-                    <div
-                      className={`h-4 w-4 rounded-full bg-white transition-transform ${
-                        echoCancellation ? "translate-x-4" : "translate-x-0"
-                      }`}
-                    />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div className="flex items-center justify-around mt-1">
-              <button
-                onClick={onToggleMute}
-                className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all cursor-pointer ${
-                  isMuted
-                    ? "bg-rose-500/20 text-rose-400 border border-rose-500/25"
-                    : "hover:bg-neutral-800 text-neutral-400 hover:text-white"
-                }`}
-                title={isMuted ? "Unmute Mic" : "Mute Mic"}
-              >
-                {isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-              </button>
-              <button
-                onClick={onToggleDeafen}
-                className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all cursor-pointer ${
-                  isDeafened
-                    ? "bg-amber-500/20 text-amber-400 border border-amber-500/25"
-                    : "hover:bg-neutral-800 text-neutral-400 hover:text-white"
-                }`}
-                title={isDeafened ? "Undeafen Audio" : "Deafen Audio"}
-              >
-                <Headphones className={`h-4 w-4 ${isDeafened ? "text-amber-400" : ""}`} />
-              </button>
-              <button
-                onClick={() => setShowAudioSettings(!showAudioSettings)}
-                className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all cursor-pointer ${
-                  showAudioSettings
-                    ? "bg-white text-black font-bold"
-                    : "hover:bg-neutral-800 text-neutral-400 hover:text-white"
-                }`}
-                title="Audio Boost Settings"
-              >
-                <Sliders className="h-4 w-4" />
-              </button>
-              <button
-                onClick={onLeaveVoice}
-                className="flex h-7 w-7 items-center justify-center rounded-lg bg-rose-600 hover:bg-rose-700 text-white shadow-sm transition-all cursor-pointer"
-                title="Disconnect Voice"
-              >
-                <PhoneOff className="h-4 w-4" />
-              </button>
-            </div>
+            <span className="text-[10px] text-neutral-400 font-semibold truncate max-w-[90px] text-right">
+              {channels.find((c) => c.id === currentVoiceChannelId)?.name || "General Voice"}
+            </span>
           </div>
-        )}
+
+          {/* Live Mic Activity Bar */}
+          <div className="flex items-center gap-1.5 mt-0.5 px-1">
+            <span className="text-[9px] text-neutral-400 uppercase font-bold tracking-wider shrink-0">
+              Mic
+            </span>
+            <div className="flex-1 h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-emerald-500 to-green-400 transition-all duration-75"
+                style={{ width: `${isMuted || isDeafened ? 0 : micLevel}%` }}
+              />
+            </div>
+            <span className="text-[9px] text-emerald-400 font-mono font-bold shrink-0">
+              {isMuted || isDeafened ? "MUTE" : `${Math.round(micGain * 100)}%`}
+            </span>
+          </div>
+
+          {/* Audio Booster Settings Popover */}
+          {showAudioSettings && (
+            <div className="flex flex-col gap-2.5 p-2.5 bg-[#141414] border border-neutral-700/80 rounded-lg mt-1 shadow-2xl animate-in fade-in zoom-in-95 duration-150 text-[11px]">
+              <div className="flex items-center justify-between border-b border-neutral-800 pb-1.5">
+                <div className="flex items-center gap-1 text-white font-bold">
+                  <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
+                  <span>Audio Controls</span>
+                </div>
+                <button
+                  onClick={() => setShowAudioSettings(false)}
+                  className="text-neutral-400 hover:text-white p-0.5 cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              {/* Mic Gain Slider */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-[10px] text-neutral-300">
+                  <span>Mic Volume Boost</span>
+                  <span className="font-mono text-emerald-400 font-bold">
+                    {Math.round(micGain * 100)}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="1.0"
+                  max="5.0"
+                  step="0.25"
+                  value={micGain}
+                  onChange={(e) => setMicGain && setMicGain(parseFloat(e.target.value))}
+                  className="w-full h-1.5 bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                />
+                <div className="flex justify-between text-[8px] text-neutral-400">
+                  <span>100% (Normal)</span>
+                  <span>500% (Ultra High)</span>
+                </div>
+              </div>
+
+              {/* Output Gain Slider */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-[10px] text-neutral-300">
+                  <span>User Voices Volume Boost</span>
+                  <span className="font-mono text-emerald-400 font-bold">
+                    {Math.round(outputGain * 100)}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="1.0"
+                  max="4.0"
+                  step="0.25"
+                  value={outputGain}
+                  onChange={(e) => setOutputGain && setOutputGain(parseFloat(e.target.value))}
+                  className="w-full h-1.5 bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                />
+                <div className="flex justify-between text-[8px] text-neutral-400">
+                  <span>100%</span>
+                  <span>400%</span>
+                </div>
+              </div>
+
+              {/* Live Mic Monitoring Toggle */}
+              <div className="flex items-center justify-between py-1 border-t border-neutral-800/80">
+                <div className="flex items-center gap-1.5">
+                  <Ear className="h-3.5 w-3.5 text-neutral-300" />
+                  <div>
+                    <div className="text-[10px] font-semibold text-white">Mic Monitoring</div>
+                    <div className="text-[8px] text-neutral-400">
+                      Hear your own voice in real-time
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setMicMonitoring && setMicMonitoring(!micMonitoring)}
+                  className={`h-5 w-9 rounded-full transition-colors cursor-pointer p-0.5 ${
+                    micMonitoring ? "bg-emerald-500" : "bg-neutral-800"
+                  }`}
+                >
+                  <div
+                    className={`h-4 w-4 rounded-full bg-white transition-transform ${
+                      micMonitoring ? "translate-x-4" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Hardware Echo Cancellation Toggle */}
+              <div className="flex items-center justify-between py-1 border-t border-neutral-800/80">
+                <div className="flex items-center gap-1.5">
+                  <Waves className="h-3.5 w-3.5 text-neutral-300" />
+                  <div>
+                    <div className="text-[10px] font-semibold text-white">Echo Cancellation</div>
+                    <div className="text-[8px] text-neutral-400">Recommended for speakers</div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setEchoCancellation && setEchoCancellation(!echoCancellation)}
+                  className={`h-5 w-9 rounded-full transition-colors cursor-pointer p-0.5 ${
+                    echoCancellation ? "bg-emerald-500" : "bg-neutral-800"
+                  }`}
+                >
+                  <div
+                    className={`h-4 w-4 rounded-full bg-white transition-transform ${
+                      echoCancellation ? "translate-x-4" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-around mt-1">
+            <button
+              onClick={onToggleMute}
+              className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all cursor-pointer ${
+                isMuted
+                  ? "bg-rose-500/20 text-rose-400 border border-rose-500/25"
+                  : "hover:bg-neutral-800 text-neutral-400 hover:text-white"
+              }`}
+              title={isMuted ? "Unmute Mic" : "Mute Mic"}
+            >
+              {isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+            </button>
+            <button
+              onClick={onToggleDeafen}
+              className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all cursor-pointer ${
+                isDeafened
+                  ? "bg-amber-500/20 text-amber-400 border border-amber-500/25"
+                  : "hover:bg-neutral-800 text-neutral-400 hover:text-white"
+              }`}
+              title={isDeafened ? "Undeafen Audio" : "Deafen Audio"}
+            >
+              <Headphones className={`h-4 w-4 ${isDeafened ? "text-amber-400" : ""}`} />
+            </button>
+            <button
+              onClick={() => setShowAudioSettings(!showAudioSettings)}
+              className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all cursor-pointer ${
+                showAudioSettings
+                  ? "bg-white text-black font-bold"
+                  : "hover:bg-neutral-800 text-neutral-400 hover:text-white"
+              }`}
+              title="Audio Boost Settings"
+            >
+              <Sliders className="h-4 w-4" />
+            </button>
+            <button
+              onClick={onLeaveVoice}
+              className="flex h-7 w-7 items-center justify-center rounded-lg bg-rose-600 hover:bg-rose-700 text-white shadow-sm transition-all cursor-pointer"
+              title="Disconnect Voice"
+            >
+              <PhoneOff className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* User Status Bar at Bottom */}
       {currentUser && (
