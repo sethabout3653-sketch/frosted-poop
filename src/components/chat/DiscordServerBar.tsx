@@ -6,7 +6,7 @@ interface Props {
 
 export function DiscordServerBar({ onReturnToGames }: Props) {
   return (
-    <div className="flex flex-col items-center py-3 w-18 shrink-0 bg-[#0a0a0a] border-r border-neutral-800/80 gap-2 select-none">
+    <div className="flex flex-col items-center py-3 w-18 shrink-0 bg-[#000000] border-r border-neutral-900 gap-2 select-none">
       {/* Return to Games / Direct Messages Icon */}
       <button
         onClick={onReturnToGames}

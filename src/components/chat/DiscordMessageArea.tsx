@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import {
+  Search,
   Hash,
   Volume2,
   Paperclip,
@@ -19,6 +20,11 @@ import {
 } from "lucide-react";
 import type { Channel, ChatMessage, User } from "@/types/chat";
 import { notificationManager } from "../../lib/notifications";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { GiphyFetch } from '@giphy/js-fetch-api';
+import { Grid } from '@giphy/react-components';
+
+const gf = new GiphyFetch('sXpGFDGZs0Dv1mmzVvHXpz8vIGTGLcgU');
 
 interface Props {
   activeChannel: Channel | undefined;
@@ -81,6 +87,8 @@ export function DiscordMessageArea({
   onRequestNotificationPermission,
 }: Props) {
   const [inputText, setInputText] = useState("");
+  const [gifSearch, setGifSearch] = useState("");
+  const [showGifPicker, setShowGifPicker] = useState(false);
   const [attachment, setAttachment] = useState<{ url: string; name: string } | null>(null);
   const [selectedImage, setSelectedImage] = useState<{ url: string; name: string } | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null); // messageId or null for main input
@@ -89,6 +97,16 @@ export function DiscordMessageArea({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fetchGifs = (offset: number) => {
+    return gifSearch ? gf.search(gifSearch, { offset, limit: 10 }) : gf.trending({ offset, limit: 10 });
+  };
+
+  const onGifClick = (gif: any, e: React.SyntheticEvent<HTMLElement, Event>) => {
+    e.preventDefault();
+    onSendMessage("", gif.images.original.url, "gif");
+    setShowGifPicker(false);
+  };
 
   const downloadImage = async (url: string, filename?: string) => {
     const safeFilename = filename || `download-${Date.now()}.png`;
@@ -234,54 +252,25 @@ export function DiscordMessageArea({
   };
 
   return (
-    <div className="flex h-full flex-1 flex-col bg-[#050505] text-neutral-200 font-sans overflow-hidden">
+    <div className="flex h-full flex-1 flex-col bg-[#000000] text-neutral-200 font-sans overflow-hidden">
       {/* Top Header Bar */}
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-neutral-800 px-4 bg-[#0d0d0d] shadow-sm">
+      <div className="flex h-12 shrink-0 items-center justify-between border-b border-neutral-900 px-4 bg-[#000000] shadow-sm">
         <div className="flex items-center gap-2 truncate">
-          {activeChannel?.type === "voice" ? (
-            <Volume2 className="h-4 w-4 text-neutral-400" />
-          ) : (
-            <Hash className="h-4 w-4 text-neutral-400" />
-          )}
-          <span className="font-bold text-white text-sm">{activeChannel?.name}</span>
-          {activeChannel?.topic && (
-            <>
-              <div className="h-4 w-[1px] bg-neutral-800" />
-              <span className="text-xs text-neutral-400 truncate font-normal">
-                {activeChannel.topic}
-              </span>
-            </>
-          )}
+          <span className="font-bold text-white text-lg">General</span>
+          <span className="text-xs text-neutral-400 truncate mt-1 font-normal">main room</span>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Notification Button / Status */}
-          {notificationPermission === "granted" ? (
-            <button
-              onClick={handleNotificationClick}
-              title="Desktop notifications & chimes are active. Click to test!"
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 transition cursor-pointer"
-            >
-              <BellRing className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Notifications Active</span>
-            </button>
-          ) : (
-            <button
-              onClick={handleNotificationClick}
-              title="Enable real desktop notifications for new messages"
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:bg-amber-500/25 transition cursor-pointer animate-pulse"
-            >
-              <Bell className="h-3.5 w-3.5" />
-              <span>Allow Notifications</span>
-            </button>
-          )}
-
-          {notifFeedback && (
-            <span className="text-[11px] text-neutral-300 hidden md:inline animate-fade-in">
-              {notifFeedback}
-            </span>
-          )}
-
+          {/* Search bar matching the image */}
+          <div className="flex items-center gap-2 rounded bg-[#090909] px-2 py-1.5 border border-neutral-800 hidden sm:flex">
+            <Search className="h-3.5 w-3.5 text-neutral-500" />
+            <input 
+              type="text" 
+              placeholder="Search messages" 
+              className="w-40 bg-transparent text-xs text-neutral-200 outline-none placeholder:text-neutral-500"
+            />
+          </div>
+          
           <button
             onClick={onToggleUserList}
             title="Toggle Member List"
@@ -623,7 +612,7 @@ export function DiscordMessageArea({
         )}
         <form
           onSubmit={handleSend}
-          className="relative rounded-xl bg-[#0e0e0e] p-2.5 border border-neutral-800 focus-within:border-white focus-within:ring-1 focus-within:ring-white transition-all shadow-lg"
+          className="relative rounded-lg bg-[#090909] p-2 transition-all shadow-sm"
         >
           {/* Attachment Preview Box */}
           {attachment && (
@@ -643,15 +632,6 @@ export function DiscordMessageArea({
           )}
 
           <div className="flex items-center gap-2">
-            {/* Attachment Button */}
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              title="Upload File or Image"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#1a1a1a] border border-neutral-800 text-neutral-300 hover:bg-white hover:text-black transition-all cursor-pointer"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
             <input
               ref={fileInputRef}
               type="file"
@@ -670,24 +650,55 @@ export function DiscordMessageArea({
             />
 
             {/* Quick Emoji Buttons */}
-            <div className="flex items-center gap-1 text-neutral-400">
-              {EMOJIS.slice(0, 4).map((emoji) => (
-                <button
-                  key={emoji}
-                  type="button"
-                  onClick={() => setInputText((prev) => prev + emoji)}
-                  className="hover:scale-110 transition-transform px-0.5 cursor-pointer text-sm"
-                >
-                  {emoji}
-                </button>
-              ))}
+            <div className="flex items-center gap-2 text-neutral-400 pr-1">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                title="Upload Image"
+                className="hover:text-white transition-colors cursor-pointer"
+              >
+                <ImageIcon className="h-4 w-4" />
+              </button>
+              
+              <Popover open={showGifPicker} onOpenChange={setShowGifPicker}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    title="Send a GIF"
+                    className="hover:text-white transition-colors cursor-pointer text-[10px] font-bold border border-neutral-500 rounded px-1"
+                  >
+                    GIF
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent side="top" align="end" className="w-80 p-0 bg-[#090909] border-neutral-800" sideOffset={16}>
+                  <div className="p-2 border-b border-neutral-800">
+                    <input 
+                      type="text" 
+                      placeholder="Search Giphy..." 
+                      value={gifSearch}
+                      onChange={(e) => setGifSearch(e.target.value)}
+                      className="w-full bg-[#141414] text-sm text-neutral-200 outline-none rounded px-2 py-1 placeholder:text-neutral-500 border border-neutral-800 focus:border-neutral-600 transition-colors"
+                    />
+                  </div>
+                  <div className="h-64 overflow-y-auto p-1 custom-scrollbar">
+                    <Grid 
+                      key={gifSearch} 
+                      fetchGifs={fetchGifs} 
+                      width={300} 
+                      columns={2} 
+                      gutter={4} 
+                      onGifClick={onGifClick} 
+                    />
+                  </div>
+                </PopoverContent>
+              </Popover>
 
               <button
                 type="submit"
                 disabled={!inputText.trim() && !attachment}
-                className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-black hover:bg-neutral-200 transition-colors disabled:opacity-30 cursor-pointer ml-1"
+                className="flex h-7 w-7 items-center justify-center rounded bg-white text-black hover:bg-neutral-200 transition-colors disabled:opacity-30 cursor-pointer ml-1"
               >
-                <Send className="h-4 w-4" />
+                <Send className="h-3 w-3 -rotate-90" />
               </button>
             </div>
           </div>

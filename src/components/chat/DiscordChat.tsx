@@ -161,7 +161,7 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
 
   if (isVerifyingAuth) {
     return (
-      <div className="flex h-[calc(100vh-4rem)] items-center justify-center bg-[#050505] text-white font-sans">
+      <div className="flex h-[calc(100vh-4rem)] items-center justify-center bg-[#000000] text-white font-sans">
         <div className="flex flex-col items-center gap-3">
           <div className="h-8 w-8 rounded-full border-2 border-white border-t-transparent animate-spin" />
           <span className="text-xs text-neutral-400">Connecting to Frosted Chat...</span>
@@ -178,7 +178,7 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
   const activeChannel = channels.find((c) => c.id === activeChannelId);
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] w-full overflow-hidden bg-[#050505] text-white font-sans selection:bg-white selection:text-black">
+    <div className="flex h-[calc(100vh-4rem)] w-full overflow-hidden bg-[#000000] text-white font-sans selection:bg-white selection:text-black">
       {/* 1. Leftmost Guild Rail */}
       <DiscordServerBar onReturnToGames={onReturnToGames} />
 

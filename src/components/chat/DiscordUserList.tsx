@@ -11,11 +11,11 @@ export function DiscordUserList({ users, currentUserId }: Props) {
   const offline = users.filter((u) => u.status === "offline");
 
   return (
-    <div className="flex h-full w-60 shrink-0 flex-col bg-[#0d0d0d] p-3 text-neutral-400 font-sans border-l border-neutral-800 select-none overflow-y-auto">
+    <div className="flex h-full w-60 shrink-0 flex-col bg-[#000000] p-3 text-neutral-400 font-sans border-l border-neutral-900 select-none overflow-y-auto">
       {/* ONLINE SECTION */}
       <div className="mb-4 space-y-2">
         <div className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 px-2">
-          Online — {online.length}
+          ONLINE — {online.length}
         </div>
 
         <div className="space-y-0.5">
@@ -35,7 +35,7 @@ export function DiscordUserList({ users, currentUserId }: Props) {
                     {u.username.substring(0, 1).toUpperCase()}
                   </div>
                   {/* Status Ring */}
-                  <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#0d0d0d] bg-emerald-400" />
+                  <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#000000] bg-emerald-400" />
                 </div>
 
                 <div className="truncate">
@@ -81,7 +81,7 @@ export function DiscordUserList({ users, currentUserId }: Props) {
                   >
                     {u.username.substring(0, 1).toUpperCase()}
                   </div>
-                  <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#0d0d0d] bg-neutral-600" />
+                  <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#000000] bg-neutral-600" />
                 </div>
 
                 <div className="truncate">

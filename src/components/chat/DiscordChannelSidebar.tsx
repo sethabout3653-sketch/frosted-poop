@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  Search,
   Hash,
   LogOut,
   ChevronDown,
@@ -78,16 +79,17 @@ export function DiscordChannelSidebar({
   const voiceChannels = channels.filter((c) => c.type === "voice");
 
   return (
-    <div className="flex h-full w-60 shrink-0 flex-col bg-[#0d0d0d] text-neutral-400 font-sans border-r border-neutral-800 select-none">
-      {/* Server Header */}
-      <div className="flex h-12 items-center justify-between border-b border-neutral-800 px-4 font-bold text-white shadow-sm bg-[#0d0d0d]">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="h-4 w-4 text-white" />
-          <span className="truncate text-xs font-black uppercase tracking-wider">
-            Frosted Community
-          </span>
+    <div className="flex h-full w-60 shrink-0 flex-col bg-[#000000] text-neutral-400 font-sans border-r border-neutral-900 select-none">
+      {/* Server Header / Search */}
+      <div className="flex h-12 items-center border-b border-neutral-900 px-4 bg-[#000000]">
+        <div className="flex flex-1 items-center gap-2 rounded bg-[#090909] px-2 py-1.5 border border-neutral-800">
+          <Search className="h-3.5 w-3.5 text-neutral-500" />
+          <input 
+            type="text" 
+            placeholder="Find a channel" 
+            className="w-full bg-transparent text-xs text-neutral-200 outline-none placeholder:text-neutral-500"
+          />
         </div>
-        <ChevronDown className="h-4 w-4 text-neutral-400" />
       </div>
 
       {/* Channels List Container */}
@@ -124,7 +126,7 @@ export function DiscordChannelSidebar({
               ) : (
                 <ChevronRight className="h-3 w-3" />
               )}
-              <span>Text Channels</span>
+              <span>CHANNELS</span>
             </div>
           </button>
 
@@ -138,12 +140,12 @@ export function DiscordChannelSidebar({
                     onClick={() => onSelectChannel(ch.id)}
                     className={`group flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
                       isActive
-                        ? "bg-white text-black font-semibold shadow-sm"
+                        ? "bg-[#1a1a1a] text-white font-semibold"
                         : "text-neutral-400 hover:bg-[#161616] hover:text-white"
                     }`}
                   >
                     <Hash
-                      className={`h-4 w-4 ${isActive ? "text-black" : "text-neutral-500 group-hover:text-white"}`}
+                      className={`h-4 w-4 ${isActive ? "text-neutral-400" : "text-neutral-500 group-hover:text-white"}`}
                     />
                     <span className="truncate">{ch.name}</span>
                   </button>
@@ -204,7 +206,7 @@ export function DiscordChannelSidebar({
               ) : (
                 <ChevronRight className="h-3 w-3" />
               )}
-              <span>Voice Channels</span>
+              <span>VOICE</span>
             </div>
           </button>
 
@@ -348,7 +350,7 @@ export function DiscordChannelSidebar({
 
       {/* User Status Bar at Bottom */}
       {currentUser && (
-        <div className="flex h-14 items-center justify-between border-t border-neutral-800 bg-[#111111] px-3">
+        <div className="flex h-14 items-center justify-between border-t border-neutral-900 bg-[#000000] px-3">
           {/* Avatar & Username */}
           <div className="flex items-center gap-2.5 truncate pr-1">
             <div className="relative shrink-0">
@@ -358,13 +360,12 @@ export function DiscordChannelSidebar({
               >
                 {currentUser.username.substring(0, 1).toUpperCase()}
               </div>
-              <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#111111] bg-emerald-400" />
+              <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#000000] bg-emerald-400" />
             </div>
             <div className="truncate">
               <div className="truncate text-xs font-bold text-white leading-tight">
                 {currentUser.displayName || currentUser.username}
               </div>
-              <div className="text-[10px] text-neutral-400">@{currentUser.username}</div>
             </div>
           </div>
 
