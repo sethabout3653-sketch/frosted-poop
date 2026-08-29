@@ -124,11 +124,6 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
     setVoiceError,
     isMuted,
     isDeafened,
-    isSuspended,
-    suspensionTimeLeft,
-    suspensionAction,
-    suspensionWord,
-    suspensionCategory,
     micLevel,
     sendMessage,
     deleteMessage,
@@ -194,11 +189,6 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
         setVoiceError={setVoiceError}
         isMuted={isMuted}
         isDeafened={isDeafened}
-        isSuspended={isSuspended}
-        suspensionTimeLeft={suspensionTimeLeft}
-        suspensionAction={suspensionAction}
-        suspensionWord={suspensionWord}
-        suspensionCategory={suspensionCategory}
         micLevel={micLevel}
         studioVoiceMode={studioVoiceMode}
         setStudioVoiceMode={setStudioVoiceMode}
@@ -213,38 +203,6 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
 
       {/* 3. Main Message Area */}
       <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
-        {isSuspended && (
-          <div className="flex items-center justify-between border-b border-rose-500/30 bg-rose-950/70 px-4 py-2.5 text-xs text-rose-200 shadow-inner">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <ShieldAlert className="h-4 w-4 text-rose-400 shrink-0" />
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span className="font-semibold text-white">
-                  You Have been suspended for violating moderation
-                </span>
-                <span className="text-neutral-500">•</span>
-                <span className="text-rose-200">
-                  Offensive Item:{" "}
-                  <span className="font-mono font-bold text-rose-300 underline">
-                    "{suspensionWord || "prohibited word"}"
-                  </span>
-                </span>
-                <span className="text-neutral-500">•</span>
-                <span className="text-rose-200">
-                  Violation Type:{" "}
-                  <span className="font-medium text-rose-100 bg-rose-900/80 px-2 py-0.5 rounded border border-rose-500/40">
-                    {suspensionCategory || "Derogatory / Prohibited Language"}
-                  </span>
-                </span>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 shrink-0 ml-3">
-              <span className="text-[11px] text-neutral-400">Remaining:</span>
-              <span className="font-mono text-xs font-bold text-rose-300 bg-rose-900/60 px-2 py-0.5 rounded border border-rose-500/30">
-                00:{String(suspensionTimeLeft).padStart(2, "0")}
-              </span>
-            </div>
-          </div>
-        )}
         <DiscordMessageArea
           activeChannel={activeChannel}
           messages={messages}

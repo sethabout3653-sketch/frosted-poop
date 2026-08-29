@@ -18,7 +18,6 @@ import {
   limit,
 } from "firebase/firestore";
 import { GoogleGenAI, Type } from "@google/genai";
-import { checkVoiceModeration } from "../lib/voiceModerationRules.js";
 
 export const chatRouter = Router();
 
@@ -640,24 +639,4 @@ function getAi() {
 // Link moderation disabled - all links allowed
 chatRouter.post("/moderate-link", async (_req, res) => {
   return res.json({ allowed: true });
-});
-
-// Fast text-based voice moderation endpoint (isomorphic)
-chatRouter.post("/voice-moderate-text", async (req, res) => {
-  const { transcript } = req.body || {};
-  const check = checkVoiceModeration(String(transcript || ""));
-  return res.json(check);
-});
-
-// High-speed Phonetic & Acoustic Voice Moderation (10x faster with 0ms latency, zero-Gemini dependency)
-chatRouter.post("/voice-moderate-audio", async (req, res) => {
-  try {
-    const { transcript, text } = req.body || {};
-    const input = String(transcript || text || "");
-    const check = checkVoiceModeration(input);
-    return res.json(check);
-  } catch (err: any) {
-    console.warn("Voice audio moderation service warning:", err?.message || err);
-    return res.json({ isViolating: false, matchedWord: "" });
-  }
 });

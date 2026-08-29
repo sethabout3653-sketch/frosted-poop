@@ -28,11 +28,6 @@ interface Props {
   setVoiceError?: (err: string | null) => void;
   isMuted?: boolean;
   isDeafened?: boolean;
-  isSuspended?: boolean;
-  suspensionTimeLeft?: number;
-  suspensionAction?: string;
-  suspensionWord?: string;
-  suspensionCategory?: string;
   micLevel?: number;
   studioVoiceMode?: boolean;
   setStudioVoiceMode?: (val: boolean) => void;
@@ -56,11 +51,6 @@ export function DiscordChannelSidebar({
   setVoiceError,
   isMuted = false,
   isDeafened = false,
-  isSuspended = false,
-  suspensionTimeLeft = 0,
-  suspensionAction = "",
-  suspensionWord = "",
-  suspensionCategory = "",
   micLevel = 0,
   studioVoiceMode = true,
   setStudioVoiceMode,
@@ -155,45 +145,6 @@ export function DiscordChannelSidebar({
           )}
         </div>
 
-        {/* VOICE MODERATION SUSPENSION BANNER */}
-        {isSuspended && (
-          <div className="mx-1 mb-2 rounded-lg border border-rose-500/50 bg-rose-950/60 p-2.5 text-xs shadow-lg animate-in fade-in duration-200">
-            <div className="flex items-start gap-2">
-              <ShieldAlert className="h-4 w-4 shrink-0 text-rose-400 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-rose-400">
-                    Voice Suspended
-                  </span>
-                  <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300">
-                    00:{String(suspensionTimeLeft).padStart(2, "0")}
-                  </span>
-                </div>
-                <p className="mt-1.5 text-white font-semibold text-[11px] leading-tight">
-                  You Have been suspended for violating moderation
-                </p>
-                <div className="mt-1.5 space-y-0.5 text-[10.5px]">
-                  <div className="flex items-baseline gap-1 text-rose-200">
-                    <span className="text-neutral-400">Offensive Item:</span>
-                    <span className="font-mono font-bold text-rose-300 underline">
-                      "{suspensionWord || "prohibited word"}"
-                    </span>
-                  </div>
-                  <div className="flex items-baseline gap-1 text-rose-200">
-                    <span className="text-neutral-400">Violation Type:</span>
-                    <span className="font-medium text-rose-100 bg-rose-900/80 px-1.5 py-0.5 rounded border border-rose-500/30">
-                      {suspensionCategory || "Derogatory / Prohibited Language"}
-                    </span>
-                  </div>
-                </div>
-                <p className="mt-2 text-[9.5px] text-neutral-400 leading-snug">
-                  1 min voice suspension. Text chat remains open and unmoderated.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* VOICE CHANNELS */}
         <div>
           <button
@@ -221,28 +172,20 @@ export function DiscordChannelSidebar({
                     <button
                       onClick={() => onJoinVoice(ch.id)}
                       className={`group flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all ${
-                        isSuspended
-                          ? "opacity-60 cursor-not-allowed hover:bg-transparent"
-                          : isUserInThisVoice
-                            ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 font-semibold cursor-pointer"
-                            : "text-neutral-400 hover:bg-[#161616] hover:text-white cursor-pointer"
+                        isUserInThisVoice
+                          ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 font-semibold cursor-pointer"
+                          : "text-neutral-400 hover:bg-[#161616] hover:text-white cursor-pointer"
                       }`}
                     >
                       <Volume2
                         className={`h-4 w-4 ${
-                          isSuspended
-                            ? "text-neutral-600"
-                            : isUserInThisVoice
-                              ? "text-emerald-400"
-                              : "text-neutral-500 group-hover:text-white"
+                          isUserInThisVoice
+                            ? "text-emerald-400"
+                            : "text-neutral-500 group-hover:text-white"
                         }`}
                       />
                       <span className="truncate flex-1 text-left">{ch.name}</span>
-                      {isSuspended ? (
-                        <span className="text-[10px] px-1.5 py-0.5 bg-rose-500/20 text-rose-300 rounded font-mono font-bold">
-                          Suspended
-                        </span>
-                      ) : isUserInThisVoice ? (
+                      {isUserInThisVoice ? (
                         <span className="text-[10px] px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 rounded font-bold uppercase">
                           Live
                         </span>

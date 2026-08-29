@@ -8,10 +8,6 @@ export interface User {
   isMuted?: boolean;
   isDeafened?: boolean;
   isSpeaking?: boolean;
-  isSuspended?: boolean;
-  voiceSuspendedUntil?: number | null;
-  suspensionWord?: string | null;
-  suspensionAction?: string | null;
 }
 
 export interface Channel {

@@ -1,11 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { User, Channel, ChatMessage, VoiceUser } from "@/types/chat";
 import { notificationManager } from "../lib/notifications";
-import {
-  checkVoiceModeration,
-  categorizeProfanity,
-  announceVoiceSuspension,
-} from "../lib/voiceModeration";
 import { StudioAudioEngine } from "../lib/studioAudioEngine";
 import { db } from "../lib/firebaseClient";
 import {
@@ -128,108 +123,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const [isDeafened, setIsDeafened] = useState(false);
   const [isSelfSpeaking, setIsSelfSpeaking] = useState(false);
 
-  // Voice Chat Moderation State (1-minute suspension upon saying vulgar words or slurs)
-  const [isSuspended, setIsSuspended] = useState<boolean>(() => {
-    try {
-      const until = localStorage.getItem("discord_voice_suspended_until");
-      return !!until && parseInt(until, 10) > Date.now();
-    } catch {
-      return false;
-    }
-  });
-  const [suspensionTimeLeft, setSuspensionTimeLeft] = useState<number>(() => {
-    try {
-      const until = localStorage.getItem("discord_voice_suspended_until");
-      if (until) {
-        const diff = Math.ceil((parseInt(until, 10) - Date.now()) / 1000);
-        return diff > 0 ? diff : 0;
-      }
-    } catch {}
-    return 0;
-  });
-  const [suspensionAction, setSuspensionAction] = useState<string>(() => {
-    try {
-      return localStorage.getItem("discord_voice_suspension_action") || "";
-    } catch {
-      return "";
-    }
-  });
-  const [suspensionWord, setSuspensionWord] = useState<string>(() => {
-    try {
-      return localStorage.getItem("discord_voice_suspension_word") || "";
-    } catch {
-      return "";
-    }
-  });
-  const [suspensionCategory, setSuspensionCategory] = useState<string>(() => {
-    try {
-      return localStorage.getItem("discord_voice_suspension_category") || "";
-    } catch {
-      return "";
-    }
-  });
-
-  const suspensionWordRef = useRef(suspensionWord);
-  useEffect(() => {
-    suspensionWordRef.current = suspensionWord;
-  }, [suspensionWord]);
-
-  const suspensionCategoryRef = useRef(suspensionCategory);
-  useEffect(() => {
-    suspensionCategoryRef.current = suspensionCategory;
-  }, [suspensionCategory]);
-
-  // Voice suspension countdown interval (1 minute timer)
-  useEffect(() => {
-    if (!isSuspended && suspensionTimeLeft <= 0) return;
-
-    const timer = window.setInterval(() => {
-      try {
-        const savedUntil = localStorage.getItem("discord_voice_suspended_until");
-        if (!savedUntil) {
-          setIsSuspended(false);
-          setSuspensionTimeLeft(0);
-          setSuspensionAction("");
-          setSuspensionWord("");
-          setSuspensionCategory("");
-          return;
-        }
-
-        const diff = Math.ceil((parseInt(savedUntil, 10) - Date.now()) / 1000);
-        if (diff > 0) {
-          setIsSuspended(true);
-          setSuspensionTimeLeft(diff);
-        } else {
-          // Suspension ended after 1 minute
-          setIsSuspended(false);
-          setSuspensionTimeLeft(0);
-          setSuspensionAction("");
-          setSuspensionWord("");
-          setSuspensionCategory("");
-          try {
-            localStorage.removeItem("discord_voice_suspended_until");
-            localStorage.removeItem("discord_voice_suspension_action");
-            localStorage.removeItem("discord_voice_suspension_word");
-            localStorage.removeItem("discord_voice_suspension_category");
-          } catch {}
-          if (currentUser?.id) {
-            updateDoc(doc(db, "users", currentUser.id), {
-              isSuspended: false,
-              voiceSuspendedUntil: null,
-              suspensionWord: null,
-              suspensionCategory: null,
-              suspensionAction: null,
-            }).catch(() => {});
-          }
-        }
-      } catch (err) {
-        console.warn("Countdown timer tick error:", err);
-      }
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [isSuspended, suspensionTimeLeft, currentUser?.id]);
-
   // Audio & WebRTC Refs
   const rawStreamRef = useRef<MediaStream | null>(null);
   const processedStreamRef = useRef<MediaStream | null>(null);
@@ -250,7 +143,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const whisperBoosterStreamRef = useRef<MediaStream | null>(null);
   const activeChannelIdRef = useRef(activeChannelId);
   const currentVoiceChannelIdRef = useRef(currentVoiceChannelId);
-  const isSuspendedRef = useRef(isSuspended);
   const isMutedRef = useRef(isMuted);
   const isDeafenedRef = useRef(isDeafened);
   const currentUserRef = useRef(currentUser);
@@ -264,10 +156,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   useEffect(() => {
     currentVoiceChannelIdRef.current = currentVoiceChannelId;
   }, [currentVoiceChannelId]);
-
-  useEffect(() => {
-    isSuspendedRef.current = isSuspended;
-  }, [isSuspended]);
 
   useEffect(() => {
     isMutedRef.current = isMuted;
@@ -476,243 +364,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     triggerVoiceSuspensionRef.current = triggerVoiceSuspension;
   }, [triggerVoiceSuspension]);
 
-  // Voice speech recognition for continuous voice moderation (handles masked words ****, f***, s***, b****, whispers & slurs)
-  const startSpeechRecognitionModeration = useCallback(() => {
-    if (typeof window === "undefined") return;
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      console.warn("SpeechRecognition not supported in browser");
-      return;
-    }
 
-    if (speechRecognitionRef.current) {
-      try {
-        speechRecognitionRef.current.onresult = null;
-        speechRecognitionRef.current.onerror = null;
-        speechRecognitionRef.current.onend = null;
-        speechRecognitionRef.current.abort();
-      } catch {}
-      speechRecognitionRef.current = null;
-    }
-
-    try {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.maxAlternatives = 10;
-      recognition.lang = "en-US";
-
-      recognition.onresult = (event: any) => {
-        if (isMutedRef.current || isDeafenedRef.current || isSuspendedRef.current) {
-          return;
-        }
-
-        // 1. Check all individual results and alternatives (up to 10 hypotheses)
-        for (let i = 0; i < event.results.length; i++) {
-          const item = event.results[i];
-          for (let a = 0; a < item.length; a++) {
-            const transcript = item[a]?.transcript || "";
-            const check = checkVoiceModeration(transcript);
-            if (check.isViolating && check.matchedWord) {
-              triggerVoiceSuspensionRef.current(check.matchedWord, check.category);
-              return;
-            }
-          }
-        }
-
-        // 2. Check full combined utterance across all results
-        let fullTranscript = "";
-        for (let i = 0; i < event.results.length; i++) {
-          fullTranscript += " " + (event.results[i][0]?.transcript || "");
-        }
-        const fullCheck = checkVoiceModeration(fullTranscript);
-        if (fullCheck.isViolating && fullCheck.matchedWord) {
-          triggerVoiceSuspensionRef.current(fullCheck.matchedWord, fullCheck.category);
-          return;
-        }
-      };
-
-      recognition.onerror = (event: any) => {
-        if (event.error !== "no-speech" && event.error !== "aborted") {
-          console.warn("Speech recognition notice:", event.error);
-        }
-      };
-
-      recognition.onend = () => {
-        // Keep speech recognition running cleanly as long as user is actively in voice, unmuted, and not suspended
-        if (
-          currentVoiceChannelIdRef.current &&
-          !isMutedRef.current &&
-          !isDeafenedRef.current &&
-          !isSuspendedRef.current
-        ) {
-          window.setTimeout(() => {
-            if (
-              currentVoiceChannelIdRef.current &&
-              !isMutedRef.current &&
-              !isDeafenedRef.current &&
-              !isSuspendedRef.current
-            ) {
-              startSpeechRecognitionModeration();
-            }
-          }, 50);
-        }
-      };
-
-      recognition.start();
-      speechRecognitionRef.current = recognition;
-
-      // Keepalive watchdog to prevent recognition from silently going idle
-      if (!speechWatchdogRef.current) {
-        speechWatchdogRef.current = window.setInterval(() => {
-          if (
-            currentVoiceChannelIdRef.current &&
-            !isMutedRef.current &&
-            !isDeafenedRef.current &&
-            !isSuspendedRef.current
-          ) {
-            if (!speechRecognitionRef.current) {
-              startSpeechRecognitionModeration();
-            } else {
-              try {
-                speechRecognitionRef.current.start();
-              } catch {}
-            }
-          }
-        }, 800);
-      }
-    } catch (e) {
-      console.warn("Failed to initialize speech recognition moderation:", e);
-    }
-  }, []);
-
-  // Multimodal Whisper Audio Moderation: Captures faint whispers and muffled speech
-  const startAudioWhisperModeration = useCallback((whisperStream: MediaStream) => {
-    if (typeof window === "undefined" || !("MediaRecorder" in window)) return;
-
-    if (whisperAudioIntervalRef.current) {
-      clearInterval(whisperAudioIntervalRef.current);
-      whisperAudioIntervalRef.current = null;
-    }
-    if (mediaRecorderRef.current) {
-      try {
-        if (mediaRecorderRef.current.state !== "inactive") {
-          mediaRecorderRef.current.stop();
-        }
-      } catch {}
-      mediaRecorderRef.current = null;
-    }
-
-    try {
-      let mimeType = "audio/webm;codecs=opus";
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
-      }
-
-      const runRecordingCycle = () => {
-        if (
-          isMutedRef.current ||
-          isDeafenedRef.current ||
-          isSuspendedRef.current ||
-          !currentVoiceChannelIdRef.current
-        ) {
-          whisperAudioIntervalRef.current = window.setTimeout(runRecordingCycle, 1000);
-          return;
-        }
-
-        try {
-          const chunks: Blob[] = [];
-          const recorder = new MediaRecorder(whisperStream, {
-            mimeType,
-            audioBitsPerSecond: 32000,
-          });
-
-          recorder.ondataavailable = (e) => {
-            if (e.data && e.data.size > 0) {
-              chunks.push(e.data);
-            }
-          };
-
-          recorder.onstop = () => {
-            if (
-              !isMutedRef.current &&
-              !isDeafenedRef.current &&
-              !isSuspendedRef.current &&
-              currentVoiceChannelIdRef.current &&
-              recentMaxEnergyRef.current >= 1.0 &&
-              chunks.length > 0 &&
-              !isAnalyzingAudioRef.current
-            ) {
-              const audioBlob = new Blob(chunks, { type: mimeType });
-              recentMaxEnergyRef.current = 0;
-
-              if (audioBlob.size >= 1000) {
-                isAnalyzingAudioRef.current = true;
-                const reader = new FileReader();
-                reader.onloadend = async () => {
-                  try {
-                    const rawResult = reader.result as string;
-                    const base64 = rawResult.split(",")[1];
-                    if (!base64) return;
-
-                    const res = await fetch("/api/chat/voice-moderate-audio", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        audio: base64,
-                        mimeType,
-                      }),
-                    });
-
-                    if (res.ok) {
-                      const data = await res.json();
-                      if (data.isViolating && data.matchedWord && !isSuspendedRef.current) {
-                        triggerVoiceSuspensionRef.current(data.matchedWord, data.category);
-                      }
-                    }
-                  } catch (e) {
-                    console.warn("Whisper audio moderation warning:", e);
-                  } finally {
-                    isAnalyzingAudioRef.current = false;
-                  }
-                };
-                reader.readAsDataURL(audioBlob);
-              }
-            }
-
-            // Schedule next cycle immediately
-            if (
-              !isMutedRef.current &&
-              !isDeafenedRef.current &&
-              !isSuspendedRef.current &&
-              currentVoiceChannelIdRef.current
-            ) {
-              whisperAudioIntervalRef.current = window.setTimeout(runRecordingCycle, 150);
-            }
-          };
-
-          recorder.start();
-          mediaRecorderRef.current = recorder;
-
-          // Record 2.2 seconds slice then stop to produce complete valid WebM header
-          window.setTimeout(() => {
-            try {
-              if (recorder.state === "recording") {
-                recorder.stop();
-              }
-            } catch {}
-          }, 2200);
-        } catch (err) {
-          whisperAudioIntervalRef.current = window.setTimeout(runRecordingCycle, 1200);
-        }
-      };
-
-      runRecordingCycle();
-    } catch (err) {
-      console.warn("Could not start whisper audio recorder:", err);
-    }
-  }, []);
 
   // WebRTC Signal Sender
   const sendSignal = useCallback(async (targetPeerId: string, signalData: any) => {
@@ -1232,27 +884,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     if (!currentUser) return;
     setVoiceError(null);
 
-    // Voice Moderation: Block joining voice channels if currently suspended
-    if (isSuspendedRef.current || suspensionTimeLeft > 0) {
-      const word = suspensionWordRef.current || "prohibited word";
-      const cat =
-        suspensionCategoryRef.current ||
-        categorizeProfanity(word) ||
-        "Derogatory & Prohibited Language";
-      const errorMsg = `You Have been suspended for violating moderation. Offensive Item: "${word}" (${cat}). Voice chat suspended: ${suspensionTimeLeft}s remaining.`;
-      setVoiceError(errorMsg);
-      if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        try {
-          window.speechSynthesis.cancel();
-          window.speechSynthesis.speak(
-            new SpeechSynthesisUtterance(
-              `You Have been suspended for violating moderation. Offensive item: ${word}. Violation type: ${cat}.`,
-            ),
-          );
-        } catch {}
-      }
-      return;
-    }
 
     try {
       cleanupVoice();
@@ -1329,15 +960,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       currentVoiceChannelIdRef.current = voiceChannelId;
       setCurrentVoiceChannelId(voiceChannelId);
 
-      // Start continuous voice moderation recognition IMMEDIATELY on active unmuted microphone
-      if (!isMuted && !isDeafened && !isSuspendedRef.current) {
-        startSpeechRecognitionModeration();
-        if (whisperBoosterStreamRef.current) {
-          startAudioWhisperModeration(whisperBoosterStreamRef.current);
-        }
-      }
-
-      // Voice presence update in Firestore (runs asynchronously in background without blocking moderation)
+      // Voice presence update in Firestore (runs asynchronously in background)
       updateDoc(doc(db, "users", currentUser.id), {
         currentVoiceChannelId: voiceChannelId,
         isMuted,
@@ -1398,11 +1021,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           speechRecognitionRef.current.abort();
         } catch {}
       }
-    } else if (!isDeafened && !isSuspended && currentVoiceChannelIdRef.current) {
-      startSpeechRecognitionModeration();
-      if (whisperBoosterStreamRef.current) {
-        startAudioWhisperModeration(whisperBoosterStreamRef.current);
-      }
     }
   };
 
@@ -1431,11 +1049,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
           speechRecognitionRef.current.abort();
         } catch {}
       }
-    } else if (!isMuted && !isSuspended && currentVoiceChannelIdRef.current) {
-      startSpeechRecognitionModeration();
-      if (whisperBoosterStreamRef.current) {
-        startAudioWhisperModeration(whisperBoosterStreamRef.current);
-      }
     }
   };
 
@@ -1454,12 +1067,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     isMuted,
     isDeafened,
     isSelfSpeaking,
-    isSuspended,
-    suspensionTimeLeft,
-    suspensionAction,
-    suspensionWord,
-    suspensionCategory,
-    triggerVoiceSuspension,
     micLevel,
     notificationPermission,
     requestNotificationPermission,
