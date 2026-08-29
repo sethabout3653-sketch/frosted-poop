@@ -3,7 +3,7 @@ import { Curl, CurlFeature } from "node-libcurl";
 
 const router = Router();
 
-let TARGET_URL = "https://myinstants.com";
+const TARGET_URL = "https://myinstants.com";
 
 function getTargetDetails(inputUrl?: string) {
   let raw = (inputUrl || TARGET_URL).trim();
@@ -11,14 +11,14 @@ function getTargetDetails(inputUrl?: string) {
     raw = `https://${raw}`;
   }
   raw = raw.replace(/\/+$/, "");
-  
+
   let origin = raw;
   try {
     origin = new URL(raw).origin;
   } catch {
     /* silent fallback */
   }
-  
+
   return {
     baseUrl: raw,
     origin,
@@ -31,7 +31,7 @@ const USER_AGENTS = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/122.0",
-  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1"
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
 ];
 
 function getRandomUserAgent() {
@@ -55,28 +55,38 @@ function parseMyinstantsHtml(
     color: string;
     category: string;
   }> = [];
-  
+
   const vibrantColors = [
-    "#f43f5e", "#8b5cf6", "#06b6d4", "#eab308",
-    "#ef4444", "#10b981", "#6366f1", "#ec4899",
-    "#a855f7", "#3b82f6", "#f97316", "#14b8a6",
+    "#f43f5e",
+    "#8b5cf6",
+    "#06b6d4",
+    "#eab308",
+    "#ef4444",
+    "#10b981",
+    "#6366f1",
+    "#ec4899",
+    "#a855f7",
+    "#3b82f6",
+    "#f97316",
+    "#14b8a6",
   ];
-  
+
   try {
     // Original parsing logic
-    const buttonRegex = /<div\s+class="instant[^"]*"[^>]*>\s*<a\s+class="instant-link[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+    const buttonRegex =
+      /<div\s+class="instant[^"]*"[^>]*>\s*<a\s+class="instant-link[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
     const onclickRegex = /play\s*\(\s*['"]([^'"]+)['"]/gi;
-    
+
     const titles: string[] = [];
     const mp3s: string[] = [];
     const links: string[] = [];
-    
+
     let match;
     while ((match = buttonRegex.exec(html)) !== null) {
       links.push(match[1]);
       titles.push(match[2].replace(/<[^>]+>/g, "").trim());
     }
-    
+
     while ((match = onclickRegex.exec(html)) !== null) {
       let mp3 = match[1];
       if (mp3.startsWith("/")) {
@@ -84,12 +94,12 @@ function parseMyinstantsHtml(
       }
       mp3s.push(mp3);
     }
-    
+
     const count = Math.min(titles.length, mp3s.length, links.length);
     for (let i = 0; i < count; i++) {
       const id = links[i].split("/").filter(Boolean).pop() || `sound-${i}`;
       const color = vibrantColors[i % vibrantColors.length];
-      
+
       items.push({
         id,
         title: titles[i],
@@ -98,11 +108,10 @@ function parseMyinstantsHtml(
         category: "Instant",
       });
     }
-    
   } catch (err) {
     console.error("Error parsing target HTML:", err);
   }
-  
+
   return items;
 }
 
@@ -111,97 +120,102 @@ function parseMyinstantsHtml(
 router.all("/scramjet-proxy", async (req: Request, res: Response) => {
   const target = (req.query.target as string) || TARGET_URL;
   const { origin, referer } = getTargetDetails(target);
-  
+
   try {
     const stealthHeaders = {
       "User-Agent": getRandomUserAgent(),
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
       "Accept-Language": "en-US,en;q=0.9",
-      "Referer": referer,
-      "Origin": origin,
-      "DNT": "1",
-      "Connection": "keep-alive",
+      Referer: referer,
+      Origin: origin,
+      DNT: "1",
+      Connection: "keep-alive",
       "Upgrade-Insecure-Requests": "1",
       "Sec-Fetch-Dest": "document",
       "Sec-Fetch-Mode": "navigate",
       "Sec-Fetch-Site": "same-origin",
       "Sec-Fetch-User": "?1",
       "Cache-Control": "max-age=0",
-      "Pragma": "no-cache"
+      Pragma: "no-cache",
     };
-    
-    const { finalUrl, contentType, contentBuffer, status } = await new Promise<any>((resolve, reject) => {
-      const curl = new Curl();
-      curl.setOpt('URL', target);
-      curl.setOpt('FOLLOWLOCATION', true);
-      curl.setOpt('MAXREDIRS', 5);
-      curl.setOpt('SSL_VERIFYPEER', false);
-      curl.setOpt('ACCEPT_ENCODING', '');
-      curl.setOpt('TIMEOUT', 15); // Maximum time for a request (fixes infinite loading)
-      curl.setOpt('CONNECTTIMEOUT', 5); // Connect timeout
-      
-      if (req.method !== 'GET') {
-        curl.setOpt('CUSTOMREQUEST', req.method);
-      }
 
-      const curlHeaders = Object.entries(stealthHeaders).map(([k, v]) => `${k}: ${v}`);
-      curl.setOpt('HTTPHEADER', curlHeaders);
+    const { finalUrl, contentType, contentBuffer, status } = await new Promise<any>(
+      (resolve, reject) => {
+        const curl = new Curl();
+        curl.setOpt("URL", target);
+        curl.setOpt("FOLLOWLOCATION", true);
+        curl.setOpt("MAXREDIRS", 5);
+        curl.setOpt("SSL_VERIFYPEER", false);
+        curl.setOpt("ACCEPT_ENCODING", "");
+        curl.setOpt("TIMEOUT", 15); // Maximum time for a request (fixes infinite loading)
+        curl.setOpt("CONNECTTIMEOUT", 5); // Connect timeout
 
-      curl.enable(CurlFeature.NoStorage);
+        if (req.method !== "GET") {
+          curl.setOpt("CUSTOMREQUEST", req.method);
+        }
 
-      const chunks: Buffer[] = [];
-      curl.on('data', function (chunk) {
-        chunks.push(chunk);
-        return chunk.length;
-      });
+        const curlHeaders = Object.entries(stealthHeaders).map(([k, v]) => `${k}: ${v}`);
+        curl.setOpt("HTTPHEADER", curlHeaders);
 
-      curl.on('end', function (statusCode, _data, responseHeaders) {
-        const finalUrl = this.getInfo(Curl.info.EFFECTIVE_URL) as string;
-        const contentType = this.getInfo(Curl.info.CONTENT_TYPE) as string;
-        const buf = Buffer.concat(chunks);
-        this.close();
-        resolve({ finalUrl, contentType, contentBuffer: buf, status: statusCode });
-      });
+        curl.enable(CurlFeature.NoStorage);
 
-      curl.on('error', function (err) {
-        this.close();
-        reject(err);
-      });
+        const chunks: Buffer[] = [];
+        curl.on("data", function (chunk) {
+          chunks.push(chunk);
+          return chunk.length;
+        });
 
-      curl.perform();
-    });
-    
+        curl.on("end", function (statusCode, _data, responseHeaders) {
+          const finalUrl = this.getInfo(Curl.info.EFFECTIVE_URL) as string;
+          const contentType = this.getInfo(Curl.info.CONTENT_TYPE) as string;
+          const buf = Buffer.concat(chunks);
+          this.close();
+          resolve({ finalUrl, contentType, contentBuffer: buf, status: statusCode });
+        });
+
+        curl.on("error", function (err) {
+          this.close();
+          reject(err);
+        });
+
+        curl.perform();
+      },
+    );
+
     res.status(status || 200);
 
-    if (typeof contentType === 'string' && !contentType.includes("text/html")) {
+    if (typeof contentType === "string" && !contentType.includes("text/html")) {
       res.setHeader("Access-Control-Allow-Origin", "*");
       if (contentType) res.setHeader("Content-Type", contentType);
       return res.send(contentBuffer);
     }
-    
-    let content = contentBuffer.toString('utf-8');
-    
+
+    let content = contentBuffer.toString("utf-8");
+
     // Remove all meta refresh tags completely
-    content = content.replace(/<meta[^>]*http-equiv\s*=\s*["']?refresh["']?[^>]*>/gi, '');
-    
+    content = content.replace(/<meta[^>]*http-equiv\s*=\s*["']?refresh["']?[^>]*>/gi, "");
+
     // Remove CSP meta tags that could contain frame-ancestors or block our scripts
-    content = content.replace(/<meta[^>]*http-equiv\s*=\s*["']?Content-Security-Policy["']?[^>]*>/gi, '');
-    
+    content = content.replace(
+      /<meta[^>]*http-equiv\s*=\s*["']?Content-Security-Policy["']?[^>]*>/gi,
+      "",
+    );
+
     // Strip subresource integrity and crossorigin constraints so proxied assets don't fail CORS
-    content = content.replace(/\bintegrity=["'][^"']*["']/gi, '');
-    content = content.replace(/\bcrossorigin=["']?(?:anonymous|use-credentials)?["']?/gi, '');
-    
+    content = content.replace(/\bintegrity=["'][^"']*["']/gi, "");
+    content = content.replace(/\bcrossorigin=["']?(?:anonymous|use-credentials)?["']?/gi, "");
+
     // More aggressive anti-framebusting
-    content = content.replace(/top\.location/g, 'window.self.location');
-    content = content.replace(/parent\.location/g, 'window.self.location');
-    content = content.replace(/window\.top/g, 'window.self');
-    content = content.replace(/window\.parent/g, 'window.self');
-    content = content.replace(/if\s*\(top\s*!=\s*self\)/g, 'if(false)');
-    content = content.replace(/if\s*\(parent\s*!=\s*self\)/g, 'if(false)');
-    
+    content = content.replace(/top\.location/g, "window.self.location");
+    content = content.replace(/parent\.location/g, "window.self.location");
+    content = content.replace(/window\.top/g, "window.self");
+    content = content.replace(/window\.parent/g, "window.self");
+    content = content.replace(/if\s*\(top\s*!=\s*self\)/g, "if(false)");
+    content = content.replace(/if\s*\(parent\s*!=\s*self\)/g, "if(false)");
+
     // Fix base URL
     const baseUrl = finalUrl.endsWith("/") ? finalUrl : `${finalUrl}/`;
-    
+
     // Enhanced proxy script with better interception
     const proxyScript = `
 <script>
@@ -403,10 +417,10 @@ console.error = function() {
 };
 </script>
     `;
-    
+
     // Inject into head
     const headInjection = `<head><base href="${baseUrl}">${proxyScript}`;
-    
+
     if (content.toLowerCase().includes("<head>")) {
       content = content.replace(/<head>/i, headInjection);
     } else if (content.toLowerCase().includes("<head ")) {
@@ -414,17 +428,16 @@ console.error = function() {
     } else {
       content = `${headInjection}</head>${content}`;
     }
-    
+
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("X-Frame-Options", "ALLOWALL");
     res.send(content);
-    
   } catch (err: any) {
     console.error("Proxy error:", err);
-    res.status(500).json({ 
+    res.status(500).json({
       error: err.message,
-      note: "Target site might be actively blocking proxies. Try different user agents."
+      note: "Target site might be actively blocking proxies. Try different user agents.",
     });
   }
 });

@@ -21,10 +21,10 @@ import {
 import type { Channel, ChatMessage, User } from "@/types/chat";
 import { notificationManager } from "../../lib/notifications";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { GiphyFetch } from '@giphy/js-fetch-api';
-import { Grid } from '@giphy/react-components';
+import { GiphyFetch } from "@giphy/js-fetch-api";
+import { Grid } from "@giphy/react-components";
 
-const gf = new GiphyFetch('Gc7131jiJuvI7IdN0HZ1D7nh0ow5BU6g');
+const gf = new GiphyFetch("Gc7131jiJuvI7IdN0HZ1D7nh0ow5BU6g");
 
 interface Props {
   activeChannel: Channel | undefined;
@@ -99,7 +99,9 @@ export function DiscordMessageArea({
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchGifs = (offset: number) => {
-    return gifSearch ? gf.search(gifSearch, { offset, limit: 10 }) : gf.trending({ offset, limit: 10 });
+    return gifSearch
+      ? gf.search(gifSearch, { offset, limit: 10 })
+      : gf.trending({ offset, limit: 10 });
   };
 
   const onGifClick = (gif: any, e: React.SyntheticEvent<HTMLElement, Event>) => {
@@ -264,13 +266,13 @@ export function DiscordMessageArea({
           {/* Search bar matching the image */}
           <div className="flex items-center gap-2 rounded bg-[#090909] px-2 py-1.5 border border-neutral-800 hidden sm:flex">
             <Search className="h-3.5 w-3.5 text-neutral-500" />
-            <input 
-              type="text" 
-              placeholder="Search messages" 
+            <input
+              type="text"
+              placeholder="Search messages"
               className="w-40 bg-transparent text-xs text-neutral-200 outline-none placeholder:text-neutral-500"
             />
           </div>
-          
+
           <button
             onClick={onToggleUserList}
             title="Toggle Member List"
@@ -659,7 +661,7 @@ export function DiscordMessageArea({
               >
                 <ImageIcon className="h-4 w-4" />
               </button>
-              
+
               <Popover open={showGifPicker} onOpenChange={setShowGifPicker}>
                 <PopoverTrigger asChild>
                   <button
@@ -670,24 +672,29 @@ export function DiscordMessageArea({
                     GIF
                   </button>
                 </PopoverTrigger>
-                <PopoverContent side="top" align="end" className="w-80 p-0 bg-[#090909] border-neutral-800" sideOffset={16}>
+                <PopoverContent
+                  side="top"
+                  align="end"
+                  className="w-80 p-0 bg-[#090909] border-neutral-800"
+                  sideOffset={16}
+                >
                   <div className="p-2 border-b border-neutral-800">
-                    <input 
-                      type="text" 
-                      placeholder="Search Giphy..." 
+                    <input
+                      type="text"
+                      placeholder="Search Giphy..."
                       value={gifSearch}
                       onChange={(e) => setGifSearch(e.target.value)}
                       className="w-full bg-[#141414] text-sm text-neutral-200 outline-none rounded px-2 py-1 placeholder:text-neutral-500 border border-neutral-800 focus:border-neutral-600 transition-colors"
                     />
                   </div>
                   <div className="h-64 overflow-y-auto p-1 custom-scrollbar">
-                    <Grid 
-                      key={gifSearch} 
-                      fetchGifs={fetchGifs} 
-                      width={300} 
-                      columns={2} 
-                      gutter={4} 
-                      onGifClick={onGifClick} 
+                    <Grid
+                      key={gifSearch}
+                      fetchGifs={fetchGifs}
+                      width={300}
+                      columns={2}
+                      gutter={4}
+                      onGifClick={onGifClick}
                     />
                   </div>
                 </PopoverContent>

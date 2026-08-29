@@ -11,6 +11,7 @@
     "format": "prettier --write ."
   },
   "dependencies": {
+    "@d-exclaimation/seraph": "^0.1.0-beta.5",
     "@giphy/js-fetch-api": "^5.8.0",
     "@giphy/react-components": "^10.1.2",
     "@google/genai": "^2.19.0",
@@ -50,6 +51,7 @@
     "embla-carousel-react": "^8.6.0",
     "express": "^4.21.0",
     "firebase": "^12.18.0",
+    "gn-math-npm": "^1.0.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.575.0",
     "motion": "^13.1.0",

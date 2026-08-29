@@ -17,7 +17,15 @@
         "createdAt": { "type": "integer" },
         "lastSeen": { "type": "integer" }
       },
-      "required": ["id", "username", "displayName", "avatarColor", "status", "createdAt", "lastSeen"]
+      "required": [
+        "id",
+        "username",
+        "displayName",
+        "avatarColor",
+        "status",
+        "createdAt",
+        "lastSeen"
+      ]
     },
     "Message": {
       "title": "Message",
@@ -36,7 +44,16 @@
         "timestamp": { "type": "integer" },
         "reactions": { "type": "object" }
       },
-      "required": ["id", "channelId", "userId", "username", "displayName", "avatarColor", "content", "timestamp"]
+      "required": [
+        "id",
+        "channelId",
+        "userId",
+        "username",
+        "displayName",
+        "avatarColor",
+        "content",
+        "timestamp"
+      ]
     }
   },
   "firestore": {

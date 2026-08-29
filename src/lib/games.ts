@@ -1,7 +1,16 @@
 // Custom games list module
 // --- Existing code from your provided snippet ---
 export type GameCategory =
-  "all" | "popular" | "action" | "driving" | "sports" | "puzzle" | "retro" | "casual";
+  | "all"
+  | "popular"
+  | "action"
+  | "driving"
+  | "sports"
+  | "puzzle"
+  | "retro"
+  | "casual"
+  | "ckv"
+  | "lumin";
 
 export type Game = {
   id: number | string;
@@ -17,7 +26,10 @@ export type Game = {
 };
 
 export const GN_COVERS_CDN = "https://cdn.jsdelivr.net/gh/freebuisness/covers@main";
-export const GN_ZONES_URL = "https://cdn.jsdelivr.net/gh/freebuisness/assets@latest/zones.json";
+// Use the server-side proxy to avoid client-side CORS issues and blockages
+export const GN_ZONES_URL = "/api/public/gn/cdn/freebuisness/assets@latest/zones.json";
+export const SERAPH_DATA_URL = "/api/public/gn/gh/a456pur/seraph/main/storage/js/directories.json";
+export const CKV_DATA_URL = "https://raw.githubusercontent.com/WanoCapy/ChickenKingsVault/main/games.js";
 export const GN_GAME_PROXY = "/api/public/gn/game";
 
 export function gameEntry(directory: string) {
@@ -29,12 +41,18 @@ export function gameEntry(directory: string) {
   ) {
     return directory;
   }
+  if (directory.startsWith("gh/")) {
+    return `/api/public/gn/${directory}`;
+  }
   return `${GN_GAME_PROXY}/${directory}`;
 }
 
 export function gameCover(game: Game) {
   if (game.image && game.image.startsWith("http")) {
     return game.image;
+  }
+  if (game.image && (game.image.startsWith("/api/") || game.image.startsWith("gh/"))) {
+    return game.image.startsWith("gh/") ? `/api/public/gn/${game.image}` : game.image;
   }
   return `${GN_COVERS_CDN}/${game.id}.png`;
 }
@@ -52,7 +70,20 @@ function assignCategory(name: string): GameCategory {
     n.includes("retro bowl") ||
     n.includes("drift") ||
     n.includes("paper.io") ||
-    n.includes("basket")
+    n.includes("basket") ||
+    n.includes("ovo") ||
+    n.includes("temple run") ||
+    n.includes("stickman hook") ||
+    n.includes("jetpack") ||
+    n.includes("fnf") ||
+    n.includes("friday night") ||
+    n.includes("angry birds") ||
+    n.includes("cut the rope") ||
+    n.includes("among us") ||
+    n.includes("roblox") ||
+    n.includes("minecraft") ||
+    n.includes("bottle flip") ||
+    n.includes("happy wheels")
   ) {
     return "popular";
   }
@@ -64,7 +95,14 @@ function assignCategory(name: string): GameCategory {
     n.includes("racing") ||
     n.includes("kart") ||
     n.includes("bike") ||
-    n.includes("truck")
+    n.includes("truck") ||
+    n.includes("simulator") ||
+    n.includes("park") ||
+    n.includes("stunt") ||
+    n.includes("traffic") ||
+    n.includes("highway") ||
+    n.includes("taxi") ||
+    n.includes("bus")
   ) {
     return "driving";
   }
@@ -76,7 +114,15 @@ function assignCategory(name: string): GameCategory {
     n.includes("bowl") ||
     n.includes("tennis") ||
     n.includes("pool") ||
-    n.includes("sports")
+    n.includes("sports") ||
+    n.includes("baseball") ||
+    n.includes("hockey") ||
+    n.includes("billiard") ||
+    n.includes("skate") ||
+    n.includes("surf") ||
+    n.includes("box") ||
+    n.includes("wrestle") ||
+    n.includes("ufc")
   ) {
     return "sports";
   }
@@ -89,7 +135,15 @@ function assignCategory(name: string): GameCategory {
     n.includes("bullet") ||
     n.includes("gun") ||
     n.includes("zombie") ||
-    n.includes("action")
+    n.includes("action") ||
+    n.includes("sniper") ||
+    n.includes("assassin") ||
+    n.includes("battle") ||
+    n.includes("strike") ||
+    n.includes("army") ||
+    n.includes("hero") ||
+    n.includes("adventure") ||
+    n.includes("quest")
   ) {
     return "action";
   }
@@ -103,7 +157,12 @@ function assignCategory(name: string): GameCategory {
     n.includes("atari") ||
     n.includes("classic") ||
     n.includes("zelda") ||
-    n.includes("pokemon")
+    n.includes("pokemon") ||
+    n.includes("pixel") ||
+    n.includes("8-bit") ||
+    n.includes("nes") ||
+    n.includes("snes") ||
+    n.includes("gameboy")
   ) {
     return "retro";
   }
@@ -112,11 +171,19 @@ function assignCategory(name: string): GameCategory {
     n.includes("sudoku") ||
     n.includes("chess") ||
     n.includes("checkers") ||
-    n.includes("cut the rope") ||
     n.includes("word") ||
     n.includes("puzzle") ||
     n.includes("block") ||
-    n.includes("math")
+    n.includes("math") ||
+    n.includes("logic") ||
+    n.includes("brain") ||
+    n.includes("match 3") ||
+    n.includes("tile") ||
+    n.includes("connect") ||
+    n.includes("escape") ||
+    n.includes("maze") ||
+    n.includes("quiz") ||
+    n.includes("trivia")
   ) {
     return "puzzle";
   }
@@ -146,16 +213,22 @@ export async function fetchGames(): Promise<Game[]> {
       "https://play-lh.googleusercontent.com/QbPwdx7u46tJLd6SBJ6cCPajEKgiA620fYNSZb1VsdlKIBPs4m6itZRDmu9SWPo8vbV77H1H42cNefPDtoYM",
     category: "popular",
     featured: true,
-    plays: 99999,
-    rating: 5.0,
+    plays: 50000,
+    rating: 4.8,
   };
 
+  const results: Game[] = [customGame];
+
   try {
-    const res = await fetch(GN_ZONES_URL);
-    if (res.ok) {
-      const rawData = await res.json();
+    const gnRes = await fetch(GN_ZONES_URL).catch((err) => {
+      console.error("GN fetch error:", err);
+      return null;
+    });
+
+    if (gnRes && gnRes.ok) {
+      const rawData = await gnRes.json();
       if (Array.isArray(rawData)) {
-        const fetchedGames = rawData
+        const gnGames = rawData
           .filter(
             (item: Record<string, unknown>) =>
               item && typeof item.id === "number" && item.id >= 0 && item.url && item.name,
@@ -187,13 +260,123 @@ export async function fetchGames(): Promise<Game[]> {
               rating: Number((4.5 + Math.random() * 0.4).toFixed(1)),
             };
           });
-        return [customGame, ...fetchedGames];
+        results.push(...gnGames);
+      }
+    }
+
+    // Fetch Seraph Games
+    const seraphRes = await fetch(SERAPH_DATA_URL).catch((err) => {
+      console.error("Seraph fetch error:", err);
+      return null;
+    });
+
+    if (seraphRes && seraphRes.ok) {
+      const seraphData = await seraphRes.json();
+      if (typeof seraphData === "object" && seraphData !== null) {
+        const seraphGames = Object.entries(seraphData).map(([key, data]: [string, any]) => {
+          // Key is like "slope/index.html"
+          const name = key
+            .split("/")[0]
+            .replace(/-/g, " ")
+            .replace(/\b\w/g, (l) => l.toUpperCase());
+          const category = assignCategory(name);
+
+          return {
+            id: `seraph-${key}`,
+            name,
+            directory: `gh/a456pur/seraph/main/games/${key}`,
+            image: `gh/a456pur/seraph/main${data.thumbnail}`,
+            category,
+            featured: FEATURED_GAME_IDS.some((fid) => name.toLowerCase().includes(fid)),
+            plays: Math.floor(Math.random() * 30000) + 5000,
+            rating: Number((4.3 + Math.random() * 0.6).toFixed(1)),
+          };
+        });
+        results.push(...seraphGames);
+      }
+    }
+
+    // Fetch CKV Games
+    const ckvRes = await fetch(CKV_DATA_URL).catch((err) => {
+      console.error("CKV fetch error:", err);
+      return null;
+    });
+
+    if (ckvRes && ckvRes.ok) {
+      const ckvHtml = await ckvRes.text();
+      // Match <a class="game-link" href="gamefiles/fnaf3.html"> <img src="gameimages/fnaf3.jpg" alt="Five Nights at Freddy's 3 Cover"> <div>Five Nights at Freddy's 3</div></a>
+      const regex = /<a class="game-link" href="([^"]+)">\s*<img src="([^"]+)" alt="([^"]*)">\s*<div>([^<]+)<\/div><\/a>/g;
+      let match;
+      const ckvGames: Game[] = [];
+      while ((match = regex.exec(ckvHtml)) !== null) {
+        const [, href, imgSrc, , title] = match;
+        ckvGames.push({
+          id: `ckv-${href}`,
+          name: title.trim(),
+          directory: `gh/WanoCapy/ChickenKingsVault/main/${href}`,
+          image: `gh/WanoCapy/ChickenKingsVault/main/${imgSrc}`,
+          category: "ckv",
+          featured: FEATURED_GAME_IDS.some((fid) => title.toLowerCase().includes(fid)),
+          plays: Math.floor(Math.random() * 20000) + 8000,
+          rating: Number((4.4 + Math.random() * 0.5).toFixed(1)),
+        });
+      }
+      results.push(...ckvGames);
+    }
+
+    // Fetch Lumin Games
+    if (typeof window !== "undefined") {
+      let luminEngine = (window as any).LuminEngine;
+
+      // Wait a bit for initialization if needed
+      if (!luminEngine) {
+        for (let i = 0; i < 50; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          // Check if it's ready AND it's a constructor
+          if ((window as any).Lumin && typeof (window as any).Lumin === "function") {
+            // It might already be initialized by main.tsx
+            luminEngine = (window as any).LuminEngine;
+            if (luminEngine) break;
+
+            // If not initialized yet, do it here if possible (as a backup)
+            try {
+              (window as any).LuminEngine = new (window as any).Lumin({
+                provider: "gn-math-mirror",
+                fallbackProxy: "https://cherrion.top",
+                sandboxMode: false,
+              });
+              luminEngine = (window as any).LuminEngine;
+              break;
+            } catch (e) {
+              // Not a constructor yet or failed
+            }
+          }
+        }
+      }
+
+      if (luminEngine && typeof luminEngine.fetchGames === "function") {
+        try {
+          const luminGamesRaw = await luminEngine.fetchGames();
+          if (Array.isArray(luminGamesRaw)) {
+            const luminGames: Game[] = luminGamesRaw.map((game: any) => ({
+              id: `lumin-${game.id}`,
+              name: game.title,
+              directory: `lumin-id-${game.id}`,
+              image: game.icon,
+              category: "lumin",
+              plays: Math.floor(Math.random() * 40000) + 10000,
+              rating: Number((4.6 + Math.random() * 0.3).toFixed(1)),
+            }));
+            results.push(...luminGames);
+          }
+        } catch (err) {
+          console.error("Failed to stream inventory from Lumin engine:", err);
+        }
       }
     }
   } catch (err) {
-    console.error("Failed to fetch gn-math games:", err);
+    console.error("Failed to fetch games list:", err);
   }
 
-  // If fetch fails, return the custom games
-  return [customGame];
+  return results;
 }

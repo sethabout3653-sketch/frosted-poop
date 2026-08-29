@@ -74,9 +74,9 @@ export function DiscordChannelSidebar({
       <div className="flex h-12 items-center border-b border-neutral-900 px-4 bg-[#000000]">
         <div className="flex flex-1 items-center gap-2 rounded bg-[#090909] px-2 py-1.5 border border-neutral-800">
           <Search className="h-3.5 w-3.5 text-neutral-500" />
-          <input 
-            type="text" 
-            placeholder="Find a channel" 
+          <input
+            type="text"
+            placeholder="Find a channel"
             className="w-full bg-transparent text-xs text-neutral-200 outline-none placeholder:text-neutral-500"
           />
         </div>

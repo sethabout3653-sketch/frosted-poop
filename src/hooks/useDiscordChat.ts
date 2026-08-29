@@ -364,8 +364,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     triggerVoiceSuspensionRef.current = triggerVoiceSuspension;
   }, [triggerVoiceSuspension]);
 
-
-
   // WebRTC Signal Sender
   const sendSignal = useCallback(async (targetPeerId: string, signalData: any) => {
     if (!currentUserRef.current) return;
@@ -883,7 +881,6 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const joinVoiceChannel = async (voiceChannelId: string) => {
     if (!currentUser) return;
     setVoiceError(null);
-
 
     try {
       cleanupVoice();
