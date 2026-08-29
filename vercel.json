@@ -8,7 +8,23 @@
       "destination": "/api/index.ts"
     },
     {
-      "source": "/((?!api/|assets/|public/|.*\\..*).*)",
+      "source": "/public/(.*)",
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/game/(.*)",
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/chat/(.*)",
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/soundboard/(.*)",
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/((?!api/|public/|game/|chat/|soundboard/|assets/|.*\\..*).*)",
       "destination": "/index.html"
     }
   ]
