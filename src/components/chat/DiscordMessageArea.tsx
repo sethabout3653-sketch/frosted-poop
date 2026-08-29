@@ -24,7 +24,7 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import { GiphyFetch } from '@giphy/js-fetch-api';
 import { Grid } from '@giphy/react-components';
 
-const gf = new GiphyFetch('sXpGFDGZs0Dv1mmzVvHXpz8vIGTGLcgU');
+const gf = new GiphyFetch('Gc7131jiJuvI7IdN0HZ1D7nh0ow5BU6g');
 
 interface Props {
   activeChannel: Channel | undefined;
