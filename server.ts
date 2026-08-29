@@ -4,6 +4,7 @@ import http from "http";
 import { createServer as createViteServer } from "vite";
 import gameProxy from "./src/server/gameProxy.js";
 import { chatRouter } from "./src/server/chatServer.js";
+import soundboardRouter from "./src/server/soundboardProxy.js";
 
 async function startServer() {
   const app = express();
@@ -22,6 +23,7 @@ async function startServer() {
   // Attach API routes
   app.use("/api/public", gameProxy);
   app.use("/api/chat", chatRouter);
+  app.use("/api/soundboard", soundboardRouter);
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {

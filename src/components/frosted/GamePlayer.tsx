@@ -55,6 +55,10 @@ export function GamePlayer({
 
     async function initAndLoad() {
       if (cancelled) return;
+      if (game.id === "soundboard") {
+        setActiveSrc("/api/soundboard/scramjet-proxy");
+        return;
+      }
       const result = await loadGameSource(game.directory);
       if (cancelled) {
         if (result.blobUrl) URL.revokeObjectURL(result.blobUrl);
@@ -117,6 +121,14 @@ export function GamePlayer({
   const handleReload = () => {
     setIsReloading(true);
     setIframeLoading(true);
+    if (game.id === "soundboard") {
+      setActiveSrc("");
+      setTimeout(() => {
+        setActiveSrc("/api/soundboard/scramjet-proxy");
+        setIsReloading(false);
+      }, 100);
+      return;
+    }
     if (currentBlobUrlRef.current) {
       URL.revokeObjectURL(currentBlobUrlRef.current);
       currentBlobUrlRef.current = null;
@@ -237,6 +249,7 @@ export function GamePlayer({
             onLoad={() => setIframeLoading(false)}
             className="h-full w-full border-0 bg-black"
             allow="fullscreen; autoplay; gamepad; pointer-lock; clipboard-write; encrypted-media"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
           />
         </div>
       </div>

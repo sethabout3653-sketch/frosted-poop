@@ -127,7 +127,7 @@ export function FrostedApp() {
           {activeGame ? (
             <GamePlayer
               game={activeGame}
-              onBack={() => setActiveGame(null)}
+              onBack={handleHome}
               onSelectGame={handleSelectGame}
               allGames={gamesList}
               favorites={favorites}
