@@ -2,6 +2,7 @@ import express from "express";
 import Stripe from "stripe";
 import gameProxy from "../src/server/gameProxy";
 import { chatRouter } from "../src/server/chatServer";
+import soundboardRouter from "../src/server/soundboardProxy";
 
 // Initialize Stripe gracefully
 let stripeClient: Stripe | null = null;
@@ -135,10 +136,14 @@ app.use("/api/public", gameProxy);
 app.use("/public", gameProxy);
 app.use(gameProxy);
 
-// 8. Direct router fallback if path was stripped (e.g. /join, /state, /me)
+// 8. Mount Soundboard Proxy
+app.use("/api/soundboard", soundboardRouter);
+app.use("/soundboard", soundboardRouter);
+
+// 9. Direct router fallback if path was stripped (e.g. /join, /state, /me)
 app.use(chatRouter);
 
-// 9. Error Handler
+// 10. Error Handler
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error("Serverless Function Error:", err);
   if (res.headersSent) return;

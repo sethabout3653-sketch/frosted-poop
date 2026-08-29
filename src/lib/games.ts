@@ -29,7 +29,7 @@ export const GN_COVERS_CDN = "https://cdn.jsdelivr.net/gh/freebuisness/covers@ma
 // Use the server-side proxy to avoid client-side CORS issues and blockages
 export const GN_ZONES_URL = "/api/public/gn/cdn/freebuisness/assets@latest/zones.json";
 export const SERAPH_DATA_URL = "/api/public/gn/gh/a456pur/seraph/main/storage/js/directories.json";
-export const CKV_DATA_URL = "https://raw.githubusercontent.com/WanoCapy/ChickenKingsVault/main/games.js";
+export const CKV_DATA_URL = "/api/public/gn/gh/WanoCapy/ChickenKingsVault/main/games.js";
 export const GN_GAME_PROXY = "/api/public/gn/game";
 
 export function gameEntry(directory: string) {
@@ -305,7 +305,8 @@ export async function fetchGames(): Promise<Game[]> {
     if (ckvRes && ckvRes.ok) {
       const ckvHtml = await ckvRes.text();
       // Match <a class="game-link" href="gamefiles/fnaf3.html"> <img src="gameimages/fnaf3.jpg" alt="Five Nights at Freddy's 3 Cover"> <div>Five Nights at Freddy's 3</div></a>
-      const regex = /<a class="game-link" href="([^"]+)">\s*<img src="([^"]+)" alt="([^"]*)">\s*<div>([^<]+)<\/div><\/a>/g;
+      const regex =
+        /<a class="game-link" href="([^"]+)">\s*<img src="([^"]+)" alt="([^"]*)">\s*<div>([^<]+)<\/div><\/a>/g;
       let match;
       const ckvGames: Game[] = [];
       while ((match = regex.exec(ckvHtml)) !== null) {

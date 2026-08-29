@@ -1,5 +1,4 @@
 import { Router, Request, Response } from "express";
-import { Curl, CurlFeature } from "node-libcurl";
 
 const router = Router();
 
@@ -38,83 +37,6 @@ function getRandomUserAgent() {
   return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 }
 
-function parseMyinstantsHtml(
-  html: string,
-  targetBaseUrl: string,
-): Array<{
-  id: string;
-  title: string;
-  mp3: string;
-  color: string;
-  category: string;
-}> {
-  const items: Array<{
-    id: string;
-    title: string;
-    mp3: string;
-    color: string;
-    category: string;
-  }> = [];
-
-  const vibrantColors = [
-    "#f43f5e",
-    "#8b5cf6",
-    "#06b6d4",
-    "#eab308",
-    "#ef4444",
-    "#10b981",
-    "#6366f1",
-    "#ec4899",
-    "#a855f7",
-    "#3b82f6",
-    "#f97316",
-    "#14b8a6",
-  ];
-
-  try {
-    // Original parsing logic
-    const buttonRegex =
-      /<div\s+class="instant[^"]*"[^>]*>\s*<a\s+class="instant-link[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
-    const onclickRegex = /play\s*\(\s*['"]([^'"]+)['"]/gi;
-
-    const titles: string[] = [];
-    const mp3s: string[] = [];
-    const links: string[] = [];
-
-    let match;
-    while ((match = buttonRegex.exec(html)) !== null) {
-      links.push(match[1]);
-      titles.push(match[2].replace(/<[^>]+>/g, "").trim());
-    }
-
-    while ((match = onclickRegex.exec(html)) !== null) {
-      let mp3 = match[1];
-      if (mp3.startsWith("/")) {
-        mp3 = `${targetBaseUrl}${mp3}`;
-      }
-      mp3s.push(mp3);
-    }
-
-    const count = Math.min(titles.length, mp3s.length, links.length);
-    for (let i = 0; i < count; i++) {
-      const id = links[i].split("/").filter(Boolean).pop() || `sound-${i}`;
-      const color = vibrantColors[i % vibrantColors.length];
-
-      items.push({
-        id,
-        title: titles[i],
-        mp3: mp3s[i],
-        color,
-        category: "Instant",
-      });
-    }
-  } catch (err) {
-    console.error("Error parsing target HTML:", err);
-  }
-
-  return items;
-}
-
 // Routes remain the same until scramjet-proxy
 
 router.all("/scramjet-proxy", async (req: Request, res: Response) => {
@@ -139,48 +61,22 @@ router.all("/scramjet-proxy", async (req: Request, res: Response) => {
       Pragma: "no-cache",
     };
 
-    const { finalUrl, contentType, contentBuffer, status } = await new Promise<any>(
-      (resolve, reject) => {
-        const curl = new Curl();
-        curl.setOpt("URL", target);
-        curl.setOpt("FOLLOWLOCATION", true);
-        curl.setOpt("MAXREDIRS", 5);
-        curl.setOpt("SSL_VERIFYPEER", false);
-        curl.setOpt("ACCEPT_ENCODING", "");
-        curl.setOpt("TIMEOUT", 15); // Maximum time for a request (fixes infinite loading)
-        curl.setOpt("CONNECTTIMEOUT", 5); // Connect timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-        if (req.method !== "GET") {
-          curl.setOpt("CUSTOMREQUEST", req.method);
-        }
+    const response = await fetch(target, {
+      method: req.method,
+      headers: stealthHeaders,
+      redirect: "follow",
+      signal: controller.signal,
+    });
 
-        const curlHeaders = Object.entries(stealthHeaders).map(([k, v]) => `${k}: ${v}`);
-        curl.setOpt("HTTPHEADER", curlHeaders);
+    clearTimeout(timeoutId);
 
-        curl.enable(CurlFeature.NoStorage);
-
-        const chunks: Buffer[] = [];
-        curl.on("data", function (chunk) {
-          chunks.push(chunk);
-          return chunk.length;
-        });
-
-        curl.on("end", function (statusCode, _data, responseHeaders) {
-          const finalUrl = this.getInfo(Curl.info.EFFECTIVE_URL) as string;
-          const contentType = this.getInfo(Curl.info.CONTENT_TYPE) as string;
-          const buf = Buffer.concat(chunks);
-          this.close();
-          resolve({ finalUrl, contentType, contentBuffer: buf, status: statusCode });
-        });
-
-        curl.on("error", function (err) {
-          this.close();
-          reject(err);
-        });
-
-        curl.perform();
-      },
-    );
+    const status = response.status;
+    const finalUrl = response.url;
+    const contentType = response.headers.get("content-type");
+    const contentBuffer = Buffer.from(await response.arrayBuffer());
 
     res.status(status || 200);
 
