@@ -8,12 +8,23 @@ export interface AdSettings {
   adSlot?: string;
 }
 
-const AD_SETTINGS_KEY = "frosted_ad_settings_v6";
+const AD_SETTINGS_KEY = "frosted_ad_settings_v7";
 
 export const DEFAULT_AD_SETTINGS: AdSettings = {
   enabled: true,
   provider: "custom",
-  customScriptCode: `<script src="https://idealistic-revenue.com/bL3.V/0_Pa3bpfvbbrm/V/JgZgDn0L3MMtzTYp4AN/zlIW5eLyTZcrz_N-jYgS3jMRz/Mr" async data-cfasync="false"></script>`,
+  customScriptCode: `<script>
+(function(mfpva){
+var d = document,
+    s = d.createElement('script'),
+    l = d.scripts[d.scripts.length - 1];
+s.settings = mfpva || {};
+s.src = "//quarrelsomebitter.com/bGX/V.sEdoGIl/0/YJWdcK/neumE9/u/ZoUSllkQPsTJcCzCNMjYgv3KMezLcVtoNJz/M_2cO/DNcX0nMQQc";
+s.async = true;
+s.referrerPolicy = 'no-referrer-when-downgrade';
+l.parentNode.insertBefore(s, l);
+})({})
+</script>`,
   clientPublisherId: "",
   adSlot: "",
 };
