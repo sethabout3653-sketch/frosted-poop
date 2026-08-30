@@ -50,7 +50,9 @@ export function FrostedApp() {
     const loadExoClick = () => {
       try {
         const raw =
-          localStorage.getItem("frosted_exoclick_zone") || import.meta.env.VITE_EXOCLICK_ZONE || "";
+          localStorage.getItem("frosted_exoclick_zone") ||
+          import.meta.env.VITE_EXOCLICK_ZONE ||
+          "6015558";
         const trimmed = raw.trim();
         if (!trimmed) return;
 

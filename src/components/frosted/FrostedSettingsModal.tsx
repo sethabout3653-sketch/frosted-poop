@@ -22,10 +22,12 @@ export function FrostedSettingsModal({
   const [exoClickZone, setExoClickZone] = useState<string>(() => {
     if (typeof localStorage !== "undefined") {
       return (
-        localStorage.getItem("frosted_exoclick_zone") || import.meta.env.VITE_EXOCLICK_ZONE || ""
+        localStorage.getItem("frosted_exoclick_zone") ||
+        import.meta.env.VITE_EXOCLICK_ZONE ||
+        "6015558"
       );
     }
-    return "";
+    return "6015558";
   });
   const [savedExoNotice, setSavedExoNotice] = useState<boolean>(false);
 
@@ -179,7 +181,7 @@ export function FrostedSettingsModal({
                     type="text"
                     value={exoClickZone}
                     onChange={(e) => setExoClickZone(e.target.value)}
-                    placeholder="e.g. 4839201 (From ExoClick Publisher Panel)"
+                    placeholder="e.g. 6015558 (From ExoClick Publisher Panel)"
                     className="flex-1 rounded-xl border border-neutral-800 bg-neutral-900 px-3 py-2 text-xs font-mono text-white placeholder-neutral-600 focus:border-neutral-500 focus:outline-none"
                   />
                   <button
