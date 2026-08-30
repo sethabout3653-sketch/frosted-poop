@@ -134,12 +134,10 @@ app.use("/chat", chatRouter);
 // 7. Mount Game Proxy at all possible sub-paths
 app.use("/api/public", gameProxy);
 app.use("/public", gameProxy);
-app.use(gameProxy);
 
 // 7.5. Mount Soundboard Proxy at all possible sub-paths
 app.use("/api/soundboard", soundboardRouter);
 app.use("/soundboard", soundboardRouter);
-app.use(soundboardRouter);
 
 // 8. Direct router fallback if path was stripped (e.g. /join, /state, /me)
 app.use(chatRouter);
