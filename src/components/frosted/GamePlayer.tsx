@@ -55,6 +55,11 @@ export function GamePlayer({
 
     async function initAndLoad() {
       if (cancelled) return;
+      if (game.id === "soundboard") {
+        setActiveSrc("/api/soundboard/scramjet-proxy");
+        setIframeLoading(false);
+        return;
+      }
       const result = await loadGameSource(game.directory);
       if (cancelled) {
         if (result.blobUrl) URL.revokeObjectURL(result.blobUrl);
@@ -117,6 +122,14 @@ export function GamePlayer({
   const handleReload = () => {
     setIsReloading(true);
     setIframeLoading(true);
+    if (game.id === "soundboard") {
+      setActiveSrc("");
+      setTimeout(() => {
+        setActiveSrc("/api/soundboard/scramjet-proxy");
+        setIsReloading(false);
+      }, 100);
+      return;
+    }
     if (currentBlobUrlRef.current) {
       URL.revokeObjectURL(currentBlobUrlRef.current);
       currentBlobUrlRef.current = null;
