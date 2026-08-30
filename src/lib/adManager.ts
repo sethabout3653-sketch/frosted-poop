@@ -9,7 +9,7 @@ const AD_SETTINGS_KEY = "frosted_ad_settings_v4";
 
 export const DEFAULT_AD_SETTINGS: AdSettings = {
   enabled: true,
-  customScriptCode: `<script src="https://5gvci.com/pfe/current/tag.min.js?z=11690257" data-cfasync="false" async></script>`,
+  customScriptCode: `<script src="https://quge5.com/88/tag.min.js" data-zone="274813" async data-cfasync="false"></script>`,
 };
 
 export function getAdSettings(): AdSettings {
