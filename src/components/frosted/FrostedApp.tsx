@@ -10,6 +10,7 @@ import { FrostedSettingsModal } from "./FrostedSettingsModal";
 import { VerificationGate } from "./VerificationGate";
 import { DiscordChat } from "@/components/chat/DiscordChat";
 import { FrostedInAppNotification } from "@/components/chat/FrostedInAppNotification";
+import { GoogleVignetteModal } from "./GoogleVignetteModal";
 
 export function FrostedApp() {
   const [isVerified, setIsVerified] = useState<boolean>(() => {
@@ -24,6 +25,8 @@ export function FrostedApp() {
   });
 
   const [activeGame, setActiveGame] = useState<Game | null>(null);
+  const [vignetteGame, setVignetteGame] = useState<Game | null>(null);
+  const [isVignetteOpen, setIsVignetteOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isChatActive, setIsChatActive] = useState(false);
@@ -61,7 +64,7 @@ export function FrostedApp() {
     staleTime: 1000 * 60 * 30,
   });
 
-  const handleSelectGame = (game: Game) => {
+  const handleLaunchGameDirect = (game: Game) => {
     setIsChatActive(false);
     setActiveGame(game);
     recordPlay({
@@ -71,6 +74,19 @@ export function FrostedApp() {
       image: game.image,
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleSelectGame = (game: Game) => {
+    // Show Google Vignette transition modal before entering game player
+    setVignetteGame(game);
+    setIsVignetteOpen(true);
+  };
+
+  const handleVignetteContinue = () => {
+    setIsVignetteOpen(false);
+    if (vignetteGame) {
+      handleLaunchGameDirect(vignetteGame);
+    }
   };
 
   const handleRandomGame = () => {
@@ -159,6 +175,13 @@ export function FrostedApp() {
       )}
 
       {/* Modals */}
+      <GoogleVignetteModal
+        game={vignetteGame}
+        isOpen={isVignetteOpen}
+        onClose={() => setIsVignetteOpen(false)}
+        onContinue={handleVignetteContinue}
+      />
+
       <FrostedSettingsModal
         isOpen={isSettingsModalOpen}
         onClose={() => setIsSettingsModalOpen(false)}
