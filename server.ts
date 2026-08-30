@@ -21,7 +21,7 @@ async function startServer() {
   });
 
   app.get("/ads.txt", (_req, res) => {
-    res.type("text/plain").send("google.com, pub-4411579510743309, DIRECT, f08c47fec0942fa0\n");
+    res.type("text/plain").send("exoclick.com, DIRECT\n");
   });
 
   // Attach API routes

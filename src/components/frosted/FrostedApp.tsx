@@ -10,7 +10,6 @@ import { FrostedSettingsModal } from "./FrostedSettingsModal";
 import { VerificationGate } from "./VerificationGate";
 import { DiscordChat } from "@/components/chat/DiscordChat";
 import { FrostedInAppNotification } from "@/components/chat/FrostedInAppNotification";
-import { GoogleVignetteModal } from "./GoogleVignetteModal";
 
 export function FrostedApp() {
   const [isVerified, setIsVerified] = useState<boolean>(() => {
@@ -25,8 +24,6 @@ export function FrostedApp() {
   });
 
   const [activeGame, setActiveGame] = useState<Game | null>(null);
-  const [vignetteGame, setVignetteGame] = useState<Game | null>(null);
-  const [isVignetteOpen, setIsVignetteOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isChatActive, setIsChatActive] = useState(false);
@@ -45,6 +42,57 @@ export function FrostedApp() {
     window.addEventListener("frosted-open-chat", handleOpenChat);
     return () => {
       window.removeEventListener("frosted-open-chat", handleOpenChat);
+    };
+  }, []);
+
+  // ExoClick Network Dynamic Activation
+  useEffect(() => {
+    const loadExoClick = () => {
+      try {
+        const raw =
+          localStorage.getItem("frosted_exoclick_zone") || import.meta.env.VITE_EXOCLICK_ZONE || "";
+        const trimmed = raw.trim();
+        if (!trimmed) return;
+
+        // Clean up previous dynamic ExoClick script
+        const existing = document.getElementById("exoclick-dynamic-script");
+        if (existing) {
+          existing.remove();
+        }
+
+        const script = document.createElement("script");
+        script.id = "exoclick-dynamic-script";
+        script.type = "text/javascript";
+        script.async = true;
+
+        if (
+          trimmed.startsWith("http://") ||
+          trimmed.startsWith("https://") ||
+          trimmed.startsWith("//")
+        ) {
+          script.src = trimmed;
+        } else if (trimmed.includes("src=")) {
+          const match = trimmed.match(/src=["'](.*?)["']/);
+          if (match && match[1]) {
+            script.src = match[1];
+          } else {
+            script.text = trimmed;
+          }
+        } else {
+          // If a Zone ID is provided, load from ExoClick ad provider with zone
+          script.src = `https://a.magsrv.com/ad-provider.js?zone=${encodeURIComponent(trimmed)}`;
+        }
+
+        document.body.appendChild(script);
+      } catch {
+        /* silent */
+      }
+    };
+
+    loadExoClick();
+    window.addEventListener("frosted_exoclick_updated", loadExoClick);
+    return () => {
+      window.removeEventListener("frosted_exoclick_updated", loadExoClick);
     };
   }, []);
 
@@ -77,16 +125,7 @@ export function FrostedApp() {
   };
 
   const handleSelectGame = (game: Game) => {
-    // Show Google Vignette transition modal before entering game player
-    setVignetteGame(game);
-    setIsVignetteOpen(true);
-  };
-
-  const handleVignetteContinue = () => {
-    setIsVignetteOpen(false);
-    if (vignetteGame) {
-      handleLaunchGameDirect(vignetteGame);
-    }
+    handleLaunchGameDirect(game);
   };
 
   const handleRandomGame = () => {
@@ -173,14 +212,6 @@ export function FrostedApp() {
           )}
         </main>
       )}
-
-      {/* Modals */}
-      <GoogleVignetteModal
-        game={vignetteGame}
-        isOpen={isVignetteOpen}
-        onClose={() => setIsVignetteOpen(false)}
-        onContinue={handleVignetteContinue}
-      />
 
       <FrostedSettingsModal
         isOpen={isSettingsModalOpen}

@@ -19,26 +19,24 @@ export function FrostedSettingsModal({
   cachedCount = 0,
   onClearCache,
 }: Props) {
-  const [adsenseClient, setAdsenseClient] = useState<string>(() => {
+  const [exoClickZone, setExoClickZone] = useState<string>(() => {
     if (typeof localStorage !== "undefined") {
       return (
-        localStorage.getItem("frosted_adsense_client") ||
-        import.meta.env.VITE_GOOGLE_ADSENSE_CLIENT ||
-        "ca-pub-4411579510743309"
+        localStorage.getItem("frosted_exoclick_zone") || import.meta.env.VITE_EXOCLICK_ZONE || ""
       );
     }
-    return "ca-pub-4411579510743309";
+    return "";
   });
-  const [savedClientNotice, setSavedClientNotice] = useState<boolean>(false);
+  const [savedExoNotice, setSavedExoNotice] = useState<boolean>(false);
 
   if (!isOpen) return null;
 
-  const handleSaveAdsense = () => {
+  const handleSaveExoClick = () => {
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem("frosted_adsense_client", adsenseClient.trim());
-      window.dispatchEvent(new Event("frosted_adsense_updated"));
-      setSavedClientNotice(true);
-      setTimeout(() => setSavedClientNotice(false), 2000);
+      localStorage.setItem("frosted_exoclick_zone", exoClickZone.trim());
+      window.dispatchEvent(new Event("frosted_exoclick_updated"));
+      setSavedExoNotice(true);
+      setTimeout(() => setSavedExoNotice(false), 2000);
     }
   };
 
@@ -159,34 +157,34 @@ export function FrostedSettingsModal({
 
           <div className="h-[1px] bg-neutral-800" />
 
-          {/* Section 3: Google AdSense Integration */}
+          {/* Section 3: ExoClick Ad Network Integration */}
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-300 mb-2 flex items-center gap-2">
-              <Megaphone className="h-4 w-4 text-sky-400" />
-              <span>Google AdSense Publisher Integration</span>
+              <Megaphone className="h-4 w-4 text-orange-400" />
+              <span>ExoClick Network Integration</span>
             </h3>
             <p className="text-xs text-neutral-400 mb-3">
-              Configure your Google AdSense Publisher ID (
-              <code className="font-mono text-neutral-300">ca-pub-XXXXXXXXXXXXXXXX</code>) to
-              display real Google Ad units across the arcade layout.
+              ExoClick is integrated directly via native ad-provider scripts (
+              <code className="font-mono text-neutral-300">a.magsrv.com/ad-provider.js</code>) with
+              high-fill global delivery and automated network handling.
             </p>
 
             <div className="rounded-xl border border-neutral-800 bg-black p-4 space-y-3">
               <div>
                 <label className="block text-xs font-medium text-neutral-400 mb-1">
-                  Google AdSense Client / Publisher ID
+                  ExoClick Zone ID (Optional)
                 </label>
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    value={adsenseClient}
-                    onChange={(e) => setAdsenseClient(e.target.value)}
-                    placeholder="ca-pub-4411579510743309"
+                    value={exoClickZone}
+                    onChange={(e) => setExoClickZone(e.target.value)}
+                    placeholder="e.g. 4839201 (From ExoClick Publisher Panel)"
                     className="flex-1 rounded-xl border border-neutral-800 bg-neutral-900 px-3 py-2 text-xs font-mono text-white placeholder-neutral-600 focus:border-neutral-500 focus:outline-none"
                   />
                   <button
-                    onClick={handleSaveAdsense}
-                    className="smooth-btn flex items-center gap-1.5 rounded-xl border border-sky-500/40 bg-sky-500 px-3 py-2 text-xs font-semibold text-white hover:bg-sky-400 cursor-pointer"
+                    onClick={handleSaveExoClick}
+                    className="smooth-btn flex items-center gap-1.5 rounded-xl border border-orange-500/40 bg-orange-600 px-3 py-2 text-xs font-semibold text-white hover:bg-orange-500 cursor-pointer"
                   >
                     <Save className="h-3.5 w-3.5" />
                     <span>Save</span>
@@ -194,10 +192,10 @@ export function FrostedSettingsModal({
                 </div>
               </div>
 
-              {savedClientNotice && (
+              {savedExoNotice && (
                 <div className="text-[11px] font-medium text-emerald-400 flex items-center gap-1.5">
                   <Check className="h-3.5 w-3.5 text-emerald-400" />
-                  <span>Publisher ID saved successfully! Google Ads refreshed.</span>
+                  <span>ExoClick configuration updated successfully!</span>
                 </div>
               )}
             </div>

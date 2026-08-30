@@ -16,7 +16,6 @@ import { useEffect, useRef, useState } from "react";
 import { gameCover, type Game } from "@/lib/games";
 import { loadGameSource, type GameLoadResult } from "@/lib/gameLoader";
 import { isGameCached } from "@/lib/offlineManager";
-import { GoogleAdBanner } from "./GoogleAdBanner";
 
 interface Props {
   game: Game;
@@ -323,11 +322,6 @@ export function GamePlayer({
             allow="fullscreen; autoplay; gamepad; pointer-lock; clipboard-write; encrypted-media"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
           />
-        </div>
-
-        {/* Google Ad Leaderboard under Game Player */}
-        <div className="w-full max-w-6xl mt-2">
-          <GoogleAdBanner formatType="leaderboard" label="SPONSORED GAME AD" />
         </div>
       </div>
 
