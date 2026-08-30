@@ -145,7 +145,7 @@ export function GamesGrid({
 
       {/* Top Google AdSense Leaderboard Banner */}
       <div className="my-3">
-        <GoogleAdBanner formatType="leaderboard" label="ARCADE SPONSORED AD" />
+        <GoogleAdBanner formatType="leaderboard" label="GOOGLE SPONSORED AD" />
       </div>
 
       {/* Featured Showcase Hero (Only shown when no search query and in 'all' or 'popular' tab) */}

@@ -1,5 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Info, ExternalLink } from "lucide-react";
+import { Info, ExternalLink, Sparkles, ShieldCheck } from "lucide-react";
+
+export interface GoogleAdProps {
+  slotId?: string;
+  formatType?: "leaderboard" | "rectangle" | "in-grid" | "banner";
+  className?: string;
+  label?: string;
+}
 
 declare global {
   interface Window {
@@ -7,82 +14,55 @@ declare global {
   }
 }
 
-export interface GoogleAdProps {
-  adClient?: string;
-  adSlot?: string;
-  adFormat?: "auto" | "fluid" | "rectangle" | "horizontal" | "vertical";
-  formatType?: "leaderboard" | "rectangle" | "in-grid" | "banner";
-  className?: string;
-  label?: string;
-}
-
 export const GoogleAdBanner: React.FC<GoogleAdProps> = ({
-  adClient,
-  adSlot,
-  adFormat = "auto",
+  slotId = "1234567890",
   formatType = "leaderboard",
   className = "",
-  label = "ADVERTISEMENT",
+  label = "GOOGLE ADSENSE SPONSOR",
 }) => {
-  const adRef = useRef<HTMLModElement>(null);
+  const adRef = useRef<HTMLDivElement>(null);
   const [adLoaded, setAdLoaded] = useState<boolean>(false);
   const [adError, setAdError] = useState<boolean>(false);
-  const pushedRef = useRef<boolean>(false);
-
-  const isPreviewMode = !adLoaded || adError;
-
-  // Client ID fallback logic: prop -> localStorage -> env -> default ca-pub string
-  const activeClient =
-    adClient ||
-    (typeof localStorage !== "undefined" ? localStorage.getItem("frosted_adsense_client") : null) ||
-    import.meta.env.VITE_GOOGLE_ADSENSE_CLIENT ||
-    "ca-pub-4411579510743309"; // User AdSense Client ID
-
-  const activeSlot =
-    adSlot ||
-    (formatType === "rectangle"
-      ? "6300978111"
-      : formatType === "in-grid"
-        ? "7458129033"
-        : "1038592746");
+  const [clientPublisherId, setClientPublisherId] = useState<string>(() => {
+    if (typeof localStorage !== "undefined") {
+      return (
+        localStorage.getItem("frosted_adsense_client") ||
+        import.meta.env.VITE_GOOGLE_ADSENSE_CLIENT ||
+        "ca-pub-4411579510743309"
+      );
+    }
+    return "ca-pub-4411579510743309";
+  });
 
   useEffect(() => {
-    // Inject Google AdSense Script once if client is valid
-    if (activeClient && typeof document !== "undefined") {
-      const scriptId = "google-adsense-script";
-      let existingScript = document.getElementById(scriptId) as HTMLScriptElement;
-
-      if (!existingScript) {
-        existingScript = document.createElement("script");
-        existingScript.id = scriptId;
-        existingScript.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${activeClient}`;
-        existingScript.async = true;
-        existingScript.crossOrigin = "anonymous";
-        document.head.appendChild(existingScript);
+    const handleStorageChange = () => {
+      if (typeof localStorage !== "undefined") {
+        const id =
+          localStorage.getItem("frosted_adsense_client") ||
+          import.meta.env.VITE_GOOGLE_ADSENSE_CLIENT ||
+          "ca-pub-4411579510743309";
+        setClientPublisherId(id);
       }
-    }
+    };
 
-    // Attempt to push ad call to Google Ads queue if not already initialized
-    if (typeof window !== "undefined" && !pushedRef.current) {
-      const insNode = adRef.current;
-      const isAlreadyFilled =
-        insNode && (insNode.getAttribute("data-adsbygoogle-status") || insNode.children.length > 0);
+    window.addEventListener("frosted_adsense_updated", handleStorageChange);
+    return () => window.removeEventListener("frosted_adsense_updated", handleStorageChange);
+  }, []);
 
-      if (!isAlreadyFilled) {
-        try {
-          pushedRef.current = true;
-          window.adsbygoogle = window.adsbygoogle || [];
-          window.adsbygoogle.push({});
-          setAdLoaded(true);
-        } catch (err) {
-          console.warn("[Frosted Google Ads] AdSense push notice:", err);
-          setAdError(true);
-        }
+  useEffect(() => {
+    // Attempt to initialize Google Adsbygoogle
+    try {
+      if (typeof window !== "undefined") {
+        (window.adsbygoogle = window.adsbygoogle || []).push({});
+        setAdLoaded(true);
       }
+    } catch (e) {
+      console.warn("Google AdSense initialization notice:", e);
+      setAdError(true);
     }
-  }, [activeClient, activeSlot]);
+  }, [clientPublisherId, slotId]);
 
-  // Height and dimensions depending on format type
+  // Dimensions depending on format type
   const containerDimensions =
     formatType === "rectangle"
       ? "min-h-[250px] w-full max-w-[300px]"
@@ -94,79 +74,66 @@ export const GoogleAdBanner: React.FC<GoogleAdProps> = ({
 
   return (
     <div className={`my-4 flex flex-col items-center justify-center ${className}`}>
-      {/* Top Ad Label */}
+      {/* Ad Header Label */}
       <div className="mb-1.5 flex items-center justify-between w-full max-w-5xl px-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
-        <span className="flex items-center gap-1">
-          <span className="bg-neutral-800 text-neutral-300 px-1.5 py-0.5 rounded text-[9px]">
-            Google Ad
+        <span className="flex items-center gap-1.5">
+          <span className="bg-sky-500/10 border border-sky-500/20 text-sky-400 px-1.5 py-0.5 rounded text-[9px] font-bold flex items-center gap-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-sky-400"></span>
+            <span>GOOGLE AD</span>
           </span>
           <span>{label}</span>
         </span>
-        <a
-          href="https://adsense.google.com"
-          target="_blank"
-          rel="noreferrer"
-          className="hover:text-neutral-300 flex items-center gap-0.5 transition-colors"
-          title="Google Ads Policy & Options"
-        >
-          <span>AdChoices</span>
-          <Info className="h-3 w-3" />
-        </a>
+        <span className="text-neutral-500 text-[9px] flex items-center gap-1">
+          <Info className="h-3 w-3 text-sky-400" />
+          <span>Ads by Google</span>
+        </span>
       </div>
 
-      {/* Main Ad Slot Container */}
+      {/* Main Google Ad Container */}
       <div
-        className={`relative overflow-hidden rounded-2xl border border-neutral-800/80 bg-[#080808] p-2 transition-all hover:border-neutral-700/80 ${containerDimensions} flex items-center justify-center`}
+        ref={adRef}
+        className={`relative overflow-hidden rounded-2xl border border-neutral-800 bg-[#080808] p-3 transition-all hover:border-neutral-700 ${containerDimensions} flex items-center justify-center`}
       >
-        {/* Real Google AdSense Tag */}
+        {/* Real Google AdSense <ins> Tag */}
         <ins
-          ref={adRef}
           className="adsbygoogle"
-          style={{
-            display: "block",
-            width: "100%",
-            height: "100%",
-            textAlign: "center",
-          }}
-          data-ad-client={activeClient}
-          data-ad-slot={activeSlot}
-          data-ad-format={adFormat}
+          style={{ display: "block", width: "100%", height: "100%", minHeight: "90px" }}
+          data-ad-client={clientPublisherId}
+          data-ad-slot={slotId}
+          data-ad-format="auto"
           data-full-width-responsive="true"
         />
 
-        {/* Development & Sandbox Fallback Display (Shown when running in non-ad-serving environment) */}
-        {isPreviewMode && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-neutral-900/90 via-black to-[#0a0a0a] p-4 text-center">
-            <div className="flex items-center gap-2 mb-1">
-              {/* Google AdSense Quad-Color Icon SVG */}
-              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none">
-                <path d="M12 2L2 7l10 5 10-5-10-5z" fill="#4285F4" />
-                <path
-                  d="M2 17l10 5 10-5M2 12l10 5 10-5"
-                  stroke="#34A853"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              <span className="text-xs font-bold text-neutral-200 tracking-wide">
-                Google AdSense Preview Slot
-              </span>
+        {/* Fallback Display if Google AdSense is waiting for approval or blocked by adblocker */}
+        {(!adLoaded || adError) && (
+          <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3 p-3.5 bg-gradient-to-r from-sky-950/20 via-black to-[#0d0d0d] rounded-xl border border-sky-900/30">
+            <div className="flex items-center gap-3 text-left">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-400 font-bold text-sm">
+                Ad
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs font-bold text-white">Google Display & Search Ad Unit</h4>
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase bg-sky-500/10 text-sky-400 border-sky-500/30">
+                    AdChoices
+                  </span>
+                </div>
+                <p className="text-[11px] text-neutral-400 mt-0.5 max-w-xl">
+                  Targeted sponsored results powered by Google AdSense Publisher Client ID:{" "}
+                  <code className="font-mono text-sky-300">{clientPublisherId}</code>
+                </p>
+              </div>
             </div>
 
-            <p className="max-w-md text-[11px] text-neutral-400 leading-tight">
-              {formatType === "leaderboard"
-                ? "Responsive Leaderboard Banner (728x90 / Auto)"
-                : formatType === "rectangle"
-                  ? "Medium Rectangle Ad (300x250)"
-                  : "Sponsored Arcade Ad Slot"}
-            </p>
-
-            <div className="mt-2 flex items-center gap-2 text-[10px] text-neutral-300 bg-black/60 px-2.5 py-1 rounded-full border border-neutral-800">
-              <span className="font-mono text-emerald-400">ID: {activeClient}</span>
-              <span>•</span>
-              <span className="font-mono text-cyan-400">Slot: {activeSlot}</span>
-            </div>
+            <a
+              href="https://adsense.google.com"
+              target="_blank"
+              rel="noreferrer"
+              className="smooth-btn shrink-0 flex items-center gap-1.5 rounded-xl border border-sky-500/40 bg-sky-500 px-4 py-2 text-xs font-bold text-white hover:bg-sky-400 transition-all shadow-[0_0_15px_rgba(14,165,233,0.25)]"
+            >
+              <span>Manage Ads</span>
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
           </div>
         )}
       </div>

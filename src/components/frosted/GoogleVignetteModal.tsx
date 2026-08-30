@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Play, X, ExternalLink, ShieldCheck } from "lucide-react";
+import { Play, X, ExternalLink, ShieldCheck, Sparkles, Zap, Info } from "lucide-react";
 import { GoogleAdBanner } from "./GoogleAdBanner";
 import type { Game } from "@/lib/games";
 
@@ -51,11 +51,12 @@ export function GoogleVignetteModal({
         {/* Top Header / Skip Control */}
         <div className="w-full flex items-center justify-between border-b border-neutral-800 pb-4 mb-4">
           <div className="flex items-center gap-2">
-            <span className="rounded-md bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 text-[10px] font-bold tracking-wider text-amber-400 uppercase">
-              Advertisement
+            <span className="rounded-md bg-sky-500/10 border border-sky-500/30 px-2 py-0.5 text-[10px] font-bold tracking-wider text-sky-400 uppercase flex items-center gap-1">
+              <Info className="h-3 w-3 text-sky-400" />
+              <span>GOOGLE ADSENSE VIGNETTE</span>
             </span>
             <span className="text-xs text-neutral-400 hidden sm:inline">
-              Google Vignette Interstitial
+              Full Screen Interstitial
             </span>
           </div>
 
@@ -66,11 +67,11 @@ export function GoogleVignetteModal({
                 className="smooth-btn flex items-center gap-1.5 rounded-xl bg-white px-4 py-1.5 text-xs font-bold text-black hover:bg-neutral-200 cursor-pointer shadow-lg animate-bounce"
               >
                 <span>Play {game.name}</span>
-                <Play className="h-3.5 w-3.5 fill-black" />
+                <Play className="h-3.5 w-3.5 fill-black ml-0.5" />
               </button>
             ) : (
               <div className="flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-400">
-                <span className="h-2 w-2 rounded-full bg-amber-400 animate-ping" />
+                <span className="h-2 w-2 rounded-full bg-sky-400 animate-ping" />
                 <span>Skip in {countdown}s...</span>
               </div>
             )}
@@ -88,24 +89,24 @@ export function GoogleVignetteModal({
         {/* Game Title Preview */}
         <div className="mb-4">
           <h3 className="text-base font-bold text-white flex items-center justify-center gap-2">
-            <span>Starting</span>
-            <span className="text-amber-400">{game.name}</span>
+            <span>Loading</span>
+            <span className="text-sky-400">{game.name}</span>
           </h3>
           <p className="text-xs text-neutral-400 mt-0.5">
-            Sponsored advertisement by Google AdSense
+            Sponsored advertisement powered by Google AdSense
           </p>
         </div>
 
         {/* Ad Banner Content Container */}
-        <div className="w-full my-2 bg-neutral-950 rounded-xl border border-neutral-800 p-3 flex flex-col items-center min-h-[250px] justify-center">
-          <GoogleAdBanner formatType="rectangle" label="SPONSORED VIGNETTE" />
+        <div className="w-full my-2 bg-neutral-950 rounded-xl border border-neutral-800 p-3 flex flex-col items-center min-h-[220px] justify-center">
+          <GoogleAdBanner formatType="rectangle" label="GOOGLE VIGNETTE AD" />
         </div>
 
         {/* Bottom Footer Action */}
         <div className="w-full border-t border-neutral-800 pt-4 mt-4 flex items-center justify-between text-xs text-neutral-400">
           <div className="flex items-center gap-1.5 text-[11px] text-neutral-500">
             <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-            <span>AdSense Verified Publisher ca-pub-4411579510743309</span>
+            <span>Google AdSense Publisher Active</span>
           </div>
 
           <button

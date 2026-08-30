@@ -36,6 +36,7 @@ export function FrostedSettingsModal({
   const handleSaveAdsense = () => {
     if (typeof localStorage !== "undefined") {
       localStorage.setItem("frosted_adsense_client", adsenseClient.trim());
+      window.dispatchEvent(new Event("frosted_adsense_updated"));
       setSavedClientNotice(true);
       setTimeout(() => setSavedClientNotice(false), 2000);
     }
@@ -180,12 +181,12 @@ export function FrostedSettingsModal({
                     type="text"
                     value={adsenseClient}
                     onChange={(e) => setAdsenseClient(e.target.value)}
-                    placeholder="ca-pub-3940256099942544"
+                    placeholder="ca-pub-4411579510743309"
                     className="flex-1 rounded-xl border border-neutral-800 bg-neutral-900 px-3 py-2 text-xs font-mono text-white placeholder-neutral-600 focus:border-neutral-500 focus:outline-none"
                   />
                   <button
                     onClick={handleSaveAdsense}
-                    className="smooth-btn flex items-center gap-1.5 rounded-xl border border-neutral-700 bg-neutral-800 px-3 py-2 text-xs font-semibold text-white hover:bg-neutral-700 cursor-pointer"
+                    className="smooth-btn flex items-center gap-1.5 rounded-xl border border-sky-500/40 bg-sky-500 px-3 py-2 text-xs font-semibold text-white hover:bg-sky-400 cursor-pointer"
                   >
                     <Save className="h-3.5 w-3.5" />
                     <span>Save</span>
@@ -196,7 +197,7 @@ export function FrostedSettingsModal({
               {savedClientNotice && (
                 <div className="text-[11px] font-medium text-emerald-400 flex items-center gap-1.5">
                   <Check className="h-3.5 w-3.5 text-emerald-400" />
-                  <span>Publisher ID saved successfully! Ads refreshed.</span>
+                  <span>Publisher ID saved successfully! Google Ads refreshed.</span>
                 </div>
               )}
             </div>
