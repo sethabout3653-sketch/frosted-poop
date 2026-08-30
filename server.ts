@@ -15,9 +15,13 @@ async function startServer() {
   app.use(express.json({ limit: "25mb" }));
   app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
-  // Health check route
+  // Health check & system static routes
   app.get(["/api/health", "/health"], (_req, res) => {
     res.json({ status: "ok", timestamp: Date.now() });
+  });
+
+  app.get("/ads.txt", (_req, res) => {
+    res.type("text/plain").send("google.com, pub-4411579510743309, DIRECT, f08c47fec0942fa0\n");
   });
 
   // Attach API routes
