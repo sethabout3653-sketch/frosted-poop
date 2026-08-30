@@ -1,15 +1,21 @@
-// Universal Ad Engine & Network Embedder
+// Universal Ad Network Manager
 
 export interface AdSettings {
   enabled: boolean;
-  customScriptCode: string; // Raw script snippet from any ad network (Monetag, Adsterra, Ezoic, GameDistribution, etc.)
+  provider: "custom" | "adsense";
+  customScriptCode: string; // Raw HTML / JS snippet from any ad network (Monetag, Adsterra, Ezoic, etc.)
+  clientPublisherId?: string;
+  adSlot?: string;
 }
 
-const AD_SETTINGS_KEY = "frosted_ad_settings_v4";
+const AD_SETTINGS_KEY = "frosted_ad_settings_v6";
 
 export const DEFAULT_AD_SETTINGS: AdSettings = {
   enabled: true,
-  customScriptCode: `<script src="https://quge5.com/88/tag.min.js" data-zone="274813" async data-cfasync="false"></script>`,
+  provider: "custom",
+  customScriptCode: "",
+  clientPublisherId: "",
+  adSlot: "",
 };
 
 export function getAdSettings(): AdSettings {
@@ -36,25 +42,45 @@ export function saveAdSettings(settings: AdSettings): void {
 }
 
 /**
- * Injects custom ad scripts safely into document body/head
+ * Injects global header ad scripts dynamically if provided
  */
 export function applyAdScripts(settings?: AdSettings): void {
   if (typeof document === "undefined") return;
 
   const current = settings || getAdSettings();
 
-  const existingCustom = document.getElementById("frosted-custom-ad-container");
-  if (existingCustom) existingCustom.remove();
+  const existingContainer = document.getElementById("frosted-global-ad-script");
+  if (existingContainer) existingContainer.remove();
 
   if (!current.enabled || !current.customScriptCode.trim()) return;
 
-  const container = document.createElement("div");
-  container.id = "frosted-custom-ad-container";
-  container.style.display = "none";
-  container.innerHTML = current.customScriptCode;
-  document.body.appendChild(container);
+  // If the script contains head tags or global tags, parse and append scripts to head/body
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(current.customScriptCode, "text/html");
+    const scripts = doc.querySelectorAll("script");
+
+    if (scripts.length > 0) {
+      const wrapper = document.createElement("div");
+      wrapper.id = "frosted-global-ad-script";
+      wrapper.style.display = "none";
+
+      scripts.forEach((oldScript) => {
+        const newScript = document.createElement("script");
+        Array.from(oldScript.attributes).forEach((attr) =>
+          newScript.setAttribute(attr.name, attr.value),
+        );
+        newScript.textContent = oldScript.textContent;
+        wrapper.appendChild(newScript);
+      });
+
+      document.body.appendChild(wrapper);
+    }
+  } catch {
+    /* silent */
+  }
 }
 
 export function triggerAdImpression(): void {
-  /* Triggered on game loads / navigation */
+  /* Triggered on game loads or page navigation */
 }

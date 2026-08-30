@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { getAdSettings, type AdSettings } from "@/lib/adManager";
+import { getAdSettings, applyAdScripts, type AdSettings } from "@/lib/adManager";
 import { Megaphone, ShieldCheck } from "lucide-react";
 
 interface Props {
   className?: string;
+  adSlot?: string;
+  format?: "auto" | "horizontal" | "rectangle";
 }
 
 export function AdBanner({ className = "" }: Props) {
@@ -11,15 +13,20 @@ export function AdBanner({ className = "" }: Props) {
   const [settings, setSettings] = useState<AdSettings>(() => getAdSettings());
 
   useEffect(() => {
+    applyAdScripts();
     const handleUpdate = () => {
-      setSettings(getAdSettings());
+      const updated = getAdSettings();
+      setSettings(updated);
+      applyAdScripts(updated);
     };
     window.addEventListener("frosted_ad_settings_updated", handleUpdate);
     return () => window.removeEventListener("frosted_ad_settings_updated", handleUpdate);
   }, []);
 
+  const hasCustomCode = !!settings.customScriptCode.trim();
+
   useEffect(() => {
-    if (!settings.enabled || !settings.customScriptCode.trim() || !containerRef.current) return;
+    if (!settings.enabled || !hasCustomCode || !containerRef.current) return;
 
     try {
       containerRef.current.innerHTML = "";
@@ -27,14 +34,13 @@ export function AdBanner({ className = "" }: Props) {
       adDiv.className = "universal-ad-unit flex items-center justify-center w-full";
       adDiv.innerHTML = settings.customScriptCode;
 
-      // Execute embedded scripts if any
       const scripts = adDiv.querySelectorAll("script");
       scripts.forEach((oldScript) => {
         const newScript = document.createElement("script");
         Array.from(oldScript.attributes).forEach((attr) =>
           newScript.setAttribute(attr.name, attr.value),
         );
-        newScript.appendChild(document.createTextNode(oldScript.innerHTML));
+        newScript.textContent = oldScript.textContent;
         oldScript.parentNode?.replaceChild(newScript, oldScript);
       });
 
@@ -42,9 +48,9 @@ export function AdBanner({ className = "" }: Props) {
     } catch {
       /* silent */
     }
-  }, [settings.enabled, settings.customScriptCode]);
+  }, [settings.enabled, settings.customScriptCode, hasCustomCode]);
 
-  if (!settings.enabled || !settings.customScriptCode.trim()) return null;
+  if (!settings.enabled || !hasCustomCode) return null;
 
   return (
     <div
@@ -53,11 +59,11 @@ export function AdBanner({ className = "" }: Props) {
       <div className="mb-2 flex items-center justify-between w-full max-w-4xl px-2">
         <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-neutral-500">
           <Megaphone className="h-3 w-3 text-neutral-400" />
-          <span>Advertisement</span>
+          <span>Sponsored Advertisement</span>
         </div>
         <div className="flex items-center gap-1.5 text-[10px] text-neutral-600 font-mono">
           <ShieldCheck className="h-3 w-3 text-emerald-500/80" />
-          <span>Verified Display Network</span>
+          <span>Ad Network</span>
         </div>
       </div>
 
