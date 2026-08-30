@@ -30,15 +30,26 @@ export function AdBanner({ className = "" }: Props) {
   useEffect(() => {
     if (!settings.enabled || !containerRef.current) return;
 
-    let observer: IntersectionObserver | null = null;
+    let resizeObserver: ResizeObserver | null = null;
+    let initialized = false;
 
     const triggerAdsense = () => {
-      if (!containerRef.current) return;
+      if (!containerRef.current || initialized) return;
+
+      const width = containerRef.current.getBoundingClientRect().width;
+      if (width < 250) {
+        return;
+      }
+
+      initialized = true;
       containerRef.current.innerHTML = "";
 
       const ins = document.createElement("ins");
       ins.className = "adsbygoogle";
       ins.style.display = "block";
+      ins.style.width = "100%";
+      ins.style.minWidth = "250px";
+      ins.style.minHeight = "90px";
       ins.setAttribute("data-ad-client", "ca-pub-4411579510743309");
       ins.setAttribute("data-ad-slot", settings.adSlot || "auto");
       ins.setAttribute("data-ad-format", "auto");
@@ -46,30 +57,43 @@ export function AdBanner({ className = "" }: Props) {
 
       containerRef.current.appendChild(ins);
 
-      try {
-        ((window as any).adsbygoogle = (window as any).adsbygoogle || []).push({});
-      } catch (e) {
-        console.warn("AdSense push warning:", e);
-      }
+      // Defer push until browser completes layout flow and elements have real dimensions
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          if (!containerRef.current || !ins.isConnected) return;
+          const rect = ins.getBoundingClientRect();
+          if (rect.width < 250) {
+            console.warn(
+              "Postponing AdSense push: layout width is still zero or too small",
+              rect.width,
+            );
+            return;
+          }
+          try {
+            ((window as any).adsbygoogle = (window as any).adsbygoogle || []).push({});
+          } catch (e) {
+            console.warn("AdSense push warning:", e);
+          }
+        }, 150);
+      });
     };
 
     try {
       if (settings.provider === "adsense") {
-        const width = containerRef.current.getBoundingClientRect().width;
-        if (width === 0) {
-          observer = new IntersectionObserver((entries) => {
-            if (
-              entries[0].isIntersecting &&
-              containerRef.current &&
-              containerRef.current.getBoundingClientRect().width > 0
-            ) {
-              observer?.disconnect();
-              triggerAdsense();
+        const initialRect = containerRef.current.getBoundingClientRect();
+        if (initialRect.width >= 250) {
+          triggerAdsense();
+        } else {
+          resizeObserver = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+              const { width } = entry.contentRect;
+              if (width >= 250 && !initialized) {
+                triggerAdsense();
+                resizeObserver?.disconnect();
+              }
             }
           });
-          observer.observe(containerRef.current);
-        } else {
-          triggerAdsense();
+          resizeObserver.observe(containerRef.current);
         }
       } else if (hasCustomCode) {
         containerRef.current.innerHTML = "";
@@ -94,7 +118,7 @@ export function AdBanner({ className = "" }: Props) {
     }
 
     return () => {
-      observer?.disconnect();
+      resizeObserver?.disconnect();
     };
   }, [
     settings.enabled,
