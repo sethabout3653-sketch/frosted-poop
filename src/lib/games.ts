@@ -356,9 +356,8 @@ export async function fetchGames(): Promise<Game[]> {
   const customGame: Game = {
     id: "soundboard",
     name: "Soundboard",
-    directory: "https://MyInstants.com",
-    image:
-      "https://play-lh.googleusercontent.com/QbPwdx7u46tJLd6SBJ6cCPajEKgiA620fYNSZb1VsdlKIBPs4m6itZRDmu9SWPo8vbV77H1H42cNefPDtoYM",
+    directory: "https://myinstants.com",
+    image: "https://play-lh.googleusercontent.com/QbPwdx7u46tJLd6SBJ6cCPajEKgiA620fYNSZb1VsdlKIBPs4m6itZRDmu9SWPo8vbV77H1H42cNefPDtoYM",
     category: "popular",
     featured: true,
     plays: 99999,
@@ -404,7 +403,7 @@ export async function fetchGames(): Promise<Game[]> {
       }
     }
   } catch (err) {
-    console.error("Failed to fetch full Seraph games list from GitHub API:", err);
+    console.warn("Failed to fetch full Seraph games list from GitHub API (rate limit likely). Proceeding with fallback list.");
   }
 
   if (seraphGames.length === 0) {
@@ -453,7 +452,7 @@ export async function fetchGames(): Promise<Game[]> {
       }
     }
   } catch (err) {
-    console.error("Failed to fetch gn-math games:", err);
+    console.warn("Failed to fetch gn-math games:", err);
   }
 
   return [customGame, ...gnMathGames, ...seraphGames];

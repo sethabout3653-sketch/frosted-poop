@@ -57,6 +57,7 @@ export function GamePlayer({
       if (cancelled) return;
       if (game.id === "soundboard") {
         setActiveSrc("/api/soundboard/scramjet-proxy");
+        setIframeLoading(false);
         return;
       }
       const result = await loadGameSource(game.directory);

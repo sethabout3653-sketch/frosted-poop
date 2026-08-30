@@ -102,19 +102,21 @@ export function FrostedApp() {
       />
 
       {/* Navigation Header */}
-      <FrostedNavbar
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        onHome={handleHome}
-        onRandomGame={handleRandomGame}
-        onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
-        onOpenChat={() => {
-          setActiveGame(null);
-          setIsChatActive(!isChatActive);
-        }}
-        activeGame={activeGame}
-        isChatActive={isChatActive}
-      />
+      {activeGame === null && (
+        <FrostedNavbar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          onHome={handleHome}
+          onRandomGame={handleRandomGame}
+          onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
+          onOpenChat={() => {
+            setActiveGame(null);
+            setIsChatActive(!isChatActive);
+          }}
+          activeGame={activeGame}
+          isChatActive={isChatActive}
+        />
+      )}
 
       {/* Persistent Discord Chat Container */}
       <div className={isChatActive ? "block" : "hidden"}>
