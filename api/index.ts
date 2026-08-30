@@ -82,7 +82,8 @@ app.use((req, _res, next) => {
     matchedHeader &&
     (matchedHeader.includes("/chat") ||
       matchedHeader.includes("/public") ||
-      matchedHeader.includes("/health"))
+      matchedHeader.includes("/health") ||
+      matchedHeader.includes("/soundboard"))
   ) {
     url = matchedHeader;
   }

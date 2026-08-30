@@ -32,20 +32,20 @@ router.all(["/scramjet-proxy", "/scramjet-proxy/*"], async (req, res) => {
       if (contentType.includes("text/html")) {
         // Rewrite HTML tags and inline attributes
         rewrittenBody = rewrittenBody
-          .replace(/(href|src|action)=("|')\//gi, '$1=$2/api/soundboard/scramjet-proxy/')
-          .replace(/play\((["'])\//gi, 'play($1/api/soundboard/scramjet-proxy/')
+          .replace(/(href|src|action)=("|')\/(?!\/)/gi, '$1=$2/api/soundboard/scramjet-proxy/')
+          .replace(/play\((["'])\/(?!\/)/gi, 'play($1/api/soundboard/scramjet-proxy/')
           .replace(/(href|src|action)=("|')https:\/\/(www\.)?myinstants\.com\//gi, '$1=$2/api/soundboard/scramjet-proxy/')
-          .replace(/url\((["']?)\//gi, 'url($1/api/soundboard/scramjet-proxy/');
+          .replace(/url\((["']?)\/(?!\/)/gi, 'url($1/api/soundboard/scramjet-proxy/');
       } else if (contentType.includes("text/css")) {
         // Rewrite CSS url() functions
         rewrittenBody = rewrittenBody
-          .replace(/url\((["']?)\//gi, 'url($1/api/soundboard/scramjet-proxy/');
+          .replace(/url\((["']?)\/(?!\/)/gi, 'url($1/api/soundboard/scramjet-proxy/');
       } else if (contentType.includes("javascript")) {
         // Rewrite common JS strings that represent absolute paths to media or APIs
         rewrittenBody = rewrittenBody
-          .replace(/(["'])\/media\//gi, '$1/api/soundboard/scramjet-proxy/media/')
-          .replace(/(["'])\/api\//gi, '$1/api/soundboard/scramjet-proxy/api/')
-          .replace(/play\((["'])\//gi, 'play($1/api/soundboard/scramjet-proxy/');
+          .replace(/(["'])\/media\/(?!\/)/gi, '$1/api/soundboard/scramjet-proxy/media/')
+          .replace(/(["'])\/api\/(?!\/)/gi, '$1/api/soundboard/scramjet-proxy/api/')
+          .replace(/play\((["'])\/(?!\/)/gi, 'play($1/api/soundboard/scramjet-proxy/');
       }
 
       return res.send(rewrittenBody);
@@ -58,9 +58,9 @@ router.all(["/scramjet-proxy", "/scramjet-proxy/*"], async (req, res) => {
       
       if (response.body) {
         const arrayBuffer = await response.arrayBuffer();
-        res.send(Buffer.from(arrayBuffer));
+        res.end(Buffer.from(arrayBuffer));
       } else {
-        res.send();
+        res.end();
       }
     }
   } catch (err: any) {
