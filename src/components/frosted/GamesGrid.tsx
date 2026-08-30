@@ -18,8 +18,8 @@ import {
 } from "lucide-react";
 import { gameCover, type Game, type GameCategory } from "@/lib/games";
 import { isGameCached } from "@/lib/offlineManager";
-import { ExoClickAdBanner } from "./ExoClickAdBanner";
-import { getExoClickZone, triggerPopunderOnUserAction } from "@/lib/popupManager";
+import { AdBanner } from "./AdBanner";
+import { triggerAdImpression } from "@/lib/adManager";
 
 interface Props {
   games: Game[];
@@ -116,11 +116,9 @@ export function GamesGrid({
   }, [games]);
 
   const handleGameCardClick = (game: Game) => {
-    triggerPopunderOnUserAction();
+    triggerAdImpression();
     onSelectGame(game);
   };
-
-  const exoZone = getExoClickZone();
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
@@ -133,7 +131,7 @@ export function GamesGrid({
             <button
               key={cat.id}
               onClick={() => {
-                triggerPopunderOnUserAction();
+                triggerAdImpression();
                 setActiveCategory(cat.id);
               }}
               className={`smooth-btn flex shrink-0 items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-medium cursor-pointer ${
@@ -154,8 +152,8 @@ export function GamesGrid({
         })}
       </div>
 
-      {/* Home Screen ExoClick Banner */}
-      <ExoClickAdBanner zoneId={exoZone} className="my-4" />
+      {/* Top Responsive Leaderboard Banner */}
+      <AdBanner className="my-4" />
 
       {/* Featured Showcase Hero (Only shown when no search query and in 'all' or 'popular' tab) */}
       {!searchQuery &&
@@ -350,7 +348,7 @@ export function GamesGrid({
         <div className="mt-12 flex flex-col items-center justify-center gap-3">
           <button
             onClick={() => {
-              triggerPopunderOnUserAction();
+              triggerAdImpression();
               setVisibleCount((prev) => prev + 48);
             }}
             className="smooth-btn group cursor-pointer flex items-center gap-2 rounded-2xl border border-neutral-800 bg-neutral-900/60 px-6 py-3.5 text-sm font-semibold text-white hover:border-neutral-500 hover:bg-neutral-900 shadow-[0_4px_20px_rgba(0,0,0,0.4)] hover:shadow-[0_0_20px_rgba(255,255,255,0.06)]"
@@ -367,8 +365,8 @@ export function GamesGrid({
         </div>
       )}
 
-      {/* Footer ExoClick Banner */}
-      <ExoClickAdBanner zoneId={exoZone} className="mt-12 mb-4" />
+      {/* Footer Responsive Banner */}
+      <AdBanner className="mt-12 mb-4" />
     </div>
   );
 }

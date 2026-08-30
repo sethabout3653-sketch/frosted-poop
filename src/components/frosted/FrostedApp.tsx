@@ -10,7 +10,7 @@ import { FrostedSettingsModal } from "./FrostedSettingsModal";
 import { VerificationGate } from "./VerificationGate";
 import { DiscordChat } from "@/components/chat/DiscordChat";
 import { FrostedInAppNotification } from "@/components/chat/FrostedInAppNotification";
-import { triggerPopunderOnUserAction } from "@/lib/popupManager";
+import { applyAdScripts, triggerAdImpression } from "@/lib/adManager";
 
 export function FrostedApp() {
   const [isVerified, setIsVerified] = useState<boolean>(() => {
@@ -46,56 +46,13 @@ export function FrostedApp() {
     };
   }, []);
 
-  // ExoClick Network Dynamic Activation
+  // Universal Ad Engine Initialization
   useEffect(() => {
-    const loadExoClick = () => {
-      try {
-        const raw =
-          localStorage.getItem("frosted_exoclick_zone") ||
-          import.meta.env.VITE_EXOCLICK_ZONE ||
-          "6015558";
-        const trimmed = raw.trim();
-        if (!trimmed) return;
-
-        // Clean up previous dynamic ExoClick script
-        const existing = document.getElementById("exoclick-dynamic-script");
-        if (existing) {
-          existing.remove();
-        }
-
-        const script = document.createElement("script");
-        script.id = "exoclick-dynamic-script";
-        script.type = "text/javascript";
-        script.async = true;
-
-        if (
-          trimmed.startsWith("http://") ||
-          trimmed.startsWith("https://") ||
-          trimmed.startsWith("//")
-        ) {
-          script.src = trimmed;
-        } else if (trimmed.includes("src=")) {
-          const match = trimmed.match(/src=["'](.*?)["']/);
-          if (match && match[1]) {
-            script.src = match[1];
-          } else {
-            script.text = trimmed;
-          }
-        } else {
-          // If a Zone ID is provided, load from ExoClick ad provider with zone
-          script.src = `https://a.magsrv.com/ad-provider.js?zone=${encodeURIComponent(trimmed)}`;
-        }
-
-        document.body.appendChild(script);
-      } catch {
-        /* silent */
-      }
-    };
-
-    loadExoClick();
-    window.addEventListener("frosted_exoclick_updated", loadExoClick);
+    applyAdScripts();
+    const handleUpdate = () => applyAdScripts();
+    window.addEventListener("frosted_ad_settings_updated", handleUpdate);
     return () => {
-      window.removeEventListener("frosted_exoclick_updated", loadExoClick);
+      window.removeEventListener("frosted_ad_settings_updated", handleUpdate);
     };
   }, []);
 
@@ -116,7 +73,7 @@ export function FrostedApp() {
   });
 
   const handleLaunchGameDirect = (game: Game) => {
-    triggerPopunderOnUserAction();
+    triggerAdImpression();
     setIsChatActive(false);
     setActiveGame(game);
     recordPlay({
@@ -134,7 +91,7 @@ export function FrostedApp() {
 
   const handleRandomGame = () => {
     if (gamesList.length === 0) return;
-    triggerPopunderOnUserAction();
+    triggerAdImpression();
     setIsChatActive(false);
     const randomIndex = Math.floor(Math.random() * gamesList.length);
     handleSelectGame(gamesList[randomIndex]);
