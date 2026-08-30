@@ -4,27 +4,7 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/index.ts"
-    },
-    {
-      "source": "/public/(.*)",
-      "destination": "/api/index.ts"
-    },
-    {
-      "source": "/game/(.*)",
-      "destination": "/api/index.ts"
-    },
-    {
-      "source": "/chat/(.*)",
-      "destination": "/api/index.ts"
-    },
-    {
-      "source": "/soundboard/(.*)",
-      "destination": "/api/index.ts"
-    },
-    {
-      "source": "/((?!api/|public/|game/|chat/|soundboard/|assets/|.*\\..*).*)",
+      "source": "/((?!api/|api$|assets/|public/|.*\\..*).*)",
       "destination": "/index.html"
     }
   ]

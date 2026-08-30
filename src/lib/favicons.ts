@@ -52,7 +52,7 @@ export function getFaviconUrl(target: string): string {
     if (hostname.startsWith("http://") || hostname.startsWith("https://")) {
       hostname = new URL(hostname).hostname;
     } else if (hostname.includes("/")) {
-      hostname = hostname.split("/")[0];
+      hostname = hostname.split("/")[0] || hostname;
     }
     hostname = hostname.replace(/^www\./, "").toLowerCase();
     if (!hostname || hostname === "localhost" || hostname.startsWith("frosted:")) {

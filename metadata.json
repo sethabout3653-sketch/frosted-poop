@@ -1,6 +1,6 @@
 {
   "name": "Frosted",
-  "description": "Premium, distraction-free arcade with 1,000+ unblocked titles, real-time chat, and game cloaking. Built for the ultimate playground experience.",
+  "description": "Frosted - Unblocked HTML5 & retro games arcade with clean player controls, stealth cloaking, and favorites.",
   "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

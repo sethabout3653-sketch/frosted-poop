@@ -43,8 +43,6 @@ const CATEGORIES: {
   { id: "puzzle", label: "Puzzle", icon: <Puzzle className="h-3.5 w-3.5 text-purple-400" /> },
   { id: "retro", label: "Retro", icon: <Gamepad2 className="h-3.5 w-3.5 text-yellow-400" /> },
   { id: "casual", label: "Casual", icon: <Coffee className="h-3.5 w-3.5 text-amber-200" /> },
-  { id: "ckv", label: "CKV Games", icon: <Sparkles className="h-3.5 w-3.5 text-emerald-400" /> },
-  { id: "lumin", label: "Lumin Games", icon: <Flame className="h-3.5 w-3.5 text-purple-400" /> },
   { id: "favorites", label: "My Favorites", icon: <Star className="h-3.5 w-3.5 text-amber-300" /> },
   { id: "recent", label: "Recently Played", icon: <Clock className="h-3.5 w-3.5 text-cyan-400" /> },
 ];
@@ -61,31 +59,6 @@ export function GamesGrid({
   const [activeCategory, setActiveCategory] = useState<GameCategory | "favorites" | "recent">(
     "all",
   );
-
-  const [animatedTotal, setAnimatedTotal] = useState(0);
-
-  useEffect(() => {
-    if (games.length > 0) {
-      let start = 0;
-      const end = games.length;
-      if (start === end) return;
-
-      const duration = 1500;
-      const stepTime = Math.abs(Math.floor(duration / end));
-
-      const timer = setInterval(() => {
-        start += Math.ceil(end / 100);
-        if (start >= end) {
-          setAnimatedTotal(end);
-          clearInterval(timer);
-        } else {
-          setAnimatedTotal(start);
-        }
-      }, 20);
-
-      return () => clearInterval(timer);
-    }
-  }, [games.length]);
 
   // Lazy loading pagination to render 830+ games fast and fluid without crashing lower-end browsers
   const [visibleCount, setVisibleCount] = useState(48);
@@ -116,11 +89,6 @@ export function GamesGrid({
     return list;
   }, [games, activeCategory, searchQuery, favorites, recentlyPlayed]);
 
-  const displayCount = useMemo(() => {
-    if (activeCategory === "all" && !searchQuery) return animatedTotal || games.length;
-    return filteredGames.length;
-  }, [activeCategory, searchQuery, animatedTotal, games.length, filteredGames.length]);
-
   // Sliced games list for progressive rendering
   const visibleGames = useMemo(() => {
     return filteredGames.slice(0, visibleCount);
@@ -138,19 +106,6 @@ export function GamesGrid({
         {CATEGORIES.map((cat) => {
           const isActive = activeCategory === cat.id;
 
-          let count = 0;
-          if (cat.id === "all") {
-            count = games.length;
-          } else if (cat.id === "favorites") {
-            count = favorites.length;
-          } else if (cat.id === "recent") {
-            count = recentlyPlayed.length;
-          } else {
-            count = games.filter((g) => g.category === cat.id).length;
-          }
-
-          if (count === 0 && cat.id !== "all") return null;
-
           return (
             <button
               key={cat.id}
@@ -163,13 +118,11 @@ export function GamesGrid({
             >
               {cat.icon}
               <span>{cat.label}</span>
-              <span
-                className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                  isActive ? "bg-white/10 text-white" : "bg-neutral-800 text-neutral-500"
-                }`}
-              >
-                {count}
-              </span>
+              {cat.id === "favorites" && favorites.length > 0 && (
+                <span className="rounded-full bg-amber-400/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">
+                  {favorites.length}
+                </span>
+              )}
             </button>
           );
         })}
@@ -256,16 +209,12 @@ export function GamesGrid({
         )}
 
       {/* Main Grid Section Header */}
-      <div className="flex items-center justify-between mb-4 border-b border-neutral-900 pb-2">
-        <h2 className="text-sm font-bold tracking-widest text-white uppercase font-sans">
-          {searchQuery ? "Search Results" : activeCategory === "all" ? "All Games" : activeCategory}
-          <span className="ml-2 text-neutral-500 font-mono text-xs">({displayCount})</span>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-sm font-semibold tracking-wider text-neutral-400 uppercase font-sans">
+          {searchQuery
+            ? `Search Results (${filteredGames.length})`
+            : `${activeCategory.toUpperCase()} GAMES (${filteredGames.length})`}
         </h2>
-        {filteredGames.length > 0 && (
-          <p className="text-[10px] text-neutral-500 uppercase tracking-tighter hidden sm:block">
-            Library Sync: Active
-          </p>
-        )}
       </div>
 
       {/* Loading Skeleton */}

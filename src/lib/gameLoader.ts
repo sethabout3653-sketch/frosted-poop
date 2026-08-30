@@ -43,7 +43,7 @@ export function prepareGameHtml(rawHtml: string, filename: string): string {
       const matchRepo = fullMatch.match(
         /(https:\/\/cdn\.jsdelivr\.net\/gh\/[^/]+\/[^/]+(?:@[^/]+)?\/?)/i,
       );
-      if (matchRepo) {
+      if (matchRepo && matchRepo[1]) {
         detectedBase = matchRepo[1];
         if (!detectedBase.endsWith("/")) detectedBase += "/";
       }
@@ -194,7 +194,7 @@ export function prepareGameHtml(rawHtml: string, filename: string): string {
 
   if (isFnafZipGame) {
     const fnafNumMatch = filename.match(/(\d+)-f/);
-    const fnafNum = fnafNumMatch ? parseInt(fnafNumMatch[1], 10) - 37 : 1; // 38 -> 1, 39 -> 2, 40 -> 3, 41 -> 4
+    const fnafNum = fnafNumMatch && fnafNumMatch[1] ? parseInt(fnafNumMatch[1], 10) - 37 : 1;
     const validNum = fnafNum >= 1 && fnafNum <= 4 ? fnafNum : 1;
     const cchName = `FNAF${validNum}HTML5.cch`;
 

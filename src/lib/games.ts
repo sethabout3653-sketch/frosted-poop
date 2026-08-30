@@ -1,22 +1,13 @@
 // Custom games list module
 // --- Existing code from your provided snippet ---
 export type GameCategory =
-  | "all"
-  | "popular"
-  | "action"
-  | "driving"
-  | "sports"
-  | "puzzle"
-  | "retro"
-  | "casual"
-  | "ckv"
-  | "lumin";
+  "all" | "popular" | "action" | "driving" | "sports" | "puzzle" | "retro" | "casual";
 
 export type Game = {
   id: number | string;
   name: string;
   directory: string;
-  image: string;
+  image?: string;
   author?: string;
   authorLink?: string;
   category?: GameCategory;
@@ -26,11 +17,157 @@ export type Game = {
 };
 
 export const GN_COVERS_CDN = "https://cdn.jsdelivr.net/gh/freebuisness/covers@main";
-// Use the server-side proxy to avoid client-side CORS issues and blockages
-export const GN_ZONES_URL = "/api/public/gn/cdn/freebuisness/assets@latest/zones.json";
-export const SERAPH_DATA_URL = "/api/public/gn/gh/a456pur/seraph/main/storage/js/directories.json";
-export const CKV_DATA_URL = "/api/public/gn/gh/WanoCapy/ChickenKingsVault/main/games.js";
+export const GN_ZONES_URL = "https://cdn.jsdelivr.net/gh/freebuisness/assets@latest/zones.json";
 export const GN_GAME_PROXY = "/api/public/gn/game";
+export const SERAPH_GAME_PROXY = "/api/public/seraph";
+export const THREE_KH0_GAME_PROXY = "/api/public/3kh0";
+
+export const SERAPH_GAMES: Game[] = [
+  {
+    id: "slope",
+    name: "Slope",
+    directory: "games/slope/index.html",
+    category: "popular",
+    featured: true,
+    plays: 984000,
+    rating: 4.9,
+  },
+  {
+    id: "1v1lol",
+    name: "1v1.LOL",
+    directory: "games/1v1lol/index.html",
+    category: "popular",
+    featured: true,
+    plays: 953000,
+    rating: 4.8,
+  },
+  {
+    id: "retrobowl",
+    name: "Retro Bowl",
+    directory: "games/retrobowl/index.html",
+    category: "popular",
+    featured: true,
+    plays: 882000,
+    rating: 4.9,
+  },
+  {
+    id: "subway-surfers",
+    name: "Subway Surfers",
+    directory: "games/subwaysurfers/index.html",
+    category: "popular",
+    featured: true,
+    plays: 970000,
+    rating: 4.9,
+  },
+  {
+    id: "moto-x3m",
+    name: "Moto X3M",
+    directory: "games/motox3m/index.html",
+    category: "driving",
+    featured: true,
+    plays: 741000,
+    rating: 4.7,
+  },
+  {
+    id: "cookie-clicker",
+    name: "Cookie Clicker",
+    directory: "games/cookieclicker/index.html",
+    category: "popular",
+    featured: true,
+    plays: 919000,
+    rating: 4.9,
+  },
+  {
+    id: "geometry-dash",
+    name: "Geometry Dash",
+    directory: "games/geometrydash/index.html",
+    category: "popular",
+    featured: true,
+    plays: 834000,
+    rating: 4.8,
+  },
+  {
+    id: "bitlife",
+    name: "BitLife",
+    directory: "games/bitlife/index.html",
+    category: "popular",
+    featured: true,
+    plays: 798000,
+    rating: 4.7,
+  },
+  {
+    id: "basketball-stars",
+    name: "Basketball Stars",
+    directory: "games/basketballstars/index.html",
+    category: "sports",
+    featured: true,
+    plays: 621000,
+    rating: 4.6,
+  },
+  {
+    id: "drift-hunters",
+    name: "Drift Hunters",
+    directory: "games/drift-hunters/index.html",
+    category: "driving",
+    featured: true,
+    plays: 693000,
+    rating: 4.8,
+  },
+  {
+    id: "ovo",
+    name: "OvO",
+    directory: "games/ovo/index.html",
+    category: "action",
+    featured: false,
+    plays: 541000,
+    rating: 4.7,
+  },
+  {
+    id: "run-3",
+    name: "Run 3",
+    directory: "games/run3/index.html",
+    category: "action",
+    featured: false,
+    plays: 589000,
+    rating: 4.8,
+  },
+  {
+    id: "paper-io-2",
+    name: "Paper.io 2",
+    directory: "games/paperio2/index.html",
+    category: "popular",
+    featured: false,
+    plays: 612000,
+    rating: 4.5,
+  },
+  {
+    id: "tunnel-rush",
+    name: "Tunnel Rush",
+    directory: "games/tunnelrush/index.html",
+    category: "action",
+    featured: false,
+    plays: 498000,
+    rating: 4.6,
+  },
+  {
+    id: "fnf",
+    name: "Friday Night Funkin'",
+    directory: "games/fnf/index.html",
+    category: "retro",
+    featured: true,
+    plays: 810000,
+    rating: 4.9,
+  },
+  {
+    id: "minecraft",
+    name: "Minecraft",
+    directory: "games/minecraft/index.html",
+    category: "popular",
+    featured: true,
+    plays: 999999,
+    rating: 5.0,
+  },
+];
 
 export function gameEntry(directory: string) {
   if (
@@ -41,8 +178,11 @@ export function gameEntry(directory: string) {
   ) {
     return directory;
   }
-  if (directory.startsWith("gh/")) {
-    return `/api/public/gn/${directory}`;
+  if (directory.startsWith("games/")) {
+    return `${SERAPH_GAME_PROXY}/${directory}`;
+  }
+  if (directory.startsWith("3kh0/")) {
+    return `${THREE_KH0_GAME_PROXY}/${directory.replace("3kh0/", "")}`;
   }
   return `${GN_GAME_PROXY}/${directory}`;
 }
@@ -51,13 +191,25 @@ export function gameCover(game: Game) {
   if (game.image && game.image.startsWith("http")) {
     return game.image;
   }
-  if (game.image && (game.image.startsWith("/api/") || game.image.startsWith("gh/"))) {
-    return game.image.startsWith("gh/") ? `/api/public/gn/${game.image}` : game.image;
+  if (typeof game.id === "string" && game.id.startsWith("seraph-")) {
+    return "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&auto=format&fit=crop&q=80";
+  }
+  if (typeof game.id === "string" && game.id.startsWith("3kh0-")) {
+    return "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=400&auto=format&fit=crop&q=80";
   }
   return `${GN_COVERS_CDN}/${game.id}.png`;
 }
 
-function assignCategory(name: string): GameCategory {
+function assignCategory(name: string, catRaw?: string): GameCategory {
+  const c = (catRaw || "").toLowerCase();
+  if (c.includes("action") || c.includes("shooter") || c.includes("arcade")) return "action";
+  if (c.includes("driving") || c.includes("car") || c.includes("racing")) return "driving";
+  if (c.includes("sports") || c.includes("ball")) return "sports";
+  if (c.includes("puzzle") || c.includes("board")) return "puzzle";
+  if (c.includes("retro") || c.includes("classic") || c.includes("emulator")) return "retro";
+  if (c.includes("casual") || c.includes("clicker")) return "casual";
+  if (c.includes("popular") || c.includes("featured")) return "popular";
+
   const n = name.toLowerCase();
   if (
     n.includes("slope") ||
@@ -71,19 +223,7 @@ function assignCategory(name: string): GameCategory {
     n.includes("drift") ||
     n.includes("paper.io") ||
     n.includes("basket") ||
-    n.includes("ovo") ||
-    n.includes("temple run") ||
-    n.includes("stickman hook") ||
-    n.includes("jetpack") ||
-    n.includes("fnf") ||
-    n.includes("friday night") ||
-    n.includes("angry birds") ||
-    n.includes("cut the rope") ||
-    n.includes("among us") ||
-    n.includes("roblox") ||
-    n.includes("minecraft") ||
-    n.includes("bottle flip") ||
-    n.includes("happy wheels")
+    n.includes("minecraft")
   ) {
     return "popular";
   }
@@ -95,14 +235,7 @@ function assignCategory(name: string): GameCategory {
     n.includes("racing") ||
     n.includes("kart") ||
     n.includes("bike") ||
-    n.includes("truck") ||
-    n.includes("simulator") ||
-    n.includes("park") ||
-    n.includes("stunt") ||
-    n.includes("traffic") ||
-    n.includes("highway") ||
-    n.includes("taxi") ||
-    n.includes("bus")
+    n.includes("truck")
   ) {
     return "driving";
   }
@@ -114,15 +247,7 @@ function assignCategory(name: string): GameCategory {
     n.includes("bowl") ||
     n.includes("tennis") ||
     n.includes("pool") ||
-    n.includes("sports") ||
-    n.includes("baseball") ||
-    n.includes("hockey") ||
-    n.includes("billiard") ||
-    n.includes("skate") ||
-    n.includes("surf") ||
-    n.includes("box") ||
-    n.includes("wrestle") ||
-    n.includes("ufc")
+    n.includes("sports")
   ) {
     return "sports";
   }
@@ -135,15 +260,7 @@ function assignCategory(name: string): GameCategory {
     n.includes("bullet") ||
     n.includes("gun") ||
     n.includes("zombie") ||
-    n.includes("action") ||
-    n.includes("sniper") ||
-    n.includes("assassin") ||
-    n.includes("battle") ||
-    n.includes("strike") ||
-    n.includes("army") ||
-    n.includes("hero") ||
-    n.includes("adventure") ||
-    n.includes("quest")
+    n.includes("action")
   ) {
     return "action";
   }
@@ -157,12 +274,7 @@ function assignCategory(name: string): GameCategory {
     n.includes("atari") ||
     n.includes("classic") ||
     n.includes("zelda") ||
-    n.includes("pokemon") ||
-    n.includes("pixel") ||
-    n.includes("8-bit") ||
-    n.includes("nes") ||
-    n.includes("snes") ||
-    n.includes("gameboy")
+    n.includes("pokemon")
   ) {
     return "retro";
   }
@@ -171,19 +283,11 @@ function assignCategory(name: string): GameCategory {
     n.includes("sudoku") ||
     n.includes("chess") ||
     n.includes("checkers") ||
+    n.includes("cut the rope") ||
     n.includes("word") ||
     n.includes("puzzle") ||
     n.includes("block") ||
-    n.includes("math") ||
-    n.includes("logic") ||
-    n.includes("brain") ||
-    n.includes("match 3") ||
-    n.includes("tile") ||
-    n.includes("connect") ||
-    n.includes("escape") ||
-    n.includes("maze") ||
-    n.includes("quiz") ||
-    n.includes("trivia")
+    n.includes("math")
   ) {
     return "puzzle";
   }
@@ -204,6 +308,50 @@ export const FEATURED_GAME_IDS = [
   "drifthunters",
 ];
 
+function formatGameName(folderName: string): string {
+  const customMap: Record<string, string> = {
+    "10minutestilldawn": "10 Minutes Till Dawn",
+    "1on1soccer": "1on1 Soccer",
+    "1v1lol": "1v1.LOL",
+    "2048": "2048",
+    abudathealien: "Abuda The Alien",
+    aceattorney: "Ace Attorney",
+    achievementunlocked: "Achievement Unlocked",
+    achievementunlocked2: "Achievement Unlocked 2",
+    achievementunlocked3: "Achievement Unlocked 3",
+    slope: "Slope",
+    retrobowl: "Retro Bowl",
+    subwaysurfers: "Subway Surfers",
+    motox3m: "Moto X3M",
+    cookieclicker: "Cookie Clicker",
+    geometrydash: "Geometry Dash",
+    bitlife: "BitLife",
+    basketballstars: "Basketball Stars",
+    drifthunters: "Drift Hunters",
+    ovo: "OvO",
+    run3: "Run 3",
+    paperio2: "Paper.io 2",
+    tunnelrush: "Tunnel Rush",
+    fnf: "Friday Night Funkin'",
+    minecraft: "Minecraft Eaglercraft",
+    sm64: "Super Mario 64",
+    happywheels: "Happy Wheels",
+  };
+  const mapped = customMap[folderName.toLowerCase()];
+  if (mapped) {
+    return mapped;
+  }
+  const spaced = folderName
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/([0-9]+)([a-zA-Z])/g, "$1 $2")
+    .replace(/([a-zA-Z])([0-9]+)/g, "$1 $2")
+    .replace(/[-_]/g, " ");
+  return spaced
+    .split(" ")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
 export async function fetchGames(): Promise<Game[]> {
   const customGame: Game = {
     id: "soundboard",
@@ -213,33 +361,28 @@ export async function fetchGames(): Promise<Game[]> {
       "https://play-lh.googleusercontent.com/QbPwdx7u46tJLd6SBJ6cCPajEKgiA620fYNSZb1VsdlKIBPs4m6itZRDmu9SWPo8vbV77H1H42cNefPDtoYM",
     category: "popular",
     featured: true,
-    plays: 50000,
-    rating: 4.8,
+    plays: 99999,
+    rating: 5.0,
   };
 
-  const results: Game[] = [customGame];
-
+  let seraphGames: Game[] = [];
   try {
-    const gnRes = await fetch(GN_ZONES_URL).catch((err) => {
-      console.error("GN fetch error:", err);
-      return null;
+    const res = await fetch("https://api.github.com/repos/a456pur/seraph/contents/games", {
+      headers: { "User-Agent": "Mozilla/5.0" },
     });
-
-    if (gnRes && gnRes.ok) {
-      const rawData = await gnRes.json();
-      if (Array.isArray(rawData)) {
-        const gnGames = rawData
-          .filter(
-            (item: Record<string, unknown>) =>
-              item && typeof item.id === "number" && item.id >= 0 && item.url && item.name,
-          )
-          .map((item: Record<string, unknown>) => {
-            const rawUrl = String(item.url || "");
-            const filename = rawUrl.replace("{HTML_URL}/", "").replace(/^https?:\/\/[^/]+\//, "");
-            const coverUrl = String(item.cover || "").replace("{COVER_URL}", GN_COVERS_CDN);
-            const name = String(item.name);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        seraphGames = data
+          .filter((item: any) => item && item.name && item.name !== ".DS_Store")
+          .map((item: any, idx: number) => {
+            const folderName = String(item.name);
+            const name = formatGameName(folderName);
+            const directory = `games/${folderName}/index.html`;
+            const image = `https://cdn.jsdelivr.net/gh/a456pur/seraph@main/images/thumbnails/${folderName}.jpg`;
             const category = assignCategory(name);
             const featured =
+              idx < 25 ||
               category === "popular" ||
               name.toLowerCase().includes("slope") ||
               name.toLowerCase().includes("1v1") ||
@@ -248,136 +391,70 @@ export async function fetchGames(): Promise<Game[]> {
               name.toLowerCase().includes("moto x3m");
 
             return {
-              id: item.id,
+              id: `seraph-${folderName}`,
+              name,
+              directory,
+              image,
+              category,
+              featured,
+              plays: Math.floor(Math.random() * 800000) + 150000,
+              rating: Number((4.6 + Math.random() * 0.3).toFixed(1)),
+            };
+          });
+      }
+    }
+  } catch (err) {
+    console.error("Failed to fetch full Seraph games list from GitHub API:", err);
+  }
+
+  if (seraphGames.length === 0) {
+    seraphGames = SERAPH_GAMES;
+  }
+
+  let gnMathGames: Game[] = [];
+  try {
+    const res = await fetch(GN_ZONES_URL);
+    if (res.ok) {
+      const rawData = await res.json();
+      if (Array.isArray(rawData)) {
+        gnMathGames = rawData
+          .filter(
+            (item: Record<string, unknown>) =>
+              item &&
+              typeof item["id"] === "number" &&
+              item["id"] >= 0 &&
+              item["url"] &&
+              item["name"],
+          )
+          .map((item: Record<string, unknown>) => {
+            const rawUrl = String(item["url"] || "");
+            const filename = rawUrl.replace("{HTML_URL}/", "").replace(/^https?:\/\/[^/]+\//, "");
+            const coverUrl = String(item["cover"] || "").replace("{COVER_URL}", GN_COVERS_CDN);
+            const name = String(item["name"]);
+            const category = assignCategory(name);
+            const featured =
+              category === "popular" ||
+              name.toLowerCase().includes("slope") ||
+              name.toLowerCase().includes("1v1");
+
+            return {
+              id: item["id"] as number,
               name,
               directory: filename,
               image: coverUrl,
-              author: item.author ? String(item.author) : undefined,
-              authorLink: item.authorLink ? String(item.authorLink) : undefined,
+              author: item["author"] ? String(item["author"]) : undefined,
+              authorLink: item["authorLink"] ? String(item["authorLink"]) : undefined,
               category,
               featured,
               plays: Math.floor(Math.random() * 50000) + 12000,
               rating: Number((4.5 + Math.random() * 0.4).toFixed(1)),
             };
           });
-        results.push(...gnGames);
-      }
-    }
-
-    // Fetch Seraph Games
-    const seraphRes = await fetch(SERAPH_DATA_URL).catch((err) => {
-      console.error("Seraph fetch error:", err);
-      return null;
-    });
-
-    if (seraphRes && seraphRes.ok) {
-      const seraphData = await seraphRes.json();
-      if (typeof seraphData === "object" && seraphData !== null) {
-        const seraphGames = Object.entries(seraphData).map(([key, data]: [string, any]) => {
-          // Key is like "slope/index.html"
-          const name = key
-            .split("/")[0]
-            .replace(/-/g, " ")
-            .replace(/\b\w/g, (l) => l.toUpperCase());
-          const category = assignCategory(name);
-
-          return {
-            id: `seraph-${key}`,
-            name,
-            directory: `gh/a456pur/seraph/main/games/${key}`,
-            image: `gh/a456pur/seraph/main${data.thumbnail}`,
-            category,
-            featured: FEATURED_GAME_IDS.some((fid) => name.toLowerCase().includes(fid)),
-            plays: Math.floor(Math.random() * 30000) + 5000,
-            rating: Number((4.3 + Math.random() * 0.6).toFixed(1)),
-          };
-        });
-        results.push(...seraphGames);
-      }
-    }
-
-    // Fetch CKV Games
-    const ckvRes = await fetch(CKV_DATA_URL).catch((err) => {
-      console.error("CKV fetch error:", err);
-      return null;
-    });
-
-    if (ckvRes && ckvRes.ok) {
-      const ckvHtml = await ckvRes.text();
-      // Match <a class="game-link" href="gamefiles/fnaf3.html"> <img src="gameimages/fnaf3.jpg" alt="Five Nights at Freddy's 3 Cover"> <div>Five Nights at Freddy's 3</div></a>
-      const regex =
-        /<a class="game-link" href="([^"]+)">\s*<img src="([^"]+)" alt="([^"]*)">\s*<div>([^<]+)<\/div><\/a>/g;
-      let match;
-      const ckvGames: Game[] = [];
-      while ((match = regex.exec(ckvHtml)) !== null) {
-        const [, href, imgSrc, , title] = match;
-        ckvGames.push({
-          id: `ckv-${href}`,
-          name: title.trim(),
-          directory: `gh/WanoCapy/ChickenKingsVault/main/${href}`,
-          image: `gh/WanoCapy/ChickenKingsVault/main/${imgSrc}`,
-          category: "ckv",
-          featured: FEATURED_GAME_IDS.some((fid) => title.toLowerCase().includes(fid)),
-          plays: Math.floor(Math.random() * 20000) + 8000,
-          rating: Number((4.4 + Math.random() * 0.5).toFixed(1)),
-        });
-      }
-      results.push(...ckvGames);
-    }
-
-    // Fetch Lumin Games
-    if (typeof window !== "undefined") {
-      let luminEngine = (window as any).LuminEngine;
-
-      // Wait a bit for initialization if needed
-      if (!luminEngine) {
-        for (let i = 0; i < 50; i++) {
-          await new Promise((resolve) => setTimeout(resolve, 100));
-          // Check if it's ready AND it's a constructor
-          if ((window as any).Lumin && typeof (window as any).Lumin === "function") {
-            // It might already be initialized by main.tsx
-            luminEngine = (window as any).LuminEngine;
-            if (luminEngine) break;
-
-            // If not initialized yet, do it here if possible (as a backup)
-            try {
-              (window as any).LuminEngine = new (window as any).Lumin({
-                provider: "gn-math-mirror",
-                fallbackProxy: "https://cherrion.top",
-                sandboxMode: false,
-              });
-              luminEngine = (window as any).LuminEngine;
-              break;
-            } catch (e) {
-              // Not a constructor yet or failed
-            }
-          }
-        }
-      }
-
-      if (luminEngine && typeof luminEngine.fetchGames === "function") {
-        try {
-          const luminGamesRaw = await luminEngine.fetchGames();
-          if (Array.isArray(luminGamesRaw)) {
-            const luminGames: Game[] = luminGamesRaw.map((game: any) => ({
-              id: `lumin-${game.id}`,
-              name: game.title,
-              directory: `lumin-id-${game.id}`,
-              image: game.icon,
-              category: "lumin",
-              plays: Math.floor(Math.random() * 40000) + 10000,
-              rating: Number((4.6 + Math.random() * 0.3).toFixed(1)),
-            }));
-            results.push(...luminGames);
-          }
-        } catch (err) {
-          console.error("Failed to stream inventory from Lumin engine:", err);
-        }
       }
     }
   } catch (err) {
-    console.error("Failed to fetch games list:", err);
+    console.error("Failed to fetch gn-math games:", err);
   }
 
-  return results;
+  return [customGame, ...gnMathGames, ...seraphGames];
 }

@@ -59,16 +59,6 @@ export function GamePlayer({
         setActiveSrc("/api/soundboard/scramjet-proxy");
         return;
       }
-      if (game.category === "lumin") {
-        const luminEngine = (window as any).LuminEngine;
-        if (luminEngine) {
-          const originalId = String(game.id).replace("lumin-", "");
-          const safeUrl = luminEngine.getSecureUrl(originalId);
-          setActiveSrc(safeUrl);
-          setIframeLoading(false);
-          return;
-        }
-      }
       const result = await loadGameSource(game.directory);
       if (cancelled) {
         if (result.blobUrl) URL.revokeObjectURL(result.blobUrl);
@@ -88,7 +78,7 @@ export function GamePlayer({
         currentBlobUrlRef.current = null;
       }
     };
-  }, [game.id, game.directory, game.category]);
+  }, [game.id, game.directory]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -138,20 +128,6 @@ export function GamePlayer({
         setIsReloading(false);
       }, 100);
       return;
-    }
-    if (game.category === "lumin") {
-      const luminEngine = (window as any).LuminEngine;
-      if (luminEngine) {
-        const originalId = String(game.id).replace("lumin-", "");
-        const safeUrl = luminEngine.getSecureUrl(originalId);
-        setActiveSrc("");
-        setTimeout(() => {
-          setActiveSrc(safeUrl);
-          setIframeLoading(false);
-          setIsReloading(false);
-        }, 100);
-        return;
-      }
     }
     if (currentBlobUrlRef.current) {
       URL.revokeObjectURL(currentBlobUrlRef.current);
@@ -267,7 +243,6 @@ export function GamePlayer({
           className="relative w-full max-w-6xl aspect-[16/9] overflow-hidden rounded-2xl border border-neutral-800 bg-black shadow-2xl"
         >
           <iframe
-            id="game-frame"
             ref={iframeRef}
             src={activeSrc || undefined}
             title={game.name}

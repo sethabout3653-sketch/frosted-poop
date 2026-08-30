@@ -7,7 +7,7 @@ const router = Router();
 interface CacheEntry {
   buffer: Buffer;
   mime: string;
-  encoding?: string;
+  encoding?: string | undefined;
   timestamp: number;
 }
 
@@ -154,7 +154,7 @@ function sanitizeAndCleanGameHtml(rawHtml: string): string {
     if (cdnMatch) {
       const fullMatch = cdnMatch[0];
       const matchRepo = fullMatch.match(/(\/api\/public\/gn\/cdn\/[^/]+\/[^/]+(?:@[^/]+)?\/?)/i);
-      if (matchRepo) {
+      if (matchRepo && matchRepo[1]) {
         detectedBase = matchRepo[1];
         if (!detectedBase.endsWith("/")) detectedBase += "/";
       }
@@ -424,6 +424,141 @@ router.get("/gn/*", async (req, res) => {
   } catch (err) {
     console.error("GN Game proxy error:", err);
     return res.status(500).send("GN Game proxy error");
+  }
+});
+
+// Route 3: Seraph Game Library Proxy (a456pur/seraph)
+router.get("/seraph/*", async (req, res) => {
+  try {
+    const rawPath = (req.params as Record<string, string>)[0] || "";
+    const cacheKey = `seraph:${rawPath}`;
+
+    const cached = getCachedAsset(cacheKey);
+    if (cached) {
+      return serveAsset(req, res, cached.buffer, rawPath, cached.mime, cached.encoding === "gzip");
+    }
+
+    const seraphUrl = `https://cdn.jsdelivr.net/gh/a456pur/seraph@main/${rawPath}`;
+    let response = await fetch(seraphUrl, { redirect: "follow" });
+    if (!response.ok) {
+      const rawSeraphUrl = `https://raw.githubusercontent.com/a456pur/seraph/main/${rawPath}`;
+      const r2 = await fetch(rawSeraphUrl, { redirect: "follow" });
+      if (!r2.ok) {
+        return res.status(404).send("Seraph game asset not found");
+      }
+      response = r2;
+    }
+
+    const cleanPathNoQuery = rawPath.split("?")[0] || "";
+    if (
+      cleanPathNoQuery.endsWith(".html") ||
+      cleanPathNoQuery.endsWith(".htm") ||
+      cleanPathNoQuery === "" ||
+      !cleanPathNoQuery.includes(".")
+    ) {
+      res.setHeader("content-type", "text/html; charset=utf-8");
+      const rawText = await response.text();
+      let sanitizedHtml = sanitizeAndCleanGameHtml(rawText);
+      sanitizedHtml = sanitizedHtml.replace(
+        /https:\/\/cdn\.jsdelivr\.net\/gh\/a456pur\/seraph@main/g,
+        "/api/public/seraph",
+      );
+      return res.send(sanitizedHtml);
+    }
+
+    if (cleanPathNoQuery.endsWith(".js") || cleanPathNoQuery.endsWith(".mjs")) {
+      let jsText = await response.text();
+      jsText = jsText.replace(
+        /https:\/\/cdn\.jsdelivr\.net\/gh\/a456pur\/seraph@main/g,
+        "/api/public/seraph",
+      );
+      const buffer = Buffer.from(jsText, "utf-8");
+      setCachedAsset(cacheKey, buffer, "application/javascript");
+      return serveAsset(req, res, buffer, rawPath, "application/javascript");
+    }
+
+    if (cleanPathNoQuery.endsWith(".css")) {
+      let cssText = await response.text();
+      cssText = cssText.replace(
+        /https:\/\/cdn\.jsdelivr\.net\/gh\/a456pur\/seraph@main/g,
+        "/api/public/seraph",
+      );
+      const buffer = Buffer.from(cssText, "utf-8");
+      setCachedAsset(cacheKey, buffer, "text/css");
+      return serveAsset(req, res, buffer, rawPath, "text/css");
+    }
+
+    const mime = getMimeType(cleanPathNoQuery, response.headers.get("content-type"));
+    const encoding = response.headers.get("content-encoding") || undefined;
+    const buffer = Buffer.from(await response.arrayBuffer());
+
+    setCachedAsset(cacheKey, buffer, mime, encoding);
+    return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip");
+  } catch (err) {
+    console.error("Seraph proxy error:", err);
+    return res.status(500).send("Seraph proxy error");
+  }
+});
+
+// Route 4: 3kh0 Game Library Proxy
+router.get("/3kh0/*", async (req, res) => {
+  try {
+    const rawPath = (req.params as Record<string, string>)[0] || "";
+    const cacheKey = `3kh0:${rawPath}`;
+
+    const cached = getCachedAsset(cacheKey);
+    if (cached) {
+      return serveAsset(req, res, cached.buffer, rawPath, cached.mime, cached.encoding === "gzip");
+    }
+
+    const primaryUrl = `https://cdn.jsdelivr.net/gh/3kh0/3kh0-Assets@main/${rawPath}`;
+    let response = await fetch(primaryUrl, { redirect: "follow" });
+    if (!response.ok) {
+      const fallbackUrl = `https://raw.githubusercontent.com/3kh0/3kh0-Assets/main/${rawPath}`;
+      const r2 = await fetch(fallbackUrl, { redirect: "follow" });
+      if (!r2.ok) {
+        return res.status(404).send("3kh0 game asset not found");
+      }
+      response = r2;
+    }
+
+    const cleanPathNoQuery = rawPath.split("?")[0] || "";
+    if (
+      cleanPathNoQuery.endsWith(".html") ||
+      cleanPathNoQuery.endsWith(".htm") ||
+      cleanPathNoQuery === "" ||
+      !cleanPathNoQuery.includes(".")
+    ) {
+      res.setHeader("content-type", "text/html; charset=utf-8");
+      const rawText = await response.text();
+      let sanitizedHtml = sanitizeAndCleanGameHtml(rawText);
+      sanitizedHtml = sanitizedHtml.replace(
+        /https:\/\/cdn\.jsdelivr\.net\/gh\/3kh0\/3kh0-Assets@main/g,
+        "/api/public/3kh0",
+      );
+      return res.send(sanitizedHtml);
+    }
+
+    if (cleanPathNoQuery.endsWith(".js") || cleanPathNoQuery.endsWith(".mjs")) {
+      let jsText = await response.text();
+      jsText = jsText.replace(
+        /https:\/\/cdn\.jsdelivr\.net\/gh\/3kh0\/3kh0-Assets@main/g,
+        "/api/public/3kh0",
+      );
+      const buffer = Buffer.from(jsText, "utf-8");
+      setCachedAsset(cacheKey, buffer, "application/javascript");
+      return serveAsset(req, res, buffer, rawPath, "application/javascript");
+    }
+
+    const mime = getMimeType(cleanPathNoQuery, response.headers.get("content-type"));
+    const encoding = response.headers.get("content-encoding") || undefined;
+    const buffer = Buffer.from(await response.arrayBuffer());
+
+    setCachedAsset(cacheKey, buffer, mime, encoding);
+    return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip");
+  } catch (err) {
+    console.error("3kh0 proxy error:", err);
+    return res.status(500).send("3kh0 proxy error");
   }
 });
 
