@@ -13,8 +13,12 @@ import {
   Sparkles,
   Search,
   Coffee,
+  WifiOff,
+  CheckCircle2,
 } from "lucide-react";
 import { gameCover, type Game, type GameCategory } from "@/lib/games";
+import { isGameCached } from "@/lib/offlineManager";
+import { GoogleAdBanner } from "./GoogleAdBanner";
 
 interface Props {
   games: Game[];
@@ -24,10 +28,12 @@ interface Props {
   favorites: (number | string)[];
   toggleFavorite: (id: number | string) => void;
   recentlyPlayed: { id: number | string; name: string; directory: string; image: string }[];
+  isOffline?: boolean;
+  cachedUrls?: string[];
 }
 
 const CATEGORIES: {
-  id: GameCategory | "favorites" | "recent";
+  id: GameCategory | "favorites" | "recent" | "offline";
   label: string;
   icon: React.ReactNode;
 }[] = [
@@ -43,6 +49,11 @@ const CATEGORIES: {
   { id: "puzzle", label: "Puzzle", icon: <Puzzle className="h-3.5 w-3.5 text-purple-400" /> },
   { id: "retro", label: "Retro", icon: <Gamepad2 className="h-3.5 w-3.5 text-yellow-400" /> },
   { id: "casual", label: "Casual", icon: <Coffee className="h-3.5 w-3.5 text-amber-200" /> },
+  {
+    id: "offline",
+    label: "Offline Ready",
+    icon: <WifiOff className="h-3.5 w-3.5 text-emerald-400" />,
+  },
   { id: "favorites", label: "My Favorites", icon: <Star className="h-3.5 w-3.5 text-amber-300" /> },
   { id: "recent", label: "Recently Played", icon: <Clock className="h-3.5 w-3.5 text-cyan-400" /> },
 ];
@@ -55,10 +66,12 @@ export function GamesGrid({
   favorites,
   toggleFavorite,
   recentlyPlayed,
+  isOffline = false,
+  cachedUrls = [],
 }: Props) {
-  const [activeCategory, setActiveCategory] = useState<GameCategory | "favorites" | "recent">(
-    "all",
-  );
+  const [activeCategory, setActiveCategory] = useState<
+    GameCategory | "favorites" | "recent" | "offline"
+  >(isOffline ? "offline" : "all");
 
   // Lazy loading pagination to render 830+ games fast and fluid without crashing lower-end browsers
   const [visibleCount, setVisibleCount] = useState(48);
@@ -77,6 +90,8 @@ export function GamesGrid({
     } else if (activeCategory === "recent") {
       const recentIds = recentlyPlayed.map((r) => r.id);
       list = games.filter((g) => recentIds.includes(g.id));
+    } else if (activeCategory === "offline") {
+      list = games.filter((g) => isGameCached(g, cachedUrls));
     } else if (activeCategory !== "all") {
       list = games.filter((g) => g.category === activeCategory);
     }
@@ -87,7 +102,7 @@ export function GamesGrid({
     }
 
     return list;
-  }, [games, activeCategory, searchQuery, favorites, recentlyPlayed]);
+  }, [games, activeCategory, searchQuery, favorites, recentlyPlayed, cachedUrls]);
 
   // Sliced games list for progressive rendering
   const visibleGames = useMemo(() => {
@@ -126,6 +141,11 @@ export function GamesGrid({
             </button>
           );
         })}
+      </div>
+
+      {/* Top Google AdSense Leaderboard Banner */}
+      <div className="my-3">
+        <GoogleAdBanner formatType="leaderboard" label="ARCADE SPONSORED AD" />
       </div>
 
       {/* Featured Showcase Hero (Only shown when no search query and in 'all' or 'popular' tab) */}
@@ -250,6 +270,7 @@ export function GamesGrid({
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
         {visibleGames.map((game) => {
           const isFav = favorites.includes(game.id);
+          const isCached = isGameCached(game, cachedUrls);
 
           return (
             <div
@@ -270,6 +291,17 @@ export function GamesGrid({
                   }}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity duration-300 ease-out" />
+
+                {/* Offline Cached Indicator */}
+                {isCached && (
+                  <div
+                    title="Cached in Service Worker for Offline Play"
+                    className="absolute left-2 top-2 flex items-center gap-1 rounded-md border border-emerald-500/40 bg-black/90 px-1.5 py-0.5 text-[9px] font-bold text-emerald-400 backdrop-blur-sm"
+                  >
+                    <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+                    <span className="hidden sm:inline">Offline</span>
+                  </div>
+                )}
 
                 {/* Favorite Toggle Button */}
                 <button

@@ -227,18 +227,40 @@ function serveAsset(
 ) {
   const mime = getMimeType(rawPath, contentType);
 
+  // Detect GZIP magic bytes (0x1F 0x8B) or compressed extensions (.unityweb, .gz)
+  const isGzip =
+    isCompressedGzip ||
+    (buffer.length >= 2 && buffer[0] === 0x1f && buffer[1] === 0x8b) ||
+    rawPath.toLowerCase().endsWith(".gz") ||
+    rawPath.toLowerCase().endsWith(".unityweb");
+
+  const isBrotli = rawPath.toLowerCase().endsWith(".br");
+
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
   res.setHeader(
     "Access-Control-Expose-Headers",
-    "Content-Length, Content-Type, Accept-Ranges, ETag",
+    "Content-Length, Content-Type, Content-Encoding, Accept-Ranges, ETag, Last-Modified",
   );
   res.setHeader("Accept-Ranges", "bytes");
 
-  if (isCompressedGzip || rawPath.toLowerCase().endsWith(".gz")) {
+  // Provide deterministic ETag and Last-Modified so UnityCache and browser cache validate instantly
+  const etag = `"${buffer.length}-${buffer.subarray(0, Math.min(16, buffer.length)).toString("hex")}"`;
+  res.setHeader("ETag", etag);
+  res.setHeader("Last-Modified", "Wed, 01 Jan 2025 00:00:00 GMT");
+
+  if (isGzip) {
     res.setHeader("Content-Encoding", "gzip");
-  } else if (rawPath.toLowerCase().endsWith(".br")) {
+  } else if (isBrotli) {
     res.setHeader("Content-Encoding", "br");
+  }
+
+  // Handle HEAD requests explicitly without sending body (crucial for UnityCache HEAD checks)
+  if (req.method === "HEAD") {
+    res.setHeader("Content-Type", mime);
+    res.setHeader("Content-Length", buffer.length);
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    return res.status(200).end();
   }
 
   // Handle Range Requests (important for seamless HTML5 Audio streaming in Safari and Chrome)

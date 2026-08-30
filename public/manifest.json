@@ -1,0 +1,22 @@
+{
+  "short_name": "Frosted",
+  "name": "Frosted Unblocked Games Arcade",
+  "icons": [
+    {
+      "src": "https://play-lh.googleusercontent.com/QbPwdx7u46tJLd6SBJ6cCPajEKgiA620fYNSZb1VsdlKIBPs4m6itZRDmu9SWPo8vbV77H1H42cNefPDtoYM",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://play-lh.googleusercontent.com/QbPwdx7u46tJLd6SBJ6cCPajEKgiA620fYNSZb1VsdlKIBPs4m6itZRDmu9SWPo8vbV77H1H42cNefPDtoYM",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#000000",
+  "theme_color": "#0a0a0a",
+  "display": "standalone",
+  "orientation": "any",
+  "description": "Unblocked HTML5 & retro games arcade with offline caching support."
+}

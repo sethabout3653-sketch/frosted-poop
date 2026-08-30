@@ -8,10 +8,15 @@ import {
   Keyboard,
   Sparkles,
   Check,
+  Download,
+  CheckCircle2,
+  WifiOff,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { gameCover, type Game } from "@/lib/games";
 import { loadGameSource, type GameLoadResult } from "@/lib/gameLoader";
+import { isGameCached } from "@/lib/offlineManager";
+import { GoogleAdBanner } from "./GoogleAdBanner";
 
 interface Props {
   game: Game;
@@ -20,6 +25,9 @@ interface Props {
   allGames: Game[];
   favorites: (number | string)[];
   toggleFavorite: (id: number | string) => void;
+  isOffline?: boolean;
+  cachedUrls?: string[];
+  onDownloadForOffline?: (game: Game) => Promise<number>;
 }
 
 export function GamePlayer({
@@ -29,6 +37,9 @@ export function GamePlayer({
   allGames,
   favorites,
   toggleFavorite,
+  isOffline = false,
+  cachedUrls = [],
+  onDownloadForOffline,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -38,9 +49,11 @@ export function GamePlayer({
   const [showKeybinds, setShowKeybinds] = useState(false);
   const [iframeLoading, setIframeLoading] = useState(true);
   const [activeSrc, setActiveSrc] = useState<string>("");
+  const [isSavingOffline, setIsSavingOffline] = useState(false);
   const currentBlobUrlRef = useRef<string | null>(null);
 
   const isFav = favorites.includes(game.id);
+  const isCached = isGameCached(game, cachedUrls);
 
   // Load and sanitize game HTML with multi-tier fallback (Vercel & static host compatible)
   useEffect(() => {
@@ -157,8 +170,31 @@ export function GamePlayer({
   // Recommendations: exclude current game
   const relatedGames = allGames.filter((g) => g.id !== game.id).slice(0, 6);
 
+  const handleSaveOffline = async () => {
+    if (!onDownloadForOffline || isSavingOffline) return;
+    setIsSavingOffline(true);
+    try {
+      await onDownloadForOffline(game);
+    } finally {
+      setIsSavingOffline(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-black text-white flex flex-col font-sans animate-in fade-in duration-200">
+      {/* Offline Mode Banner */}
+      {isOffline && (
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2.5 text-xs text-amber-300 flex items-center justify-between">
+          <div className="flex items-center gap-2 max-w-7xl mx-auto w-full">
+            <WifiOff className="h-4 w-4 shrink-0 text-amber-400" />
+            <span>
+              <strong>Offline Mode:</strong> Core game assets served from local Service Worker
+              cache. Previously opened games play completely offline without internet connection.
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Top Floating Controls Bar */}
       <div className="sticky top-0 z-30 border-b border-neutral-900 bg-[#0a0a0a]">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3">
@@ -184,6 +220,41 @@ export function GamePlayer({
 
           {/* Quick Action Controls */}
           <div className="flex items-center gap-2">
+            {/* Save for Offline Play Button */}
+            {onDownloadForOffline && (
+              <button
+                onClick={handleSaveOffline}
+                disabled={isSavingOffline}
+                title={
+                  isCached
+                    ? "Game cached in Service Worker for offline play"
+                    : "Save core game files locally for offline play"
+                }
+                className={`smooth-btn flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium cursor-pointer transition-all ${
+                  isCached
+                    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                    : "border-neutral-800 bg-[#0d0d0d] text-neutral-300 hover:border-neutral-600 hover:text-white"
+                }`}
+              >
+                {isCached ? (
+                  <>
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                    <span className="hidden sm:inline">Offline Ready</span>
+                  </>
+                ) : isSavingOffline ? (
+                  <>
+                    <RotateCw className="h-3.5 w-3.5 animate-spin text-neutral-400 shrink-0" />
+                    <span className="hidden sm:inline">Caching...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-3.5 w-3.5 text-neutral-400 shrink-0" />
+                    <span className="hidden sm:inline">Save Offline</span>
+                  </>
+                )}
+              </button>
+            )}
+
             <button
               onClick={() => toggleFavorite(game.id)}
               title={isFav ? "Remove Favorite" : "Add Favorite"}
@@ -252,6 +323,11 @@ export function GamePlayer({
             allow="fullscreen; autoplay; gamepad; pointer-lock; clipboard-write; encrypted-media"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
           />
+        </div>
+
+        {/* Google Ad Leaderboard under Game Player */}
+        <div className="w-full max-w-6xl mt-2">
+          <GoogleAdBanner formatType="leaderboard" label="SPONSORED GAME AD" />
         </div>
       </div>
 

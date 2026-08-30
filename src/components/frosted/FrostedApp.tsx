@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchGames, type Game } from "@/lib/games";
 import { useFrostedStore } from "@/lib/frostedStore";
+import { useOfflineStatus } from "@/lib/offlineManager";
 import { FrostedNavbar } from "./FrostedNavbar";
 import { GamesGrid } from "./GamesGrid";
 import { GamePlayer } from "./GamePlayer";
@@ -29,6 +30,8 @@ export function FrostedApp() {
 
   const { favorites, toggleFavorite, recentlyPlayed, recordPlay, cloak, updateCloak } =
     useFrostedStore();
+
+  const { isOffline, cachedUrls, downloadGameForOffline, clearGameCache } = useOfflineStatus();
 
   // Listen for open-chat event when a notification is clicked
   useEffect(() => {
@@ -115,6 +118,7 @@ export function FrostedApp() {
           }}
           activeGame={activeGame}
           isChatActive={isChatActive}
+          isOffline={isOffline}
         />
       )}
 
@@ -134,6 +138,9 @@ export function FrostedApp() {
               allGames={gamesList}
               favorites={favorites}
               toggleFavorite={toggleFavorite}
+              isOffline={isOffline}
+              cachedUrls={cachedUrls}
+              onDownloadForOffline={downloadGameForOffline}
             />
           ) : (
             <GamesGrid
@@ -144,6 +151,8 @@ export function FrostedApp() {
               favorites={favorites}
               toggleFavorite={toggleFavorite}
               recentlyPlayed={recentlyPlayed}
+              isOffline={isOffline}
+              cachedUrls={cachedUrls}
             />
           )}
         </main>
@@ -155,6 +164,8 @@ export function FrostedApp() {
         onClose={() => setIsSettingsModalOpen(false)}
         currentCloak={cloak}
         onSelectCloak={updateCloak}
+        cachedCount={cachedUrls.length}
+        onClearCache={clearGameCache}
       />
     </div>
   );

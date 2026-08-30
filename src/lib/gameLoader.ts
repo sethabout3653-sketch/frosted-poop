@@ -93,7 +93,7 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
     color: #ffffff !important;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
   }
-  #gameContainer, #unityContainer, .webgl-content, #canvas, #unity-canvas, canvas, #MMFCanvas, #ruffle {
+  #gameContainer, #unityContainer, #unity-container, #game-container, #unity-canvas-container, .webgl-content, #canvas, #unity-canvas, canvas, #MMFCanvas, #ruffle, .unity-desktop {
     width: 100% !important;
     height: 100% !important;
     display: block !important;
@@ -135,11 +135,79 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
     return u;
   }
 
-  // 3. Unity WebGL Loader & UnityCache Fix
+  // 3. Unity WebGL Loader, WebGL Context & UnityCache Fix
   // Fixes games hanging at "Loading 0%" caused by UnityCache IndexedDB / HEAD requests
+  try {
+    window.UnityCache = window.UnityCache || {};
+    window.UnityCache.isSupported = false;
+    window.UnityCache.enabled = false;
+  } catch(e) {}
+
+  // Safe IndexedDB Guard for sandboxed iframe contexts
+  try {
+    if (window.indexedDB) {
+      const _origIDBOpen = window.indexedDB.open;
+      window.indexedDB.open = function() {
+        try {
+          const req = _origIDBOpen.apply(window.indexedDB, arguments);
+          if (req && req.addEventListener) {
+            req.addEventListener('error', function(errEvt) {
+              errEvt.preventDefault && errEvt.preventDefault();
+            });
+          }
+          return req;
+        } catch(err) {
+          return {
+            addEventListener: function(type, fn) { if (type === 'error') setTimeout(fn, 1); },
+            removeEventListener: function() {},
+            result: null,
+            error: err
+          };
+        }
+      };
+    }
+  } catch(e) {}
+
+  // WebGL Context Fallback Guard (webgl2 -> webgl fallback)
+  try {
+    const origGetContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function(type, attributes) {
+      let ctx = origGetContext.call(this, type, attributes);
+      if (!ctx && (type === 'webgl2' || type === 'experimental-webgl2')) {
+        ctx = origGetContext.call(this, 'webgl', attributes) || origGetContext.call(this, 'experimental-webgl', attributes);
+      }
+      return ctx;
+    };
+  } catch(e) {}
+
+  // UnityProgress DOM Safe Guard
+  let _origUnityProgress = window.UnityProgress;
+  Object.defineProperty(window, 'UnityProgress', {
+    configurable: true,
+    enumerable: true,
+    get: function() { return _origUnityProgress; },
+    set: function(fn) {
+      if (typeof fn === 'function') {
+        _origUnityProgress = function(unityInstance, progress) {
+          try {
+            return fn.apply(this, arguments);
+          } catch(err) {
+            console.warn('[Frosted] UnityProgress template error bypassed:', err);
+          }
+        };
+      } else {
+        _origUnityProgress = fn;
+      }
+    }
+  });
+
   function patchUnityLoader(obj) {
     if (!obj || typeof obj !== 'object') return;
     try {
+      if (obj.UnityCache) {
+        obj.UnityCache.isSupported = false;
+        obj.UnityCache.enabled = false;
+      }
       if (obj.XMLHttpRequest) {
         obj.XMLHttpRequest = window.XMLHttpRequest;
       }

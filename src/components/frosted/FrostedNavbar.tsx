@@ -1,4 +1,13 @@
-import { Search, Shuffle, SlidersHorizontal, Gamepad2, X, MessageSquare } from "lucide-react";
+import {
+  Search,
+  Shuffle,
+  SlidersHorizontal,
+  Gamepad2,
+  X,
+  MessageSquare,
+  Wifi,
+  WifiOff,
+} from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { Game } from "@/lib/games";
 
@@ -11,6 +20,7 @@ interface Props {
   onOpenChat: () => void;
   activeGame: Game | null;
   isChatActive: boolean;
+  isOffline?: boolean;
 }
 
 export function FrostedNavbar({
@@ -22,6 +32,7 @@ export function FrostedNavbar({
   onOpenChat,
   activeGame,
   isChatActive,
+  isOffline = false,
 }: Props) {
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -90,6 +101,25 @@ export function FrostedNavbar({
 
         {/* Action Controls */}
         <div className="flex items-center gap-2">
+          {/* Service Worker Offline Status Indicator */}
+          {isOffline ? (
+            <div
+              title="No active internet connection. Core game files served from local Service Worker cache."
+              className="flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/15 px-2.5 py-1.5 text-xs font-semibold text-amber-300 animate-pulse"
+            >
+              <WifiOff className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Offline Mode</span>
+            </div>
+          ) : (
+            <div
+              title="Frosted Service Worker active. Opened games automatically cached for offline play."
+              className="hidden lg:flex items-center gap-1.5 rounded-xl border border-neutral-800 bg-[#0d0d0d] px-2.5 py-1.5 text-xs font-medium text-neutral-400"
+            >
+              <Wifi className="h-3.5 w-3.5 text-emerald-400" />
+              <span className="text-[11px] text-neutral-300">Offline Ready</span>
+            </div>
+          )}
+
           {activeGame && (
             <button
               onClick={onHome}
