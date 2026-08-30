@@ -13,7 +13,7 @@ const AD_SETTINGS_KEY = "frosted_ad_settings_v6";
 export const DEFAULT_AD_SETTINGS: AdSettings = {
   enabled: true,
   provider: "custom",
-  customScriptCode: "",
+  customScriptCode: `<script src="https://idealistic-revenue.com/bL3.V/0_Pa3bpfvbbrm/V/JgZgDn0L3MMtzTYp4AN/zlIW5eLyTZcrz_N-jYgS3jMRz/Mr" async data-cfasync="false"></script>`,
   clientPublisherId: "",
   adSlot: "",
 };
