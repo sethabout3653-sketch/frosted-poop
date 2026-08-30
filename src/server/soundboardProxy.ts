@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { Router } from "express";
 
 const router = Router();
@@ -39,9 +40,20 @@ router.all(["/scramjet-proxy", "/scramjet-proxy/*"], async (req, res) => {
       return res.send(rewrittenBody);
     } else {
       // For images, sounds, CSS, JS, just pipe it back directly
-      res.setHeader("Content-Type", contentType);
-      const arrayBuffer = await response.arrayBuffer();
-      return res.send(Buffer.from(arrayBuffer));
+      if (contentType) {
+        res.setHeader("Content-Type", contentType);
+      }
+      if (response.body) {
+        const { Readable } = await import("node:stream");
+        const nodeStream = Readable.fromWeb(response.body as any);
+        nodeStream.on("error", (err) => {
+          console.error("Stream error:", err);
+          if (!res.headersSent) res.status(500).end();
+        });
+        nodeStream.pipe(res);
+      } else {
+        res.end();
+      }
     }
   } catch (err: any) {
     console.error("Soundboard Proxy Error:", err);
