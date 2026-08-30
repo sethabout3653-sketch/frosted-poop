@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { Readable } from "node:stream";
 
 const router = Router();
 
@@ -58,14 +57,10 @@ router.all(["/scramjet-proxy", "/scramjet-proxy/*"], async (req, res) => {
       }
       
       if (response.body) {
-        const nodeStream = Readable.fromWeb(response.body as any);
-        nodeStream.on("error", (err) => {
-          console.error("Stream error:", err);
-          if (!res.headersSent) res.status(500).end();
-        });
-        nodeStream.pipe(res);
+        const arrayBuffer = await response.arrayBuffer();
+        res.send(Buffer.from(arrayBuffer));
       } else {
-        res.end();
+        res.send();
       }
     }
   } catch (err: any) {
