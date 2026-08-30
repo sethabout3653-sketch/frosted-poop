@@ -7,14 +7,28 @@ export interface GameLoadResult {
   blobUrl?: string;
 }
 
-const HTML_CDN_PRIMARY = "https://cdn.jsdelivr.net/gh/freebuisness/html@main";
-const HTML_CDN_FALLBACK = "https://raw.githubusercontent.com/freebuisness/html/main";
+// Rewrites dead/blocked CDN URLs to fast, CORS-enabled jsDelivr CDN
+export function rewriteCdnUrls(str: string): string {
+  if (!str) return str;
+  let result = str.replace(
+    /https?:\/\/(?:rawcdn\.githack\.com|raw\.githack\.com|cdn\.staticaly\.com\/gh|gitcdn\.link\/repo)\/([^/'"\s]+)\/([^/'"\s]+)\/([^/'"\s]+)\/([^'"\s]+)/gi,
+    "https://cdn.jsdelivr.net/gh/$1/$2@$3/$4",
+  );
+  result = result.replace(
+    /https?:\/\/(?:rawcdn\.githack\.com|raw\.githack\.com)\/([^/'"\s]+)\/([^/'"\s]+)\/([^'"\s]+)/gi,
+    "https://cdn.jsdelivr.net/gh/$1/$2@main/$3",
+  );
+  return result;
+}
 
 // Sanitizes and enhances game HTML for safe, full-speed iframe execution
-export function prepareGameHtml(rawHtml: string, filename: string): string {
+export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: string): string {
   let html = rawHtml;
 
-  // 1. Remove Google Tag Manager, analytics, and advertising scripts
+  // 1. Rewrite dead or blocked CDN hostnames immediately
+  html = rewriteCdnUrls(html);
+
+  // 2. Remove Google Tag Manager, analytics, and advertising scripts
   html = html.replace(/<script\b[^>]*googletagmanager\.com[^>]*><\/script>/gi, "");
   html = html.replace(/<script\b[^>]*googlesyndication\.com[^>]*><\/script>/gi, "");
   html = html.replace(/<script\b[^>]*adservice\.google[^>]*><\/script>/gi, "");
@@ -23,36 +37,50 @@ export function prepareGameHtml(rawHtml: string, filename: string): string {
     "",
   );
 
-  // 2. Remove third-party ad blocks & floating sidebar ad overlays
+  // 3. Remove third-party ad blocks & floating sidebar ad overlays
   html = html.replace(/<div\b[^>]*id=["\x27]sidebarad\d*["\x27][\s\S]*?<\/div>/gi, "");
   html = html.replace(/<style[^>]*>[\s\S]*?#sidebarad[\s\S]*?<\/style>/gi, "");
   html = html.replace(/<div\b[^>]*class=["\x27]sidebar-close["\x27][\s\S]*?<\/div>/gi, "");
 
-  // 3. Remove malicious domain-lock and anti-embed scripts
+  // 4. Remove malicious domain-lock and anti-embed scripts
   html = html.replace(
     /<script\b[^>]*>(?:(?!<\/script>)[\s\S])*(?:IuySzzpOiISwZDDrwmF|sFfEkK\$fMziBAJZwZbkuvp|UravPbGESYjDUNqxKcf\$Vqza|_0x257e|_0xe8c3|document\.body\.remove)[\s\S]*?<\/script>/gi,
     "",
   );
 
-  // 4. Ensure correct <base href="...">
+  // 5. Neutralize dangerous window.parent calls like maeExportApis_
+  html = html.replace(/(?:window\.)?parent\.maeExportApis_\s*\([^)]*\);?/gi, "");
+
+  // 6. Ensure correct <base href="...">
   if (!html.includes("<base ")) {
-    let detectedBase = "https://cdn.jsdelivr.net/gh/freebuisness/html@main/";
-    const cdnMatch = html.match(/https:\/\/cdn\.jsdelivr\.net\/gh\/[^\x27" \t\n\r>]+/i);
-    if (cdnMatch) {
-      const fullMatch = cdnMatch[0];
-      const matchRepo = fullMatch.match(
-        /(https:\/\/cdn\.jsdelivr\.net\/gh\/[^/]+\/[^/]+(?:@[^/]+)?\/?)/i,
-      );
-      if (matchRepo && matchRepo[1]) {
-        detectedBase = matchRepo[1];
-        if (!detectedBase.endsWith("/")) detectedBase += "/";
+    let detectedBase = baseUrl || "https://cdn.jsdelivr.net/gh/freebuisness/html@main/";
+
+    if (!baseUrl) {
+      const cdnMatch = html.match(/https:\/\/cdn\.jsdelivr\.net\/gh\/[^\x27" \t\n\r>]+/i);
+      if (cdnMatch) {
+        const fullMatch = cdnMatch[0];
+        const matchRepo = fullMatch.match(
+          /(https:\/\/cdn\.jsdelivr\.net\/gh\/[^/]+\/[^/]+(?:@[^/]+)?\/?)/i,
+        );
+        if (matchRepo && matchRepo[1]) {
+          detectedBase = matchRepo[1];
+          if (!detectedBase.endsWith("/")) detectedBase += "/";
+        }
       }
     }
-    html = html.replace(/<head[^>]*>/i, `$&<base href="${detectedBase}">`);
+
+    // Safely inject <base> immediately after <head>, or create one
+    if (html.match(/<head[^>]*>/i)) {
+      html = html.replace(/<head[^>]*>/i, `$&<base href="${detectedBase}">`);
+    } else if (html.match(/<html[^>]*>/i)) {
+      html = html.replace(/<html[^>]*>/i, `$&<head><base href="${detectedBase}"></head>`);
+    } else {
+      html = `<head><base href="${detectedBase}"></head>\n` + html;
+    }
   }
 
-  // 5. Universal Runtime Polyfill & Asset Interceptor
-  // Solves Clickteam/FNAF resource mapping, YouTube playables, Web Audio autoplay unlocking, and safe styling
+  // 7. Universal Runtime Polyfill & Asset Interceptor
+  // Solves Unity WebGL 0% hangs, Clickteam/FNAF resource mapping, Web Audio unlocking, and full-bleed layout
   const runtimeScript = `
 <style id="frosted-runtime-style">
   html, body {
@@ -65,19 +93,80 @@ export function prepareGameHtml(rawHtml: string, filename: string): string {
     color: #ffffff !important;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
   }
-  canvas, #canvas, #MMFCanvas, #game-canvas, #unity-canvas, #ruffle {
+  #gameContainer, #unityContainer, .webgl-content, #canvas, #unity-canvas, canvas, #MMFCanvas, #ruffle {
+    width: 100% !important;
+    height: 100% !important;
     display: block !important;
     margin: 0 auto !important;
-    max-width: 100% !important;
-    max-height: 100% !important;
     object-fit: contain !important;
   }
 </style>
 <script id="frosted-runtime-shield">
 (function() {
   window.__GAME_ASSET_MAP__ = window.__GAME_ASSET_MAP__ || new Map();
-  
-  // 1. YouTube Playables Mock (PlayCanvas compatibility)
+
+  // 1. Safe parent & platform exports
+  window.maeExportApis_ = window.maeExportApis_ || function() {};
+  try {
+    if (window.parent && !window.parent.maeExportApis_) {
+      window.parent.maeExportApis_ = function() {};
+    }
+  } catch(e) {}
+
+  // 2. URL Sanitizer / CDN rewriter helper
+  function resolveSafeUrl(url) {
+    if (typeof url !== "string") return url;
+    let u = url;
+    const r1 = new RegExp(
+      "https?:\\/\\/(?:rawcdn\\.githack\\.com|raw\\.githack\\.com|cdn\\.staticaly\\.com\\/gh|gitcdn\\.link\\/repo)\\/([^/\\s]+)\\/([^/\\s]+)\\/([^/\\s]+)\\/([^\\s]+)",
+      "gi",
+    );
+    u = u.replace(r1, "https://cdn.jsdelivr.net/gh/$1/$2@$3/$4");
+    const r2 = new RegExp(
+      "https?:\\/\\/(?:rawcdn\\.githack\\.com|raw\\.githack\\.com)\\/([^/\\s]+)\\/([^/\\s]+)\\/([^\\s]+)",
+      "gi",
+    );
+    u = u.replace(r2, "https://cdn.jsdelivr.net/gh/$1/$2@main/$3");
+    const r3 = new RegExp(
+      "https?:\\/\\/raw\\.githubusercontent\\.com\\/([^/\\s]+)\\/([^/\\s]+)\\/([^/\\s]+)\\/([^\\s]+)",
+      "gi",
+    );
+    u = u.replace(r3, "https://cdn.jsdelivr.net/gh/$1/$2@$3/$4");
+    return u;
+  }
+
+  // 3. Unity WebGL Loader & UnityCache Fix
+  // Fixes games hanging at "Loading 0%" caused by UnityCache IndexedDB / HEAD requests
+  function patchUnityLoader(obj) {
+    if (!obj || typeof obj !== 'object') return;
+    try {
+      if (obj.XMLHttpRequest) {
+        obj.XMLHttpRequest = window.XMLHttpRequest;
+      }
+      if (obj.compatibilityCheck) {
+        obj.compatibilityCheck = function(e, callback) {
+          if (typeof callback === 'function') callback();
+        };
+      }
+    } catch(e) {}
+  }
+
+  if (window.UnityLoader) {
+    patchUnityLoader(window.UnityLoader);
+  } else {
+    let _unityLoaderVal = undefined;
+    Object.defineProperty(window, 'UnityLoader', {
+      configurable: true,
+      enumerable: true,
+      get: function() { return _unityLoaderVal; },
+      set: function(v) {
+        _unityLoaderVal = v;
+        patchUnityLoader(_unityLoaderVal);
+      }
+    });
+  }
+
+  // 4. YouTube Playables Mock & SDK mocks (PlayCanvas / WebGL games)
   if (!window.ytgame) {
     window.ytgame = {
       game: {
@@ -94,7 +183,7 @@ export function prepareGameHtml(rawHtml: string, filename: string): string {
     };
   }
 
-  // 2. AudioContext auto-unlocker for Chromebooks and modern browsers
+  // 5. AudioContext auto-unlocker for Chromebooks and modern browsers
   function unlockAudio() {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (AudioCtx) {
@@ -116,11 +205,18 @@ export function prepareGameHtml(rawHtml: string, filename: string): string {
   }
   unlockAudio();
 
-  // 3. Asset Interception Engine (Handles both relative and base-resolved absolute URLs)
+  // 6. Asset Interception Engine (Handles both relative and base-resolved absolute URLs)
   const _origFetch = window.fetch;
   window.fetch = async function(input, init) {
     let urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : '');
     if (urlStr) {
+      urlStr = resolveSafeUrl(urlStr);
+      if (typeof input === 'string') {
+        input = urlStr;
+      } else if (input && input.url) {
+        input = new Request(urlStr, input);
+      }
+
       // Neutralize anti-tamper honeypot checks
       if (urlStr.includes('/pages/home.html') || urlStr.includes('homee.html') || urlStr.includes('marzlib.cc')) {
         return new Response('<html><body></body></html>', {
@@ -140,16 +236,18 @@ export function prepareGameHtml(rawHtml: string, filename: string): string {
   const _origXHROpen = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function(method, url) {
     if (typeof url === 'string') {
+      url = resolveSafeUrl(url);
       const fileName = url.split('?')[0].split('#')[0].split('/').pop();
       if (fileName && window.__GAME_ASSET_MAP__.has(fileName)) {
-        arguments[1] = window.__GAME_ASSET_MAP__.get(fileName);
+        url = window.__GAME_ASSET_MAP__.get(fileName);
       }
+      arguments[1] = url;
     }
     return _origXHROpen.apply(this, arguments);
   };
 
-  // Intercept Media elements (img, audio, video)
-  const mediaTypes = [HTMLImageElement, HTMLAudioElement, HTMLVideoElement];
+  // Intercept Media elements (img, audio, video) & Script elements
+  const mediaTypes = [HTMLImageElement, HTMLAudioElement, HTMLVideoElement, HTMLScriptElement];
   for (const Tag of mediaTypes) {
     const desc = Object.getOwnPropertyDescriptor(Tag.prototype, 'src');
     if (desc && desc.set) {
@@ -159,6 +257,7 @@ export function prepareGameHtml(rawHtml: string, filename: string): string {
         get: desc.get,
         set: function(val) {
           if (typeof val === 'string') {
+            val = resolveSafeUrl(val);
             const fileName = val.split('?')[0].split('#')[0].split('/').pop();
             if (fileName && window.__GAME_ASSET_MAP__.has(fileName)) {
               val = window.__GAME_ASSET_MAP__.get(fileName);
@@ -174,17 +273,13 @@ export function prepareGameHtml(rawHtml: string, filename: string): string {
 `;
 
   // Inject our runtime shield right after <head> or at the very top of HTML
-  if (html.includes("<head>")) {
-    html = html.replace("<head>", `<head>${runtimeScript}`);
-  } else if (html.includes("<head ")) {
+  if (html.match(/<head[^>]*>/i)) {
     html = html.replace(/<head[^>]*>/i, `$&${runtimeScript}`);
   } else {
     html = `${runtimeScript}${html}`;
   }
 
-  // 6. Handle FNAF Multi-part Clickteam games specifically
-  // FNAF 1-4 use resources.zip split into 8 parts with JSZip extraction.
-  // We replace the buggy main.js with our optimized, rock-solid loader.
+  // 8. Handle FNAF Multi-part Clickteam games specifically
   const isFnafZipGame =
     filename.startsWith("38-f") ||
     filename.startsWith("39-f") ||
@@ -263,7 +358,6 @@ export function prepareGameHtml(rawHtml: string, filename: string): string {
 })();
 </script>
 `;
-    // Replace <script src="main.js"></script> with our clean, optimized in-memory loader
     html = html.replace(
       /<script\b[^>]*src=["\x27]main\.js["\x27][^>]*><\/script>/gi,
       cleanFnafLoader,
@@ -275,7 +369,6 @@ export function prepareGameHtml(rawHtml: string, filename: string): string {
 
 // Loads a game source asynchronously with multi-tier fallback
 export async function loadGameSource(directory: string): Promise<GameLoadResult> {
-  // If already an absolute URL or proxy URL, return directly
   if (
     directory.startsWith("http://") ||
     directory.startsWith("https://") ||
@@ -286,21 +379,34 @@ export async function loadGameSource(directory: string): Promise<GameLoadResult>
 
   const filename = directory.replace(/^\/+/, "");
 
-  // Try fetching raw HTML from primary jsDelivr CDN
+  let cdnUrl = "";
+  let githubUrl = "";
+
+  if (filename.startsWith("games/")) {
+    cdnUrl = `https://cdn.jsdelivr.net/gh/a456pur/seraph@main/${filename}`;
+    githubUrl = `https://raw.githubusercontent.com/a456pur/seraph/main/${filename}`;
+  } else if (filename.startsWith("3kh0/")) {
+    const rawFilename = filename.replace("3kh0/", "");
+    cdnUrl = `https://cdn.jsdelivr.net/gh/3kh0/3kh0-Assets@main/${rawFilename}`;
+    githubUrl = `https://raw.githubusercontent.com/3kh0/3kh0-Assets/main/${rawFilename}`;
+  } else {
+    cdnUrl = `https://cdn.jsdelivr.net/gh/freebuisness/html@main/${filename}`;
+    githubUrl = `https://raw.githubusercontent.com/freebuisness/html/main/${filename}`;
+  }
+
   const urlsToTry = [
-    `${HTML_CDN_PRIMARY}/${filename}`,
-    `${HTML_CDN_FALLBACK}/${filename}`,
-    `/api/public/gn/game/${filename}`,
+    { url: cdnUrl, baseUrl: cdnUrl.substring(0, cdnUrl.lastIndexOf("/") + 1) },
+    { url: githubUrl, baseUrl: githubUrl.substring(0, githubUrl.lastIndexOf("/") + 1) },
   ];
 
-  for (const url of urlsToTry) {
+  for (const { url, baseUrl } of urlsToTry) {
     try {
       const res = await fetch(url);
       if (res.ok) {
         const text = await res.text();
         if (text && text.length > 50 && !text.includes("Couldn't find the requested file")) {
-          const prepared = prepareGameHtml(text, filename);
-          const blob = new Blob([prepared], { type: "text/html; charset=utf-8" });
+          const html = prepareGameHtml(text, filename, baseUrl);
+          const blob = new Blob([html], { type: "text/html; charset=utf-8" });
           const blobUrl = URL.createObjectURL(blob);
           return { type: "blob", src: blobUrl, blobUrl };
         }
@@ -310,6 +416,6 @@ export async function loadGameSource(directory: string): Promise<GameLoadResult>
     }
   }
 
-  // Fallback to direct proxy or CDN path
+  // Final fallback to the proxy if both client-side fetches fail
   return { type: "url", src: `/api/public/gn/game/${filename}` };
 }

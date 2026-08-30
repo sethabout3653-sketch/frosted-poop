@@ -35,7 +35,7 @@ export const SERAPH_GAMES: Game[] = [
   {
     id: "1v1lol",
     name: "1v1.LOL",
-    directory: "games/1v1lol/index.html",
+    directory: "58.html",
     category: "popular",
     featured: true,
     plays: 953000,
@@ -80,7 +80,7 @@ export const SERAPH_GAMES: Game[] = [
   {
     id: "geometry-dash",
     name: "Geometry Dash",
-    directory: "games/geometrydash/index.html",
+    directory: "785-upd3.html",
     category: "popular",
     featured: true,
     plays: 834000,
@@ -98,7 +98,7 @@ export const SERAPH_GAMES: Game[] = [
   {
     id: "basketball-stars",
     name: "Basketball Stars",
-    directory: "games/basketballstars/index.html",
+    directory: "272-f.html",
     category: "sports",
     featured: true,
     plays: 621000,
@@ -107,7 +107,7 @@ export const SERAPH_GAMES: Game[] = [
   {
     id: "drift-hunters",
     name: "Drift Hunters",
-    directory: "games/drift-hunters/index.html",
+    directory: "173.html",
     category: "driving",
     featured: true,
     plays: 693000,
@@ -143,7 +143,7 @@ export const SERAPH_GAMES: Game[] = [
   {
     id: "tunnel-rush",
     name: "Tunnel Rush",
-    directory: "games/tunnelrush/index.html",
+    directory: "206-f.html",
     category: "action",
     featured: false,
     plays: 498000,
@@ -161,7 +161,7 @@ export const SERAPH_GAMES: Game[] = [
   {
     id: "minecraft",
     name: "Minecraft",
-    directory: "games/minecraft/index.html",
+    directory: "182-f.html",
     category: "popular",
     featured: true,
     plays: 999999,
@@ -357,7 +357,8 @@ export async function fetchGames(): Promise<Game[]> {
     id: "soundboard",
     name: "Soundboard",
     directory: "https://myinstants.com",
-    image: "https://play-lh.googleusercontent.com/QbPwdx7u46tJLd6SBJ6cCPajEKgiA620fYNSZb1VsdlKIBPs4m6itZRDmu9SWPo8vbV77H1H42cNefPDtoYM",
+    image:
+      "https://play-lh.googleusercontent.com/QbPwdx7u46tJLd6SBJ6cCPajEKgiA620fYNSZb1VsdlKIBPs4m6itZRDmu9SWPo8vbV77H1H42cNefPDtoYM",
     category: "popular",
     featured: true,
     plays: 99999,
@@ -403,7 +404,9 @@ export async function fetchGames(): Promise<Game[]> {
       }
     }
   } catch (err) {
-    console.warn("Failed to fetch full Seraph games list from GitHub API (rate limit likely). Proceeding with fallback list.");
+    console.warn(
+      "Failed to fetch full Seraph games list from GitHub API (rate limit likely). Proceeding with fallback list.",
+    );
   }
 
   if (seraphGames.length === 0) {
