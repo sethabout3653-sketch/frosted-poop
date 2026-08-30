@@ -1,5 +1,4 @@
 import { Router, Request, Response } from "express";
-import { Curl, CurlFeature } from "node-libcurl";
 
 const router = Router();
 
@@ -126,7 +125,7 @@ router.all("/scramjet-proxy", async (req: Request, res: Response) => {
   const { origin, referer } = getTargetDetails(target);
 
   try {
-    const stealthHeaders = {
+    const stealthHeaders: Record<string, string> = {
       "User-Agent": getRandomUserAgent(),
       Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
       "Accept-Language": "en-US,en;q=0.9",
@@ -143,48 +142,17 @@ router.all("/scramjet-proxy", async (req: Request, res: Response) => {
       Pragma: "no-cache",
     };
 
-    const { finalUrl, contentType, contentBuffer, status } = await new Promise<any>(
-      (resolve, reject) => {
-        const curl = new Curl();
-        curl.setOpt("URL", target);
-        curl.setOpt("FOLLOWLOCATION", true);
-        curl.setOpt("MAXREDIRS", 5);
-        curl.setOpt("SSL_VERIFYPEER", false);
-        curl.setOpt("ACCEPT_ENCODING", "");
-        curl.setOpt("TIMEOUT", 15); // Maximum time for a request (fixes infinite loading)
-        curl.setOpt("CONNECTTIMEOUT", 5); // Connect timeout
+    const upstreamResponse = await fetch(target, {
+      method: req.method,
+      headers: stealthHeaders,
+      redirect: "follow",
+    });
 
-        if (req.method !== "GET") {
-          curl.setOpt("CUSTOMREQUEST", req.method);
-        }
-
-        const curlHeaders = Object.entries(stealthHeaders).map(([k, v]) => `${k}: ${v}`);
-        curl.setOpt("HTTPHEADER", curlHeaders);
-
-        curl.enable(CurlFeature.NoStorage);
-
-        const chunks: Buffer[] = [];
-        curl.on("data", function (chunk) {
-          chunks.push(chunk);
-          return chunk.length;
-        });
-
-        curl.on("end", function (statusCode, _data, responseHeaders) {
-          const finalUrl = this.getInfo(Curl.info.EFFECTIVE_URL) as string;
-          const contentType = this.getInfo(Curl.info.CONTENT_TYPE) as string;
-          const buf = Buffer.concat(chunks);
-          this.close();
-          resolve({ finalUrl, contentType, contentBuffer: buf, status: statusCode });
-        });
-
-        curl.on("error", function (err) {
-          this.close();
-          reject(err);
-        });
-
-        curl.perform();
-      },
-    );
+    const finalUrl = upstreamResponse.url;
+    const contentType = upstreamResponse.headers.get("content-type") || "";
+    const status = upstreamResponse.status;
+    const arrayBuffer = await upstreamResponse.arrayBuffer();
+    const contentBuffer = Buffer.from(arrayBuffer);
 
     res.status(status || 200);
 
