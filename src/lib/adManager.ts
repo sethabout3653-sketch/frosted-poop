@@ -8,24 +8,13 @@ export interface AdSettings {
   adSlot?: string;
 }
 
-const AD_SETTINGS_KEY = "frosted_ad_settings_v7";
+const AD_SETTINGS_KEY = "frosted_ad_settings_v9";
 
 export const DEFAULT_AD_SETTINGS: AdSettings = {
   enabled: true,
-  provider: "custom",
-  customScriptCode: `<script>
-(function(mfpva){
-var d = document,
-    s = d.createElement('script'),
-    l = d.scripts[d.scripts.length - 1];
-s.settings = mfpva || {};
-s.src = "//quarrelsomebitter.com/bGX/V.sEdoGIl/0/YJWdcK/neumE9/u/ZoUSllkQPsTJcCzCNMjYgv3KMezLcVtoNJz/M_2cO/DNcX0nMQQc";
-s.async = true;
-s.referrerPolicy = 'no-referrer-when-downgrade';
-l.parentNode.insertBefore(s, l);
-})({})
-</script>`,
-  clientPublisherId: "",
+  provider: "adsense",
+  customScriptCode: "",
+  clientPublisherId: "ca-pub-4411579510743309",
   adSlot: "",
 };
 
@@ -63,32 +52,42 @@ export function applyAdScripts(settings?: AdSettings): void {
   const existingContainer = document.getElementById("frosted-global-ad-script");
   if (existingContainer) existingContainer.remove();
 
-  if (!current.enabled || !current.customScriptCode.trim()) return;
+  if (!current.enabled) return;
 
-  // If the script contains head tags or global tags, parse and append scripts to head/body
-  try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(current.customScriptCode, "text/html");
-    const scripts = doc.querySelectorAll("script");
+  if (current.provider === "adsense") {
+    const client = current.clientPublisherId || "ca-pub-4411579510743309";
+    const script = document.createElement("script");
+    script.id = "frosted-global-ad-script";
+    script.async = true;
+    script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${client}`;
+    script.crossOrigin = "anonymous";
+    document.head.appendChild(script);
+  } else if (current.provider === "custom" && current.customScriptCode.trim()) {
+    // If the script contains head tags or global tags, parse and append scripts to head/body
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(current.customScriptCode, "text/html");
+      const scripts = doc.querySelectorAll("script");
 
-    if (scripts.length > 0) {
-      const wrapper = document.createElement("div");
-      wrapper.id = "frosted-global-ad-script";
-      wrapper.style.display = "none";
+      if (scripts.length > 0) {
+        const wrapper = document.createElement("div");
+        wrapper.id = "frosted-global-ad-script";
+        wrapper.style.display = "none";
 
-      scripts.forEach((oldScript) => {
-        const newScript = document.createElement("script");
-        Array.from(oldScript.attributes).forEach((attr) =>
-          newScript.setAttribute(attr.name, attr.value),
-        );
-        newScript.textContent = oldScript.textContent;
-        wrapper.appendChild(newScript);
-      });
+        scripts.forEach((oldScript) => {
+          const newScript = document.createElement("script");
+          Array.from(oldScript.attributes).forEach((attr) =>
+            newScript.setAttribute(attr.name, attr.value),
+          );
+          newScript.textContent = oldScript.textContent;
+          wrapper.appendChild(newScript);
+        });
 
-      document.body.appendChild(wrapper);
+        document.body.appendChild(wrapper);
+      }
+    } catch {
+      /* silent */
     }
-  } catch {
-    /* silent */
   }
 }
 

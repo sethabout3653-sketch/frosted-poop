@@ -23,34 +23,89 @@ export function AdBanner({ className = "" }: Props) {
     return () => window.removeEventListener("frosted_ad_settings_updated", handleUpdate);
   }, []);
 
+  const isAdsense = settings.provider === "adsense";
   const hasCustomCode = !!settings.customScriptCode.trim();
+  const isEnabled = settings.enabled && (isAdsense || hasCustomCode);
 
   useEffect(() => {
-    if (!settings.enabled || !hasCustomCode || !containerRef.current) return;
+    if (!settings.enabled || !containerRef.current) return;
+
+    let observer: IntersectionObserver | null = null;
+
+    const triggerAdsense = () => {
+      if (!containerRef.current) return;
+      containerRef.current.innerHTML = "";
+
+      const ins = document.createElement("ins");
+      ins.className = "adsbygoogle";
+      ins.style.display = "block";
+      ins.setAttribute("data-ad-client", "ca-pub-4411579510743309");
+      ins.setAttribute("data-ad-slot", settings.adSlot || "auto");
+      ins.setAttribute("data-ad-format", "auto");
+      ins.setAttribute("data-full-width-responsive", "true");
+
+      containerRef.current.appendChild(ins);
+
+      try {
+        ((window as any).adsbygoogle = (window as any).adsbygoogle || []).push({});
+      } catch (e) {
+        console.warn("AdSense push warning:", e);
+      }
+    };
 
     try {
-      containerRef.current.innerHTML = "";
-      const adDiv = document.createElement("div");
-      adDiv.className = "universal-ad-unit flex items-center justify-center w-full";
-      adDiv.innerHTML = settings.customScriptCode;
+      if (settings.provider === "adsense") {
+        const width = containerRef.current.getBoundingClientRect().width;
+        if (width === 0) {
+          observer = new IntersectionObserver((entries) => {
+            if (
+              entries[0].isIntersecting &&
+              containerRef.current &&
+              containerRef.current.getBoundingClientRect().width > 0
+            ) {
+              observer?.disconnect();
+              triggerAdsense();
+            }
+          });
+          observer.observe(containerRef.current);
+        } else {
+          triggerAdsense();
+        }
+      } else if (hasCustomCode) {
+        containerRef.current.innerHTML = "";
+        const adDiv = document.createElement("div");
+        adDiv.className = "universal-ad-unit flex items-center justify-center w-full";
+        adDiv.innerHTML = settings.customScriptCode;
 
-      const scripts = adDiv.querySelectorAll("script");
-      scripts.forEach((oldScript) => {
-        const newScript = document.createElement("script");
-        Array.from(oldScript.attributes).forEach((attr) =>
-          newScript.setAttribute(attr.name, attr.value),
-        );
-        newScript.textContent = oldScript.textContent;
-        oldScript.parentNode?.replaceChild(newScript, oldScript);
-      });
+        const scripts = adDiv.querySelectorAll("script");
+        scripts.forEach((oldScript) => {
+          const newScript = document.createElement("script");
+          Array.from(oldScript.attributes).forEach((attr) =>
+            newScript.setAttribute(attr.name, attr.value),
+          );
+          newScript.textContent = oldScript.textContent;
+          oldScript.parentNode?.replaceChild(newScript, oldScript);
+        });
 
-      containerRef.current.appendChild(adDiv);
-    } catch {
-      /* silent */
+        containerRef.current.appendChild(adDiv);
+      }
+    } catch (err) {
+      console.error("AdBanner injection error:", err);
     }
-  }, [settings.enabled, settings.customScriptCode, hasCustomCode]);
 
-  if (!settings.enabled || !hasCustomCode) return null;
+    return () => {
+      observer?.disconnect();
+    };
+  }, [
+    settings.enabled,
+    settings.provider,
+    settings.clientPublisherId,
+    settings.adSlot,
+    settings.customScriptCode,
+    hasCustomCode,
+  ]);
+
+  if (!isEnabled) return null;
 
   return (
     <div
