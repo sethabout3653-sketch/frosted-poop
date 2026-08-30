@@ -1,6 +1,26 @@
-import { Eye, X, Check, Wifi, Trash2, HardDrive, Megaphone, Save } from "lucide-react";
+import {
+  Eye,
+  X,
+  Check,
+  Wifi,
+  Trash2,
+  HardDrive,
+  Megaphone,
+  Save,
+  ExternalLink,
+  Layers,
+} from "lucide-react";
 import { useState } from "react";
 import { CLOAK_PRESETS, type CloakPreset } from "@/lib/frostedStore";
+import {
+  isInterstitialEnabled,
+  setInterstitialEnabled,
+  getBannerZoneId,
+  setBannerZoneId,
+  getInterstitialZoneId,
+  setInterstitialZoneId,
+  triggerExoInterstitial,
+} from "@/lib/popupManager";
 
 interface Props {
   isOpen: boolean;
@@ -19,27 +39,26 @@ export function FrostedSettingsModal({
   cachedCount = 0,
   onClearCache,
 }: Props) {
-  const [exoClickZone, setExoClickZone] = useState<string>(() => {
-    if (typeof localStorage !== "undefined") {
-      return (
-        localStorage.getItem("frosted_exoclick_zone") ||
-        import.meta.env.VITE_EXOCLICK_ZONE ||
-        "6015558"
-      );
-    }
-    return "6015558";
-  });
-  const [savedExoNotice, setSavedExoNotice] = useState<boolean>(false);
+  const [bannerZone, setBannerZone] = useState<string>(() => getBannerZoneId());
+  const [interstitialZone, setInterstitialZone] = useState<string>(() => getInterstitialZoneId());
+  const [interstitialActive, setInterstitialActive] = useState<boolean>(() =>
+    isInterstitialEnabled(),
+  );
+  const [savedNotice, setSavedNotice] = useState<boolean>(false);
 
   if (!isOpen) return null;
 
-  const handleSaveExoClick = () => {
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem("frosted_exoclick_zone", exoClickZone.trim());
-      window.dispatchEvent(new Event("frosted_exoclick_updated"));
-      setSavedExoNotice(true);
-      setTimeout(() => setSavedExoNotice(false), 2000);
-    }
+  const handleSaveAds = () => {
+    setBannerZoneId(bannerZone);
+    setInterstitialZoneId(interstitialZone);
+    setInterstitialEnabled(interstitialActive);
+    window.dispatchEvent(new Event("frosted_exoclick_updated"));
+    setSavedNotice(true);
+    setTimeout(() => setSavedNotice(false), 2000);
+  };
+
+  const handleTestInterstitial = () => {
+    triggerExoInterstitial(true);
   };
 
   return (
@@ -159,42 +178,103 @@ export function FrostedSettingsModal({
 
           <div className="h-[1px] bg-neutral-800" />
 
-          {/* Section 3: ExoClick Ad Network Integration */}
+          {/* Section 3: ExoClick Ad Network (Banner & Desktop Fullpage Interstitial) */}
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-300 mb-2 flex items-center gap-2">
               <Megaphone className="h-4 w-4 text-orange-400" />
-              <span>ExoClick Network Integration</span>
+              <span>ExoClick Ad Monetization</span>
             </h3>
             <p className="text-xs text-neutral-400 mb-3">
-              ExoClick is integrated directly via native ad-provider scripts (
-              <code className="font-mono text-neutral-300">a.magsrv.com/ad-provider.js</code>) with
-              high-fill global delivery and automated network handling.
+              Configure your <strong>Display Banners</strong> (Zone 6015558 /{" "}
+              <code>a.magsrv.com</code>) and <strong>Desktop Fullpage Interstitial</strong> (Zone
+              6015562 / <code>a.pemsrv.com</code>).
             </p>
 
-            <div className="rounded-xl border border-neutral-800 bg-black p-4 space-y-3">
+            <div className="rounded-xl border border-neutral-800 bg-black p-4 space-y-4">
+              {/* Display Banner Section */}
               <div>
-                <label className="block text-xs font-medium text-neutral-400 mb-1">
-                  ExoClick Zone ID (Optional)
+                <label className="block text-xs font-medium text-neutral-300 mb-1 flex items-center gap-1.5">
+                  <Megaphone className="h-3.5 w-3.5 text-neutral-400" />
+                  <span>Display Banner Zone ID (a.magsrv.com)</span>
                 </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={exoClickZone}
-                    onChange={(e) => setExoClickZone(e.target.value)}
-                    placeholder="e.g. 6015558 (From ExoClick Publisher Panel)"
-                    className="flex-1 rounded-xl border border-neutral-800 bg-neutral-900 px-3 py-2 text-xs font-mono text-white placeholder-neutral-600 focus:border-neutral-500 focus:outline-none"
-                  />
-                  <button
-                    onClick={handleSaveExoClick}
-                    className="smooth-btn flex items-center gap-1.5 rounded-xl border border-orange-500/40 bg-orange-600 px-3 py-2 text-xs font-semibold text-white hover:bg-orange-500 cursor-pointer"
-                  >
-                    <Save className="h-3.5 w-3.5" />
-                    <span>Save</span>
-                  </button>
-                </div>
+                <input
+                  type="text"
+                  value={bannerZone}
+                  onChange={(e) => setBannerZone(e.target.value)}
+                  placeholder="6015558"
+                  className="w-full rounded-xl border border-neutral-800 bg-neutral-900 px-3 py-2 text-xs font-mono text-white placeholder-neutral-600 focus:border-neutral-500 focus:outline-none"
+                />
+                <span className="text-[10px] text-neutral-500 mt-1 block">
+                  Class: <code className="font-mono text-neutral-400">eas6a97888e2</code>
+                </span>
               </div>
 
-              {savedExoNotice && (
+              {/* Desktop Fullpage Interstitial Section */}
+              <div className="pt-3 border-t border-neutral-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-medium text-white block flex items-center gap-1.5">
+                      <Layers className="h-3.5 w-3.5 text-orange-400" />
+                      <span>Desktop Fullpage Interstitial</span>
+                    </span>
+                    <span className="text-[11px] text-neutral-500 block">
+                      Fires interstitial ads during game launches and navigation clicks
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setInterstitialActive(!interstitialActive)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
+                      interstitialActive ? "bg-orange-500" : "bg-neutral-800"
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        interstitialActive ? "translate-x-6" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {interstitialActive && (
+                  <div>
+                    <label className="block text-[11px] font-medium text-neutral-400 mb-1">
+                      Interstitial Zone ID (a.pemsrv.com)
+                    </label>
+                    <input
+                      type="text"
+                      value={interstitialZone}
+                      onChange={(e) => setInterstitialZone(e.target.value)}
+                      placeholder="6015562"
+                      className="w-full rounded-xl border border-neutral-800 bg-neutral-900 px-3 py-2 text-xs font-mono text-white placeholder-neutral-600 focus:border-neutral-500 focus:outline-none"
+                    />
+                    <span className="text-[10px] text-neutral-500 mt-1 block">
+                      Class: <code className="font-mono text-neutral-400">eas6a97888e35</code>
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t border-neutral-800">
+                <button
+                  type="button"
+                  onClick={handleTestInterstitial}
+                  className="smooth-btn flex items-center gap-1.5 rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs font-medium text-neutral-200 hover:bg-neutral-800 hover:text-white cursor-pointer"
+                >
+                  <ExternalLink className="h-3.5 w-3.5 text-neutral-400" />
+                  <span>Test Interstitial Now</span>
+                </button>
+
+                <button
+                  onClick={handleSaveAds}
+                  className="smooth-btn flex items-center gap-1.5 rounded-xl border border-orange-500/40 bg-orange-600 px-4 py-2 text-xs font-semibold text-white hover:bg-orange-500 cursor-pointer"
+                >
+                  <Save className="h-3.5 w-3.5" />
+                  <span>Save Ad Settings</span>
+                </button>
+              </div>
+
+              {savedNotice && (
                 <div className="text-[11px] font-medium text-emerald-400 flex items-center gap-1.5">
                   <Check className="h-3.5 w-3.5 text-emerald-400" />
                   <span>ExoClick configuration updated successfully!</span>

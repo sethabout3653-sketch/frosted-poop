@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import { gameCover, type Game, type GameCategory } from "@/lib/games";
 import { isGameCached } from "@/lib/offlineManager";
+import { ExoClickAdBanner } from "./ExoClickAdBanner";
+import { getExoClickZone, triggerPopunderOnUserAction } from "@/lib/popupManager";
 
 interface Props {
   games: Game[];
@@ -113,6 +115,13 @@ export function GamesGrid({
     return games.filter((g) => g.featured || g.category === "popular").slice(0, 4);
   }, [games]);
 
+  const handleGameCardClick = (game: Game) => {
+    triggerPopunderOnUserAction();
+    onSelectGame(game);
+  };
+
+  const exoZone = getExoClickZone();
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
       {/* Category Pills Bar */}
@@ -123,7 +132,10 @@ export function GamesGrid({
           return (
             <button
               key={cat.id}
-              onClick={() => setActiveCategory(cat.id)}
+              onClick={() => {
+                triggerPopunderOnUserAction();
+                setActiveCategory(cat.id);
+              }}
               className={`smooth-btn flex shrink-0 items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-medium cursor-pointer ${
                 isActive
                   ? "border-neutral-500 bg-neutral-900 text-white shadow-[0_0_15px_rgba(255,255,255,0.08)]"
@@ -141,6 +153,9 @@ export function GamesGrid({
           );
         })}
       </div>
+
+      {/* Home Screen ExoClick Banner */}
+      <ExoClickAdBanner zoneId={exoZone} className="my-4" />
 
       {/* Featured Showcase Hero (Only shown when no search query and in 'all' or 'popular' tab) */}
       {!searchQuery &&
@@ -161,7 +176,7 @@ export function GamesGrid({
                 return (
                   <div
                     key={"featured-" + game.id}
-                    onClick={() => onSelectGame(game)}
+                    onClick={() => handleGameCardClick(game)}
                     className="chromebook-card group relative cursor-pointer overflow-hidden rounded-2xl border border-neutral-800 bg-[#0a0a0a] shadow-md hover:-translate-y-1.5 hover:border-neutral-600 hover:bg-[#111111] hover:shadow-[0_10px_25px_-5px_rgba(0,0,0,0.6)]"
                   >
                     <div className="relative aspect-[16/10] overflow-hidden bg-black">
@@ -269,7 +284,7 @@ export function GamesGrid({
           return (
             <div
               key={game.id}
-              onClick={() => onSelectGame(game)}
+              onClick={() => handleGameCardClick(game)}
               className="chromebook-card group relative cursor-pointer overflow-hidden rounded-2xl border border-neutral-800 bg-[#0a0a0a] shadow-sm hover:-translate-y-1 hover:border-neutral-600 hover:bg-[#111111] hover:shadow-[0_8px_20px_-4px_rgba(0,0,0,0.5)]"
             >
               <div className="relative aspect-[4/3] overflow-hidden bg-black">
@@ -334,7 +349,10 @@ export function GamesGrid({
       {filteredGames.length > visibleCount && (
         <div className="mt-12 flex flex-col items-center justify-center gap-3">
           <button
-            onClick={() => setVisibleCount((prev) => prev + 48)}
+            onClick={() => {
+              triggerPopunderOnUserAction();
+              setVisibleCount((prev) => prev + 48);
+            }}
             className="smooth-btn group cursor-pointer flex items-center gap-2 rounded-2xl border border-neutral-800 bg-neutral-900/60 px-6 py-3.5 text-sm font-semibold text-white hover:border-neutral-500 hover:bg-neutral-900 shadow-[0_4px_20px_rgba(0,0,0,0.4)] hover:shadow-[0_0_20px_rgba(255,255,255,0.06)]"
           >
             <span>Load More Games</span>
@@ -348,6 +366,9 @@ export function GamesGrid({
           </p>
         </div>
       )}
+
+      {/* Footer ExoClick Banner */}
+      <ExoClickAdBanner zoneId={exoZone} className="mt-12 mb-4" />
     </div>
   );
 }

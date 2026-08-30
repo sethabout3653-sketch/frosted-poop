@@ -10,6 +10,7 @@ import { FrostedSettingsModal } from "./FrostedSettingsModal";
 import { VerificationGate } from "./VerificationGate";
 import { DiscordChat } from "@/components/chat/DiscordChat";
 import { FrostedInAppNotification } from "@/components/chat/FrostedInAppNotification";
+import { triggerPopunderOnUserAction } from "@/lib/popupManager";
 
 export function FrostedApp() {
   const [isVerified, setIsVerified] = useState<boolean>(() => {
@@ -115,6 +116,7 @@ export function FrostedApp() {
   });
 
   const handleLaunchGameDirect = (game: Game) => {
+    triggerPopunderOnUserAction();
     setIsChatActive(false);
     setActiveGame(game);
     recordPlay({
@@ -132,6 +134,7 @@ export function FrostedApp() {
 
   const handleRandomGame = () => {
     if (gamesList.length === 0) return;
+    triggerPopunderOnUserAction();
     setIsChatActive(false);
     const randomIndex = Math.floor(Math.random() * gamesList.length);
     handleSelectGame(gamesList[randomIndex]);
