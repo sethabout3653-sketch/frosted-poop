@@ -2,7 +2,6 @@ import express from "express";
 import Stripe from "stripe";
 import gameProxy from "../src/server/gameProxy";
 import { chatRouter } from "../src/server/chatServer";
-import soundboardRouter from "../src/server/soundboardProxy";
 
 // Initialize Stripe gracefully
 let stripeClient: Stripe | null = null;
@@ -82,8 +81,7 @@ app.use((req, _res, next) => {
     matchedHeader &&
     (matchedHeader.includes("/chat") ||
       matchedHeader.includes("/public") ||
-      matchedHeader.includes("/health") ||
-      matchedHeader.includes("/soundboard"))
+      matchedHeader.includes("/health"))
   ) {
     url = matchedHeader;
   }
@@ -135,10 +133,6 @@ app.use("/chat", chatRouter);
 // 7. Mount Game Proxy at all possible sub-paths
 app.use("/api/public", gameProxy);
 app.use("/public", gameProxy);
-
-// 7.5. Mount Soundboard Proxy at all possible sub-paths
-app.use("/api/soundboard", soundboardRouter);
-app.use("/soundboard", soundboardRouter);
 
 // 8. Direct router fallback if path was stripped (e.g. /join, /state, /me)
 app.use(chatRouter);

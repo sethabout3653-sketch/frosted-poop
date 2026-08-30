@@ -34,10 +34,6 @@ export function registerServiceWorker() {
 
 // Get helper list of probable target URLs for a given game
 export function getGameTargetUrls(game: Game): string[] {
-  if (game.id === "soundboard") {
-    return ["/api/soundboard/scramjet-proxy"];
-  }
-
   const dir = game.directory || "";
   if (dir.startsWith("http://") || dir.startsWith("https://")) {
     return [dir];
