@@ -11,11 +11,17 @@ import {
   Download,
   CheckCircle2,
   WifiOff,
+  Monitor,
+  Tv,
+  Layout,
+  ChevronDown,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { gameCover, type Game } from "@/lib/games";
-import { loadGameSource, type GameLoadResult } from "@/lib/gameLoader";
+import { loadGameSource } from "@/lib/gameLoader";
 import { isGameCached } from "@/lib/offlineManager";
+
+export type ViewMode = "auto" | "16-9" | "4-3" | "theater" | "fill";
 
 interface Props {
   game: Game;
@@ -46,13 +52,63 @@ export function GamePlayer({
   const [copied, setCopied] = useState(false);
   const [isReloading, setIsReloading] = useState(false);
   const [showKeybinds, setShowKeybinds] = useState(false);
-  const [iframeLoading, setIframeLoading] = useState(true);
+  const [, setIframeLoading] = useState(true);
   const [activeSrc, setActiveSrc] = useState<string>("");
   const [isSavingOffline, setIsSavingOffline] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    try {
+      return (localStorage.getItem("frosted_view_mode") as ViewMode) || "auto";
+    } catch {
+      return "auto";
+    }
+  });
+  const [showViewMenu, setShowViewMenu] = useState(false);
   const currentBlobUrlRef = useRef<string | null>(null);
 
   const isFav = favorites.includes(game.id);
   const isCached = isGameCached(game, cachedUrls);
+
+  const handleSelectViewMode = (mode: ViewMode) => {
+    setViewMode(mode);
+    setShowViewMenu(false);
+    try {
+      localStorage.setItem("frosted_view_mode", mode);
+    } catch {}
+  };
+
+  // Keyboard shortcut handler for F (fullscreen), T (theater), R (reload)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input
+      if (["INPUT", "TEXTAREA", "SELECT"].includes((e.target as HTMLElement)?.tagName)) return;
+      if (e.key === "f" || e.key === "F") {
+        if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault();
+          toggleFullscreen();
+        }
+      } else if (e.key === "t" || e.key === "T") {
+        if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault();
+          handleSelectViewMode(viewMode === "theater" ? "auto" : "theater");
+        }
+      } else if (e.key === "r" || e.key === "R") {
+        if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault();
+          handleReload();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [viewMode]);
+
+  // Click outside to close view mode menu
+  useEffect(() => {
+    if (!showViewMenu) return;
+    const handleClickOutside = () => setShowViewMenu(false);
+    window.addEventListener("click", handleClickOutside);
+    return () => window.removeEventListener("click", handleClickOutside);
+  }, [showViewMenu]);
 
   // Load and sanitize game HTML with multi-tier fallback (Vercel & static host compatible)
   useEffect(() => {
@@ -256,6 +312,113 @@ export function GamePlayer({
               <span className="hidden sm:inline">{isFav ? "Favorited" : "Favorite"}</span>
             </button>
 
+            {/* View Mode & Aspect Ratio Controls */}
+            <div className="relative">
+              <button
+                onClick={() => setShowViewMenu(!showViewMenu)}
+                title="Change Game Screen View / Aspect Ratio"
+                className={`smooth-btn flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium cursor-pointer transition-all ${
+                  viewMode !== "auto"
+                    ? "border-neutral-700 bg-neutral-900 text-white"
+                    : "border-neutral-800 bg-[#0d0d0d] text-neutral-300 hover:border-neutral-700 hover:text-white"
+                }`}
+              >
+                <Monitor className="h-3.5 w-3.5 text-neutral-300" />
+                <span className="hidden sm:inline capitalize">
+                  {viewMode === "auto"
+                    ? "Auto Fit"
+                    : viewMode === "16-9"
+                      ? "16:9"
+                      : viewMode === "4-3"
+                        ? "4:3 Classic"
+                        : viewMode === "theater"
+                          ? "Theater"
+                          : "Full View"}
+                </span>
+                <ChevronDown
+                  className={`h-3 w-3 text-neutral-400 transition-transform duration-200 ${showViewMenu ? "rotate-180" : ""}`}
+                />
+              </button>
+
+              {showViewMenu && (
+                <div
+                  className="absolute right-0 top-full mt-1.5 w-48 rounded-xl border border-neutral-800 bg-[#121212] p-1.5 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
+                    Screen Scaling
+                  </div>
+                  <button
+                    onClick={() => handleSelectViewMode("auto")}
+                    className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors cursor-pointer ${
+                      viewMode === "auto"
+                        ? "bg-neutral-800 text-white font-medium"
+                        : "text-neutral-300 hover:bg-neutral-800/60 hover:text-white"
+                    }`}
+                  >
+                    <span>Auto Fit (Recommended)</span>
+                    {viewMode === "auto" && <Check className="h-3 w-3 text-emerald-400" />}
+                  </button>
+                  <button
+                    onClick={() => handleSelectViewMode("16-9")}
+                    className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors cursor-pointer ${
+                      viewMode === "16-9"
+                        ? "bg-neutral-800 text-white font-medium"
+                        : "text-neutral-300 hover:bg-neutral-800/60 hover:text-white"
+                    }`}
+                  >
+                    <span>16:9 Widescreen</span>
+                    {viewMode === "16-9" && <Check className="h-3 w-3 text-emerald-400" />}
+                  </button>
+                  <button
+                    onClick={() => handleSelectViewMode("4-3")}
+                    className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors cursor-pointer ${
+                      viewMode === "4-3"
+                        ? "bg-neutral-800 text-white font-medium"
+                        : "text-neutral-300 hover:bg-neutral-800/60 hover:text-white"
+                    }`}
+                  >
+                    <span>4:3 Classic / Retro</span>
+                    {viewMode === "4-3" && <Check className="h-3 w-3 text-emerald-400" />}
+                  </button>
+                  <button
+                    onClick={() => handleSelectViewMode("theater")}
+                    className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors cursor-pointer ${
+                      viewMode === "theater"
+                        ? "bg-neutral-800 text-white font-medium"
+                        : "text-neutral-300 hover:bg-neutral-800/60 hover:text-white"
+                    }`}
+                  >
+                    <span>Theater Mode (T)</span>
+                    {viewMode === "theater" && <Check className="h-3 w-3 text-emerald-400" />}
+                  </button>
+                  <button
+                    onClick={() => handleSelectViewMode("fill")}
+                    className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors cursor-pointer ${
+                      viewMode === "fill"
+                        ? "bg-neutral-800 text-white font-medium"
+                        : "text-neutral-300 hover:bg-neutral-800/60 hover:text-white"
+                    }`}
+                  >
+                    <span>Max Full View</span>
+                    {viewMode === "fill" && <Check className="h-3 w-3 text-emerald-400" />}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => handleSelectViewMode(viewMode === "theater" ? "auto" : "theater")}
+              title={viewMode === "theater" ? "Exit Theater Mode (T)" : "Theater Mode (T)"}
+              className={`smooth-btn hidden md:flex items-center gap-1.5 rounded-xl border p-2 text-xs font-medium cursor-pointer transition-all ${
+                viewMode === "theater"
+                  ? "border-neutral-600 bg-neutral-800 text-white"
+                  : "border-neutral-800 bg-[#0d0d0d] text-neutral-300 hover:border-neutral-600 hover:text-white"
+              }`}
+            >
+              <Tv className="h-4 w-4" />
+            </button>
+
             <button
               onClick={handleReload}
               title="Reload Game (R)"
@@ -280,7 +443,7 @@ export function GamePlayer({
 
             <button
               onClick={toggleFullscreen}
-              title={isFullscreen ? "Exit Fullscreen" : "Fullscreen (F)"}
+              title={isFullscreen ? "Exit Fullscreen (F)" : "Fullscreen (F)"}
               className="smooth-btn flex items-center gap-1.5 rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white hover:border-neutral-500 cursor-pointer"
             >
               {isFullscreen ? (
@@ -295,18 +458,32 @@ export function GamePlayer({
       </div>
 
       {/* Main Game Screen Container */}
-      <div className="flex-1 flex flex-col items-center justify-center p-2 sm:p-4">
+      <div
+        className={`flex-1 flex flex-col items-center justify-center ${isFullscreen ? "p-0" : viewMode === "theater" ? "p-1 sm:p-2" : "p-2 sm:p-4"}`}
+      >
         <div
           ref={containerRef}
-          className="relative w-full max-w-6xl aspect-[16/9] overflow-hidden rounded-2xl border border-neutral-800 bg-black shadow-2xl"
+          className={`relative transition-all duration-300 ease-out ${
+            isFullscreen
+              ? "w-full h-full max-w-none max-h-none rounded-none border-0 aspect-auto shadow-none"
+              : viewMode === "16-9"
+                ? "w-full max-w-6xl aspect-[16/9] max-h-[calc(100vh-130px)] rounded-2xl border border-neutral-800 bg-black shadow-2xl overflow-hidden"
+                : viewMode === "4-3"
+                  ? "w-full max-w-4xl aspect-[4/3] max-h-[calc(100vh-130px)] rounded-2xl border border-neutral-800 bg-black shadow-2xl overflow-hidden"
+                  : viewMode === "theater"
+                    ? "w-full max-w-[98vw] h-[calc(100vh-130px)] min-h-[540px] max-h-[960px] rounded-2xl border border-neutral-800 bg-black shadow-2xl overflow-hidden"
+                    : viewMode === "fill"
+                      ? "w-full max-w-7xl h-[calc(100vh-120px)] min-h-[560px] rounded-2xl border border-neutral-800 bg-black shadow-2xl overflow-hidden"
+                      : "w-full max-w-6xl h-[calc(100vh-140px)] min-h-[480px] max-h-[860px] rounded-2xl border border-neutral-800 bg-black shadow-2xl overflow-hidden"
+          }`}
         >
           <iframe
             ref={iframeRef}
             src={activeSrc || undefined}
             title={game.name}
             onLoad={() => setIframeLoading(false)}
-            className="h-full w-full border-0 bg-black"
-            allow="fullscreen; autoplay; gamepad; pointer-lock; clipboard-write; encrypted-media"
+            className="h-full w-full border-0 bg-black block"
+            allow="fullscreen; autoplay; gamepad; pointer-lock; clipboard-write; encrypted-media; camera; microphone; focus-without-user-activation *"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
           />
         </div>
@@ -323,7 +500,9 @@ export function GamePlayer({
               </div>
               <div>
                 <h3 className="text-sm font-semibold text-white">Player Keyboard Shortcuts</h3>
-                <p className="text-xs text-neutral-400">F = Fullscreen, R = Reload</p>
+                <p className="text-xs text-neutral-400">
+                  F = Fullscreen, T = Theater Mode, R = Reload
+                </p>
               </div>
             </div>
 
@@ -335,7 +514,7 @@ export function GamePlayer({
             </button>
 
             {showKeybinds && (
-              <div className="w-full border-t border-neutral-800 pt-3 mt-2 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs text-neutral-300 animate-in fade-in duration-150">
+              <div className="w-full border-t border-neutral-800 pt-3 mt-2 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-neutral-300 animate-in fade-in duration-150">
                 <div>
                   <kbd className="rounded border border-neutral-800 bg-black px-1.5 py-0.5 font-mono text-white">
                     W A S D / Arrows
@@ -353,6 +532,12 @@ export function GamePlayer({
                     F
                   </kbd>
                   <p className="text-[10px] text-neutral-400 mt-1">Toggle Fullscreen</p>
+                </div>
+                <div>
+                  <kbd className="rounded border border-neutral-800 bg-black px-1.5 py-0.5 font-mono text-white">
+                    T
+                  </kbd>
+                  <p className="text-[10px] text-neutral-400 mt-1">Toggle Theater Mode</p>
                 </div>
               </div>
             )}

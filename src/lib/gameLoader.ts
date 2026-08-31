@@ -79,6 +79,20 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
     }
   }
 
+  // 6.5. Ensure responsive viewport meta tag is present to prevent zoomed-in/clipped views
+  if (
+    !html.toLowerCase().includes('name="viewport"') &&
+    !html.toLowerCase().includes("name='viewport'")
+  ) {
+    const viewportMeta =
+      '<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">';
+    if (html.match(/<head[^>]*>/i)) {
+      html = html.replace(/<head[^>]*>/i, `$&${viewportMeta}`);
+    } else {
+      html = `${viewportMeta}${html}`;
+    }
+  }
+
   // 7. Universal Runtime Polyfill & Asset Interceptor
   // Solves Unity WebGL 0% hangs, Clickteam/FNAF resource mapping, Web Audio unlocking, and full-bleed layout
   const runtimeScript = `
@@ -88,14 +102,34 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
     padding: 0 !important;
     width: 100% !important;
     height: 100% !important;
-    overflow: hidden !important;
+    min-height: 100% !important;
     background-color: #000000 !important;
     color: #ffffff !important;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    overflow: auto !important;
+    box-sizing: border-box !important;
   }
-  #gameContainer, #unityContainer, #unity-container, #game-container, #unity-canvas-container, .webgl-content, #canvas, #unity-canvas, canvas, #MMFCanvas, #ruffle, .unity-desktop {
+  *, *:before, *:after {
+    box-sizing: inherit;
+  }
+  #gameContainer, #unityContainer, #unity-container, #game-container, #unity-canvas-container, .webgl-content, #canvas-container, #canvas-holder, #MMFCanvas, #ruffle, .unity-desktop, .game-holder {
+    max-width: 100% !important;
+    max-height: 100% !important;
     width: 100% !important;
     height: 100% !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    margin: 0 auto !important;
+    object-fit: contain !important;
+  }
+  canvas, #canvas, #unity-canvas {
+    max-width: 100% !important;
+    max-height: 100% !important;
     display: block !important;
     margin: 0 auto !important;
     object-fit: contain !important;

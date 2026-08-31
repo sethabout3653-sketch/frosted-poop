@@ -112,8 +112,48 @@ function sanitizeAndCleanGameHtml(rawHtml: string): string {
     "",
   );
 
-  // 4. Inject anti-popunder, anti-alert and frame-locking shield script to block third-party annoyances
+  // 4. Inject anti-popunder, anti-alert, frame-locking shield script and responsive layout styles
   const shieldScript = `
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<style id="frosted-proxy-style">
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 100% !important;
+    background-color: #000000 !important;
+    color: #ffffff !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    overflow: auto !important;
+    box-sizing: border-box !important;
+  }
+  *, *:before, *:after {
+    box-sizing: inherit;
+  }
+  #gameContainer, #unityContainer, #unity-container, #game-container, #unity-canvas-container, .webgl-content, #canvas-container, #canvas-holder, #MMFCanvas, #ruffle, .unity-desktop, .game-holder {
+    max-width: 100% !important;
+    max-height: 100% !important;
+    width: 100% !important;
+    height: 100% !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    margin: 0 auto !important;
+    object-fit: contain !important;
+  }
+  canvas, #canvas, #unity-canvas {
+    max-width: 100% !important;
+    max-height: 100% !important;
+    display: block !important;
+    margin: 0 auto !important;
+    object-fit: contain !important;
+  }
+</style>
 <script id="frosted-anti-annoyance">
   (function() {
     try {
