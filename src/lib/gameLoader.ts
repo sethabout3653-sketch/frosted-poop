@@ -7,16 +7,20 @@ export interface GameLoadResult {
   blobUrl?: string;
 }
 
-// Rewrites dead/blocked CDN URLs to fast, CORS-enabled jsDelivr CDN
+// Rewrites dead/blocked CDN URLs to raw GitHub URLs
 export function rewriteCdnUrls(str: string): string {
   if (!str) return str;
   let result = str.replace(
-    /https?:\/\/(?:rawcdn\.githack\.com|raw\.githack\.com|cdn\.staticaly\.com\/gh|gitcdn\.link\/repo)\/([^/'"\s]+)\/([^/'"\s]+)\/([^/'"\s]+)\/([^'"\s]+)/gi,
-    "https://cdn.jsdelivr.net/gh/$1/$2@$3/$4",
+    /https?:\/\/(?:cdn\.jsdelivr\.net\/gh|rawcdn\.githack\.com|raw\.githack\.com|cdn\.staticaly\.com\/gh|gitcdn\.link\/repo)\/([^/'"\s]+)\/([^/'"\s]+)@([^/'"\s]+)\/([^'"\s]+)/gi,
+    "https://raw.githubusercontent.com/$1/$2/$3/$4",
   );
   result = result.replace(
-    /https?:\/\/(?:rawcdn\.githack\.com|raw\.githack\.com)\/([^/'"\s]+)\/([^/'"\s]+)\/([^'"\s]+)/gi,
-    "https://cdn.jsdelivr.net/gh/$1/$2@main/$3",
+    /https?:\/\/(?:cdn\.jsdelivr\.net\/gh|rawcdn\.githack\.com|raw\.githack\.com)\/([^/'"\s]+)\/([^/'"\s]+)\/([^/'"\s]+)\/([^'"\s]+)/gi,
+    "https://raw.githubusercontent.com/$1/$2/$3/$4",
+  );
+  result = result.replace(
+    /https?:\/\/(?:cdn\.jsdelivr\.net\/gh|rawcdn\.githack\.com|raw\.githack\.com)\/([^/'"\s]+)\/([^/'"\s]+)\/([^'"\s]+)/gi,
+    "https://raw.githubusercontent.com/$1/$2/main/$3",
   );
   return result;
 }
@@ -53,14 +57,14 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
 
   // 6. Ensure correct <base href="...">
   if (!html.includes("<base ")) {
-    let detectedBase = baseUrl || "https://cdn.jsdelivr.net/gh/freebuisness/html@main/";
+    let detectedBase = baseUrl || "https://raw.githubusercontent.com/freebuisness/html/main/";
 
     if (!baseUrl) {
-      const cdnMatch = html.match(/https:\/\/cdn\.jsdelivr\.net\/gh\/[^\x27" \t\n\r>]+/i);
-      if (cdnMatch) {
-        const fullMatch = cdnMatch[0];
+      const ghMatch = html.match(/https:\/\/raw\.githubusercontent\.com\/[^\x27" \t\n\r>]+/i);
+      if (ghMatch) {
+        const fullMatch = ghMatch[0];
         const matchRepo = fullMatch.match(
-          /(https:\/\/cdn\.jsdelivr\.net\/gh\/[^/]+\/[^/]+(?:@[^/]+)?\/?)/i,
+          /(https:\/\/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/[^/]+\/?)/i,
         );
         if (matchRepo && matchRepo[1]) {
           detectedBase = matchRepo[1];
@@ -100,50 +104,67 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
   html, body {
     margin: 0 !important;
     padding: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
+    width: 100vw !important;
+    height: 100vh !important;
     max-width: 100vw !important;
     max-height: 100vh !important;
     background-color: #000000 !important;
     color: #ffffff !important;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
     display: flex !important;
+    flex-direction: column !important;
     align-items: center !important;
     justify-content: center !important;
+    text-align: center !important;
     overflow: hidden !important;
     box-sizing: border-box !important;
   }
   *, *:before, *:after {
     box-sizing: border-box !important;
   }
-  #gameContainer, #unityContainer, #unity-container, #game-container, #unity-canvas-container, .webgl-content, #canvas-container, #canvas-holder, #MMFCanvas, #ruffle, .unity-desktop, .game-holder {
+  body > * {
+    margin: auto !important;
+  }
+  #gameContainer, #unityContainer, #unity-container, #game-container, #unity-canvas-container, .webgl-content, #canvas-container, #canvas-holder, #canvas-wrapper, #MMFCanvas, #ruffle, .unity-desktop, .game-holder, #c2canvasdiv, #cr-stage, #game-stage, #root, #app, #game, .game-container, #view-holder, #canvas_container, #content, .content, #main, div[id*="game"], div[id*="canvas"], div[class*="game"], div[class*="canvas"] {
     position: relative !important;
-    max-width: 100% !important;
-    max-height: 100% !important;
+    max-width: 100vw !important;
+    max-height: 100vh !important;
     width: 100% !important;
     height: 100% !important;
-    left: auto !important;
-    top: auto !important;
+    left: 0 !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
     transform: none !important;
     display: flex !important;
     justify-content: center !important;
     align-items: center !important;
-    margin: 0 auto !important;
+    margin: auto !important;
     overflow: hidden !important;
   }
-  canvas, #canvas, #unity-canvas {
-    max-width: 100% !important;
-    max-height: 100% !important;
+  canvas, #canvas, #unity-canvas, #c2canvas, #glcanvas, #gameCanvas, #game-canvas, canvas#canvas {
+    position: relative !important;
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+    width: 100% !important;
+    height: 100% !important;
     display: block !important;
     margin: auto !important;
+    left: 0 !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    transform: none !important;
     object-fit: contain !important;
   }
   ruffle-player, ruffle-embed, object, embed {
     width: 100% !important;
     height: 100% !important;
-    max-width: 100% !important;
-    max-height: 100% !important;
+    max-width: 100vw !important;
+    max-height: 100vh !important;
     display: block !important;
+    margin: auto !important;
+    object-fit: contain !important;
   }
 </style>
 <script id="frosted-runtime-shield">
@@ -163,20 +184,20 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
     if (typeof url !== "string") return url;
     let u = url;
     const r1 = new RegExp(
-      "https?:\\/\\/(?:rawcdn\\.githack\\.com|raw\\.githack\\.com|cdn\\.staticaly\\.com\\/gh|gitcdn\\.link\\/repo)\\/([^/\\s]+)\\/([^/\\s]+)\\/([^/\\s]+)\\/([^\\s]+)",
+      "https?:\\/\\/(?:cdn\\.jsdelivr\\.net\\/gh|rawcdn\\.githack\\.com|raw\\.githack\\.com|cdn\\.staticaly\\.com\\/gh|gitcdn\\.link\\/repo)\\/([^/\\s]+)\\/([^/\\s]+)@([^/\\s]+)\\/([^\\s]+)",
       "gi",
     );
-    u = u.replace(r1, "https://cdn.jsdelivr.net/gh/$1/$2@$3/$4");
+    u = u.replace(r1, "https://raw.githubusercontent.com/$1/$2/$3/$4");
     const r2 = new RegExp(
-      "https?:\\/\\/(?:rawcdn\\.githack\\.com|raw\\.githack\\.com)\\/([^/\\s]+)\\/([^/\\s]+)\\/([^\\s]+)",
+      "https?:\\/\\/(?:cdn\\.jsdelivr\\.net\\/gh|rawcdn\\.githack\\.com|raw\\.githack\\.com)\\/([^/\\s]+)\\/([^/\\s]+)\\/([^/\\s]+)\\/([^\\s]+)",
       "gi",
     );
-    u = u.replace(r2, "https://cdn.jsdelivr.net/gh/$1/$2@main/$3");
+    u = u.replace(r2, "https://raw.githubusercontent.com/$1/$2/$3/$4");
     const r3 = new RegExp(
-      "https?:\\/\\/raw\\.githubusercontent\\.com\\/([^/\\s]+)\\/([^/\\s]+)\\/([^/\\s]+)\\/([^\\s]+)",
+      "https?:\\/\\/(?:cdn\\.jsdelivr\\.net\\/gh|rawcdn\\.githack\\.com|raw\\.githack\\.com)\\/([^/\\s]+)\\/([^/\\s]+)\\/([^\\s]+)",
       "gi",
     );
-    u = u.replace(r3, "https://cdn.jsdelivr.net/gh/$1/$2@$3/$4");
+    u = u.replace(r3, "https://raw.githubusercontent.com/$1/$2/main/$3");
     return u;
   }
 
@@ -381,6 +402,51 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
       });
     }
   }
+
+  // 8. Auto-Centering and Full-Fit Viewport Enforcer
+  try {
+    function centerAndFit() {
+      const allElements = document.querySelectorAll('canvas, #gameContainer, #unityContainer, #unity-container, #game-container, #c2canvasdiv, #cr-stage, #game-stage, #canvas, #unity-canvas, ruffle-player, embed, object, iframe');
+      for (let i = 0; i < allElements.length; i++) {
+        const el = allElements[i];
+        if (el) {
+          el.style.setProperty('margin-left', 'auto', 'important');
+          el.style.setProperty('margin-right', 'auto', 'important');
+          el.style.setProperty('margin-top', 'auto', 'important');
+          el.style.setProperty('margin-bottom', 'auto', 'important');
+          el.style.setProperty('object-fit', 'contain', 'important');
+          el.style.setProperty('max-width', '100vw', 'important');
+          el.style.setProperty('max-height', '100vh', 'important');
+        }
+      }
+      if (document.body) {
+        document.body.style.setProperty('display', 'flex', 'important');
+        document.body.style.setProperty('flex-direction', 'column', 'important');
+        document.body.style.setProperty('align-items', 'center', 'important');
+        document.body.style.setProperty('justify-content', 'center', 'important');
+        document.body.style.setProperty('margin', '0', 'important');
+        document.body.style.setProperty('padding', '0', 'important');
+        document.body.style.setProperty('width', '100vw', 'important');
+        document.body.style.setProperty('height', '100vh', 'important');
+        document.body.style.setProperty('overflow', 'hidden', 'important');
+      }
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', centerAndFit);
+    } else {
+      centerAndFit();
+    }
+    window.addEventListener('load', centerAndFit);
+    window.addEventListener('resize', centerAndFit);
+
+    if (window.MutationObserver) {
+      const obs = new MutationObserver(function() {
+        centerAndFit();
+      });
+      obs.observe(document.documentElement, { childList: true, subtree: true, attributes: false });
+    }
+  } catch(e) {}
 })();
 </script>
 `;
@@ -492,24 +558,27 @@ export async function loadGameSource(directory: string): Promise<GameLoadResult>
 
   const filename = directory.replace(/^\/+/, "");
 
-  let cdnUrl = "";
   let githubUrl = "";
+  let fallbackGithubUrl = "";
 
   if (filename.startsWith("games/")) {
-    cdnUrl = `https://cdn.jsdelivr.net/gh/a456pur/seraph@main/${filename}`;
     githubUrl = `https://raw.githubusercontent.com/a456pur/seraph/main/${filename}`;
+    fallbackGithubUrl = `https://raw.githubusercontent.com/a456pur/seraph/master/${filename}`;
   } else if (filename.startsWith("3kh0/")) {
     const rawFilename = filename.replace("3kh0/", "");
-    cdnUrl = `https://cdn.jsdelivr.net/gh/3kh0/3kh0-Assets@main/${rawFilename}`;
     githubUrl = `https://raw.githubusercontent.com/3kh0/3kh0-Assets/main/${rawFilename}`;
+    fallbackGithubUrl = `https://raw.githubusercontent.com/3kh0/3kh0-Assets/master/${rawFilename}`;
   } else {
-    cdnUrl = `https://cdn.jsdelivr.net/gh/freebuisness/html@main/${filename}`;
     githubUrl = `https://raw.githubusercontent.com/freebuisness/html/main/${filename}`;
+    fallbackGithubUrl = `https://raw.githubusercontent.com/freebuisness/html/master/${filename}`;
   }
 
   const urlsToTry = [
-    { url: cdnUrl, baseUrl: cdnUrl.substring(0, cdnUrl.lastIndexOf("/") + 1) },
     { url: githubUrl, baseUrl: githubUrl.substring(0, githubUrl.lastIndexOf("/") + 1) },
+    {
+      url: fallbackGithubUrl,
+      baseUrl: fallbackGithubUrl.substring(0, fallbackGithubUrl.lastIndexOf("/") + 1),
+    },
   ];
 
   for (const { url, baseUrl } of urlsToTry) {

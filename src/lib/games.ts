@@ -16,8 +16,8 @@ export type Game = {
   rating?: number;
 };
 
-export const GN_COVERS_CDN = "https://cdn.jsdelivr.net/gh/freebuisness/covers@main";
-export const GN_ZONES_URL = "https://cdn.jsdelivr.net/gh/freebuisness/assets@latest/zones.json";
+export const GN_COVERS_CDN = "https://raw.githubusercontent.com/freebuisness/covers/main";
+export const GN_ZONES_URL = "https://raw.githubusercontent.com/freebuisness/assets/main/zones.json";
 export const GN_GAME_PROXY = "/api/public/gn/game";
 export const SERAPH_GAME_PROXY = "/api/public/seraph";
 export const THREE_KH0_GAME_PROXY = "/api/public/3kh0";
@@ -379,7 +379,7 @@ export async function fetchGames(): Promise<Game[]> {
             const folderName = String(item.name);
             const name = formatGameName(folderName);
             const directory = `games/${folderName}/index.html`;
-            const image = `https://cdn.jsdelivr.net/gh/a456pur/seraph@main/images/thumbnails/${folderName}.jpg`;
+            const image = `https://raw.githubusercontent.com/a456pur/seraph/main/images/thumbnails/${folderName}.jpg`;
             const category = assignCategory(name);
             const featured =
               idx < 25 ||

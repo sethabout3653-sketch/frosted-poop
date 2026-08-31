@@ -57,14 +57,12 @@ function setCachedAsset(key: string, buffer: Buffer, mime: string, encoding?: st
   }
 }
 
-// Helper for fetching CDN assets with GitHub raw fallback
+// Helper for fetching GitHub raw assets with branch fallback
 async function fetchGNAsset(
   subPath: string,
 ): Promise<{ response: Response; urlUsed: string } | null> {
-  const urlsToTry = [
-    `https://cdn.jsdelivr.net/gh/${subPath}`,
-    `https://raw.githubusercontent.com/${subPath.replace("@", "/")}`,
-  ];
+  const normalizedPath = subPath.replace("@", "/");
+  const urlsToTry = [`https://raw.githubusercontent.com/${normalizedPath}`];
 
   if (!subPath.includes("@")) {
     const parts = subPath.split("/");
@@ -73,9 +71,13 @@ async function fetchGNAsset(
       const rest = parts.slice(2).join("/");
       urlsToTry.push(`https://raw.githubusercontent.com/${userRepo}/main/${rest}`);
       urlsToTry.push(`https://raw.githubusercontent.com/${userRepo}/master/${rest}`);
-      urlsToTry.push(`https://cdn.jsdelivr.net/gh/${userRepo}@main/${rest}`);
-      urlsToTry.push(`https://cdn.jsdelivr.net/gh/${userRepo}@master/${rest}`);
     }
+  } else {
+    const parts = subPath.split("@");
+    const userRepo = parts[0];
+    const rest = parts[1]?.replace(/^[^/]+\//, "") || "";
+    urlsToTry.push(`https://raw.githubusercontent.com/${userRepo}/main/${rest}`);
+    urlsToTry.push(`https://raw.githubusercontent.com/${userRepo}/master/${rest}`);
   }
 
   for (const u of urlsToTry) {
@@ -119,50 +121,67 @@ function sanitizeAndCleanGameHtml(rawHtml: string): string {
   html, body {
     margin: 0 !important;
     padding: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
+    width: 100vw !important;
+    height: 100vh !important;
     max-width: 100vw !important;
     max-height: 100vh !important;
     background-color: #000000 !important;
     color: #ffffff !important;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
     display: flex !important;
+    flex-direction: column !important;
     align-items: center !important;
     justify-content: center !important;
+    text-align: center !important;
     overflow: hidden !important;
     box-sizing: border-box !important;
   }
   *, *:before, *:after {
     box-sizing: border-box !important;
   }
-  #gameContainer, #unityContainer, #unity-container, #game-container, #unity-canvas-container, .webgl-content, #canvas-container, #canvas-holder, #MMFCanvas, #ruffle, .unity-desktop, .game-holder {
+  body > * {
+    margin: auto !important;
+  }
+  #gameContainer, #unityContainer, #unity-container, #game-container, #unity-canvas-container, .webgl-content, #canvas-container, #canvas-holder, #canvas-wrapper, #MMFCanvas, #ruffle, .unity-desktop, .game-holder, #c2canvasdiv, #cr-stage, #game-stage, #root, #app, #game, .game-container, #view-holder, #canvas_container, #content, .content, #main, div[id*="game"], div[id*="canvas"], div[class*="game"], div[class*="canvas"] {
     position: relative !important;
-    max-width: 100% !important;
-    max-height: 100% !important;
+    max-width: 100vw !important;
+    max-height: 100vh !important;
     width: 100% !important;
     height: 100% !important;
-    left: auto !important;
-    top: auto !important;
+    left: 0 !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
     transform: none !important;
     display: flex !important;
     justify-content: center !important;
     align-items: center !important;
-    margin: 0 auto !important;
+    margin: auto !important;
     overflow: hidden !important;
   }
-  canvas, #canvas, #unity-canvas {
-    max-width: 100% !important;
-    max-height: 100% !important;
+  canvas, #canvas, #unity-canvas, #c2canvas, #glcanvas, #gameCanvas, #game-canvas, canvas#canvas {
+    position: relative !important;
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+    width: 100% !important;
+    height: 100% !important;
     display: block !important;
     margin: auto !important;
+    left: 0 !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    transform: none !important;
     object-fit: contain !important;
   }
   ruffle-player, ruffle-embed, object, embed {
     width: 100% !important;
     height: 100% !important;
-    max-width: 100% !important;
-    max-height: 100% !important;
+    max-width: 100vw !important;
+    max-height: 100vh !important;
     display: block !important;
+    margin: auto !important;
+    object-fit: contain !important;
   }
 </style>
 <script id="frosted-anti-annoyance">
@@ -179,6 +198,49 @@ function sanitizeAndCleanGameHtml(rawHtml: string): string {
       // 3. Prevent frame-busting redirects (forces game to remain inside iframe sandbox)
       Object.defineProperty(window, 'top', { get: function() { return window.self; } });
       Object.defineProperty(window, 'parent', { get: function() { return window.self; } });
+
+      // 4. Runtime Auto-Centering and Viewport Fitting
+      function centerAndFit() {
+        var allElements = document.querySelectorAll('canvas, #gameContainer, #unityContainer, #unity-container, #game-container, #c2canvasdiv, #cr-stage, #game-stage, #canvas, #unity-canvas, ruffle-player, embed, object, iframe');
+        for (var i = 0; i < allElements.length; i++) {
+          var el = allElements[i];
+          if (el) {
+            el.style.setProperty('margin-left', 'auto', 'important');
+            el.style.setProperty('margin-right', 'auto', 'important');
+            el.style.setProperty('margin-top', 'auto', 'important');
+            el.style.setProperty('margin-bottom', 'auto', 'important');
+            el.style.setProperty('object-fit', 'contain', 'important');
+            el.style.setProperty('max-width', '100vw', 'important');
+            el.style.setProperty('max-height', '100vh', 'important');
+          }
+        }
+        if (document.body) {
+          document.body.style.setProperty('display', 'flex', 'important');
+          document.body.style.setProperty('flex-direction', 'column', 'important');
+          document.body.style.setProperty('align-items', 'center', 'important');
+          document.body.style.setProperty('justify-content', 'center', 'important');
+          document.body.style.setProperty('margin', '0', 'important');
+          document.body.style.setProperty('padding', '0', 'important');
+          document.body.style.setProperty('width', '100vw', 'important');
+          document.body.style.setProperty('height', '100vh', 'important');
+          document.body.style.setProperty('overflow', 'hidden', 'important');
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', centerAndFit);
+      } else {
+        centerAndFit();
+      }
+      window.addEventListener('load', centerAndFit);
+      window.addEventListener('resize', centerAndFit);
+
+      if (window.MutationObserver) {
+        var obs = new MutationObserver(function() {
+          centerAndFit();
+        });
+        obs.observe(document.documentElement, { childList: true, subtree: true });
+      }
     } catch(e) {
       console.warn("[Shield] Failed to inject protection framework:", e);
     }
@@ -195,16 +257,18 @@ function sanitizeAndCleanGameHtml(rawHtml: string): string {
   }
 
   // 5. Rewrite all CDN links to proxied local API endpoints
-  html = html.replace(/https:\/\/cdn\.jsdelivr\.net\/gh\//g, "/api/public/gn/cdn/");
-  html = html.replace(/https:\/\/raw\.githubusercontent\.com\//g, "/api/public/gn/gh/");
+  html = html.replace(
+    /https:\/\/(?:cdn\.jsdelivr\.net\/gh|raw\.githubusercontent\.com)\//g,
+    "/api/public/gn/gh/",
+  );
 
   // 6. Rewrite or insert base href tag
   if (!html.includes("<base ")) {
     let detectedBase = "/api/public/gn/game/";
-    const cdnMatch = html.match(/\/api\/public\/gn\/cdn\/[^\x27" \t\n\r>]+/i);
-    if (cdnMatch) {
-      const fullMatch = cdnMatch[0];
-      const matchRepo = fullMatch.match(/(\/api\/public\/gn\/cdn\/[^/]+\/[^/]+(?:@[^/]+)?\/?)/i);
+    const ghMatch = html.match(/\/api\/public\/gn\/gh\/[^\x27" \t\n\r>]+/i);
+    if (ghMatch) {
+      const fullMatch = ghMatch[0];
+      const matchRepo = fullMatch.match(/(\/api\/public\/gn\/gh\/[^/]+\/[^/]+(?:\/[^/]+)?\/?)/i);
       if (matchRepo && matchRepo[1]) {
         detectedBase = matchRepo[1];
         if (!detectedBase.endsWith("/")) detectedBase += "/";
@@ -214,11 +278,7 @@ function sanitizeAndCleanGameHtml(rawHtml: string): string {
   } else {
     // If a base tag was already present, rewrite it to proxy
     html = html.replace(
-      /<base([^>]*)\bhref=["\x27]https:\/\/cdn\.jsdelivr\.net\/gh\/([^"\x27]+)["\x27]/gi,
-      '<base$1href="/api/public/gn/cdn/$2"',
-    );
-    html = html.replace(
-      /<base([^>]*)\bhref=["\x27]https:\/\/raw\.githubusercontent\.com\/([^"\x27]+)["\x27]/gi,
+      /<base([^>]*)\bhref=["\x27]https:\/\/(?:cdn\.jsdelivr\.net\/gh|raw\.githubusercontent\.com)\/([^"\x27]+)["\x27]/gi,
       '<base$1href="/api/public/gn/gh/$2"',
     );
   }
@@ -350,8 +410,8 @@ router.get("/g/*", async (req, res) => {
       return serveAsset(req, res, cached.buffer, rawPath, cached.mime, cached.encoding === "gzip");
     }
 
-    const cdnUrl = `https://cdn.jsdelivr.net/gh/selenite-cc/selenite-old@main/${rawPath}`;
-    const response = await fetch(cdnUrl);
+    const rawUrl = `https://raw.githubusercontent.com/selenite-cc/selenite-old/main/${rawPath}`;
+    const response = await fetch(rawUrl, { redirect: "follow" });
     if (!response.ok) {
       return res.status(response.status).send("Game asset not found");
     }
@@ -392,23 +452,12 @@ router.get("/gn/*", async (req, res) => {
 
     let response: Response | null = null;
     let cleanPathNoQuery = rawPath.split("?")[0] || "";
-    const isHtmlType = false;
 
-    if (rawPath.startsWith("cdn/")) {
-      const cdnSubPath = rawPath.replace(/^cdn\//, "");
-      const resData = await fetchGNAsset(cdnSubPath);
+    if (rawPath.startsWith("cdn/") || rawPath.startsWith("gh/")) {
+      const subPath = rawPath.replace(/^(cdn|gh)\//, "");
+      const resData = await fetchGNAsset(subPath);
       if (resData) response = resData.response;
-      cleanPathNoQuery = cdnSubPath.split("?")[0] || "";
-    } else if (rawPath.startsWith("gh/")) {
-      const ghSubPath = rawPath.replace(/^gh\//, "");
-      const ghUrl = `https://raw.githubusercontent.com/${ghSubPath}`;
-      try {
-        const r = await fetch(ghUrl, { redirect: "follow" });
-        if (r.ok) response = r;
-      } catch (err) {
-        console.warn("Proxy gh fallback error:", err);
-      }
-      cleanPathNoQuery = ghSubPath.split("?")[0] || "";
+      cleanPathNoQuery = subPath.split("?")[0] || "";
     } else if (rawPath.startsWith("http:/") || rawPath.startsWith("https:/")) {
       const fullUrl = rawPath.replace(/^(https?:)\/*/, "$1//");
       try {
@@ -433,11 +482,11 @@ router.get("/gn/*", async (req, res) => {
         if (r.ok) {
           response = r;
         } else {
-          const resData = await fetchGNAsset(`freebuisness/html@main/${cleanGamePath}`);
+          const resData = await fetchGNAsset(`freebuisness/html/main/${cleanGamePath}`);
           if (resData) response = resData.response;
         }
       } catch {
-        const resData = await fetchGNAsset(`freebuisness/html@main/${cleanGamePath}`);
+        const resData = await fetchGNAsset(`freebuisness/html/main/${cleanGamePath}`);
         if (resData) response = resData.response;
       }
     }
@@ -459,32 +508,32 @@ router.get("/gn/*", async (req, res) => {
       return res.send(sanitizedHtml);
     }
 
-    // JS/CSS/JSON Rewrites (can also be cached to save bandwidth and compute)
+    // JS/CSS/JSON Rewrites (ensuring exact content-type instead of text/plain)
     if (cleanPathNoQuery.endsWith(".js") || cleanPathNoQuery.endsWith(".mjs")) {
       let jsText = await response.text();
-      jsText = jsText.replace(/https:\/\/cdn\.jsdelivr\.net\/gh\//g, "/api/public/gn/cdn/");
+      jsText = jsText.replace(/https:\/\/cdn\.jsdelivr\.net\/gh\//g, "/api/public/gn/gh/");
       jsText = jsText.replace(/https:\/\/raw\.githubusercontent\.com\//g, "/api/public/gn/gh/");
       const buffer = Buffer.from(jsText, "utf-8");
-      setCachedAsset(cacheKey, buffer, "application/javascript");
-      return serveAsset(req, res, buffer, rawPath, "application/javascript");
+      setCachedAsset(cacheKey, buffer, "application/javascript; charset=utf-8");
+      return serveAsset(req, res, buffer, rawPath, "application/javascript; charset=utf-8");
     }
 
     if (cleanPathNoQuery.endsWith(".css")) {
       let cssText = await response.text();
-      cssText = cssText.replace(/https:\/\/cdn\.jsdelivr\.net\/gh\//g, "/api/public/gn/cdn/");
+      cssText = cssText.replace(/https:\/\/cdn\.jsdelivr\.net\/gh\//g, "/api/public/gn/gh/");
       cssText = cssText.replace(/https:\/\/raw\.githubusercontent\.com\//g, "/api/public/gn/gh/");
       const buffer = Buffer.from(cssText, "utf-8");
-      setCachedAsset(cacheKey, buffer, "text/css");
-      return serveAsset(req, res, buffer, rawPath, "text/css");
+      setCachedAsset(cacheKey, buffer, "text/css; charset=utf-8");
+      return serveAsset(req, res, buffer, rawPath, "text/css; charset=utf-8");
     }
 
     if (cleanPathNoQuery.endsWith(".json")) {
       let jsonText = await response.text();
-      jsonText = jsonText.replace(/https:\/\/cdn\.jsdelivr\.net\/gh\//g, "/api/public/gn/cdn/");
+      jsonText = jsonText.replace(/https:\/\/cdn\.jsdelivr\.net\/gh\//g, "/api/public/gn/gh/");
       jsonText = jsonText.replace(/https:\/\/raw\.githubusercontent\.com\//g, "/api/public/gn/gh/");
       const buffer = Buffer.from(jsonText, "utf-8");
-      setCachedAsset(cacheKey, buffer, "application/json");
-      return serveAsset(req, res, buffer, rawPath, "application/json");
+      setCachedAsset(cacheKey, buffer, "application/json; charset=utf-8");
+      return serveAsset(req, res, buffer, rawPath, "application/json; charset=utf-8");
     }
 
     // Binary Assets
@@ -511,11 +560,11 @@ router.get("/seraph/*", async (req, res) => {
       return serveAsset(req, res, cached.buffer, rawPath, cached.mime, cached.encoding === "gzip");
     }
 
-    const seraphUrl = `https://cdn.jsdelivr.net/gh/a456pur/seraph@main/${rawPath}`;
-    let response = await fetch(seraphUrl, { redirect: "follow" });
+    const rawSeraphUrl = `https://raw.githubusercontent.com/a456pur/seraph/main/${rawPath}`;
+    let response = await fetch(rawSeraphUrl, { redirect: "follow" });
     if (!response.ok) {
-      const rawSeraphUrl = `https://raw.githubusercontent.com/a456pur/seraph/main/${rawPath}`;
-      const r2 = await fetch(rawSeraphUrl, { redirect: "follow" });
+      const fallbackUrl = `https://raw.githubusercontent.com/a456pur/seraph/master/${rawPath}`;
+      const r2 = await fetch(fallbackUrl, { redirect: "follow" });
       if (!r2.ok) {
         return res.status(404).send("Seraph game asset not found");
       }
@@ -533,7 +582,7 @@ router.get("/seraph/*", async (req, res) => {
       const rawText = await response.text();
       let sanitizedHtml = sanitizeAndCleanGameHtml(rawText);
       sanitizedHtml = sanitizedHtml.replace(
-        /https:\/\/cdn\.jsdelivr\.net\/gh\/a456pur\/seraph@main/g,
+        /https:\/\/(?:cdn\.jsdelivr\.net\/gh|raw\.githubusercontent\.com)\/a456pur\/seraph(?:\/|@)main/g,
         "/api/public/seraph",
       );
       return res.send(sanitizedHtml);
@@ -542,23 +591,23 @@ router.get("/seraph/*", async (req, res) => {
     if (cleanPathNoQuery.endsWith(".js") || cleanPathNoQuery.endsWith(".mjs")) {
       let jsText = await response.text();
       jsText = jsText.replace(
-        /https:\/\/cdn\.jsdelivr\.net\/gh\/a456pur\/seraph@main/g,
+        /https:\/\/(?:cdn\.jsdelivr\.net\/gh|raw\.githubusercontent\.com)\/a456pur\/seraph(?:\/|@)main/g,
         "/api/public/seraph",
       );
       const buffer = Buffer.from(jsText, "utf-8");
-      setCachedAsset(cacheKey, buffer, "application/javascript");
-      return serveAsset(req, res, buffer, rawPath, "application/javascript");
+      setCachedAsset(cacheKey, buffer, "application/javascript; charset=utf-8");
+      return serveAsset(req, res, buffer, rawPath, "application/javascript; charset=utf-8");
     }
 
     if (cleanPathNoQuery.endsWith(".css")) {
       let cssText = await response.text();
       cssText = cssText.replace(
-        /https:\/\/cdn\.jsdelivr\.net\/gh\/a456pur\/seraph@main/g,
+        /https:\/\/(?:cdn\.jsdelivr\.net\/gh|raw\.githubusercontent\.com)\/a456pur\/seraph(?:\/|@)main/g,
         "/api/public/seraph",
       );
       const buffer = Buffer.from(cssText, "utf-8");
-      setCachedAsset(cacheKey, buffer, "text/css");
-      return serveAsset(req, res, buffer, rawPath, "text/css");
+      setCachedAsset(cacheKey, buffer, "text/css; charset=utf-8");
+      return serveAsset(req, res, buffer, rawPath, "text/css; charset=utf-8");
     }
 
     const mime = getMimeType(cleanPathNoQuery, response.headers.get("content-type"));
@@ -584,10 +633,10 @@ router.get("/3kh0/*", async (req, res) => {
       return serveAsset(req, res, cached.buffer, rawPath, cached.mime, cached.encoding === "gzip");
     }
 
-    const primaryUrl = `https://cdn.jsdelivr.net/gh/3kh0/3kh0-Assets@main/${rawPath}`;
+    const primaryUrl = `https://raw.githubusercontent.com/3kh0/3kh0-Assets/main/${rawPath}`;
     let response = await fetch(primaryUrl, { redirect: "follow" });
     if (!response.ok) {
-      const fallbackUrl = `https://raw.githubusercontent.com/3kh0/3kh0-Assets/main/${rawPath}`;
+      const fallbackUrl = `https://raw.githubusercontent.com/3kh0/3kh0-Assets/master/${rawPath}`;
       const r2 = await fetch(fallbackUrl, { redirect: "follow" });
       if (!r2.ok) {
         return res.status(404).send("3kh0 game asset not found");
@@ -606,7 +655,7 @@ router.get("/3kh0/*", async (req, res) => {
       const rawText = await response.text();
       let sanitizedHtml = sanitizeAndCleanGameHtml(rawText);
       sanitizedHtml = sanitizedHtml.replace(
-        /https:\/\/cdn\.jsdelivr\.net\/gh\/3kh0\/3kh0-Assets@main/g,
+        /https:\/\/(?:cdn\.jsdelivr\.net\/gh|raw\.githubusercontent\.com)\/3kh0\/3kh0-Assets(?:\/|@)main/g,
         "/api/public/3kh0",
       );
       return res.send(sanitizedHtml);
@@ -615,12 +664,12 @@ router.get("/3kh0/*", async (req, res) => {
     if (cleanPathNoQuery.endsWith(".js") || cleanPathNoQuery.endsWith(".mjs")) {
       let jsText = await response.text();
       jsText = jsText.replace(
-        /https:\/\/cdn\.jsdelivr\.net\/gh\/3kh0\/3kh0-Assets@main/g,
+        /https:\/\/(?:cdn\.jsdelivr\.net\/gh|raw\.githubusercontent\.com)\/3kh0\/3kh0-Assets(?:\/|@)main/g,
         "/api/public/3kh0",
       );
       const buffer = Buffer.from(jsText, "utf-8");
-      setCachedAsset(cacheKey, buffer, "application/javascript");
-      return serveAsset(req, res, buffer, rawPath, "application/javascript");
+      setCachedAsset(cacheKey, buffer, "application/javascript; charset=utf-8");
+      return serveAsset(req, res, buffer, rawPath, "application/javascript; charset=utf-8");
     }
 
     const mime = getMimeType(cleanPathNoQuery, response.headers.get("content-type"));
