@@ -1,5 +1,8 @@
 // Custom games list module
 // --- Existing code from your provided snippet ---
+import luminSdkGamesData from "../data/luminSdkGames.json";
+import { getCoverStyle } from "./frostedStore";
+
 export type GameCategory =
   "all" | "popular" | "action" | "driving" | "sports" | "puzzle" | "retro" | "casual";
 
@@ -22,152 +25,8 @@ export const GN_GAME_PROXY = "/api/public/gn/game";
 export const SERAPH_GAME_PROXY = "/api/public/seraph";
 export const THREE_KH0_GAME_PROXY = "/api/public/3kh0";
 
-export const SERAPH_GAMES: Game[] = [
-  {
-    id: "slope",
-    name: "Slope",
-    directory: "games/slope/index.html",
-    category: "popular",
-    featured: true,
-    plays: 984000,
-    rating: 4.9,
-  },
-  {
-    id: "1v1lol",
-    name: "1v1.LOL",
-    directory: "58.html",
-    category: "popular",
-    featured: true,
-    plays: 953000,
-    rating: 4.8,
-  },
-  {
-    id: "retrobowl",
-    name: "Retro Bowl",
-    directory: "games/retrobowl/index.html",
-    category: "popular",
-    featured: true,
-    plays: 882000,
-    rating: 4.9,
-  },
-  {
-    id: "subway-surfers",
-    name: "Subway Surfers",
-    directory: "games/subwaysurfers/index.html",
-    category: "popular",
-    featured: true,
-    plays: 970000,
-    rating: 4.9,
-  },
-  {
-    id: "moto-x3m",
-    name: "Moto X3M",
-    directory: "games/motox3m/index.html",
-    category: "driving",
-    featured: true,
-    plays: 741000,
-    rating: 4.7,
-  },
-  {
-    id: "cookie-clicker",
-    name: "Cookie Clicker",
-    directory: "games/cookieclicker/index.html",
-    category: "popular",
-    featured: true,
-    plays: 919000,
-    rating: 4.9,
-  },
-  {
-    id: "geometry-dash",
-    name: "Geometry Dash",
-    directory: "785-upd3.html",
-    category: "popular",
-    featured: true,
-    plays: 834000,
-    rating: 4.8,
-  },
-  {
-    id: "bitlife",
-    name: "BitLife",
-    directory: "games/bitlife/index.html",
-    category: "popular",
-    featured: true,
-    plays: 798000,
-    rating: 4.7,
-  },
-  {
-    id: "basketball-stars",
-    name: "Basketball Stars",
-    directory: "272-f.html",
-    category: "sports",
-    featured: true,
-    plays: 621000,
-    rating: 4.6,
-  },
-  {
-    id: "drift-hunters",
-    name: "Drift Hunters",
-    directory: "173.html",
-    category: "driving",
-    featured: true,
-    plays: 693000,
-    rating: 4.8,
-  },
-  {
-    id: "ovo",
-    name: "OvO",
-    directory: "games/ovo/index.html",
-    category: "action",
-    featured: false,
-    plays: 541000,
-    rating: 4.7,
-  },
-  {
-    id: "run-3",
-    name: "Run 3",
-    directory: "games/run3/index.html",
-    category: "action",
-    featured: false,
-    plays: 589000,
-    rating: 4.8,
-  },
-  {
-    id: "paper-io-2",
-    name: "Paper.io 2",
-    directory: "games/paperio2/index.html",
-    category: "popular",
-    featured: false,
-    plays: 612000,
-    rating: 4.5,
-  },
-  {
-    id: "tunnel-rush",
-    name: "Tunnel Rush",
-    directory: "206-f.html",
-    category: "action",
-    featured: false,
-    plays: 498000,
-    rating: 4.6,
-  },
-  {
-    id: "fnf",
-    name: "Friday Night Funkin'",
-    directory: "games/fnf/index.html",
-    category: "retro",
-    featured: true,
-    plays: 810000,
-    rating: 4.9,
-  },
-  {
-    id: "minecraft",
-    name: "Minecraft",
-    directory: "182-f.html",
-    category: "popular",
-    featured: true,
-    plays: 999999,
-    rating: 5.0,
-  },
-];
+export const SERAPH_GAMES: Game[] = [];
+const DEPRECATED_SERAPH_LIST: Game[] = [];
 
 export function gameEntry(directory: string) {
   if (
@@ -187,17 +46,105 @@ export function gameEntry(directory: string) {
   return `${GN_GAME_PROXY}/${directory}`;
 }
 
+export function createStyledSvgCover(title: string, category: string = "game"): string {
+  let hash = 0;
+  for (let i = 0; i < title.length; i++) {
+    hash = title.charCodeAt(i) + ((hash << 5) - hash);
+  }
+
+  const colorPairs = [
+    ["#4f46e5", "#7c3aed"],
+    ["#2563eb", "#0284c7"],
+    ["#0d9488", "#059669"],
+    ["#d97706", "#dc2626"],
+    ["#c026d3", "#e11d48"],
+    ["#7c3aed", "#c026d3"],
+    ["#0284c7", "#4f46e5"],
+    ["#059669", "#0d9488"],
+    ["#e11d48", "#d97706"],
+    ["#9333ea", "#4f46e5"],
+  ];
+
+  const pair = colorPairs[Math.abs(hash) % colorPairs.length];
+  const color1 = pair[0];
+  const color2 = pair[1];
+
+  const cleanTitle = title.length > 28 ? title.slice(0, 26) + "..." : title;
+  const escapeXml = (str: string) =>
+    str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&apos;");
+
+  const upperCat = (category || "game").toUpperCase();
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 250" width="400" height="250">
+    <defs>
+      <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="${color1}" />
+        <stop offset="100%" stop-color="${color2}" />
+      </linearGradient>
+      <linearGradient id="overlay" x1="0%" y1="100%" x2="0%" y2="0%">
+        <stop offset="0%" stop-color="rgba(15,23,42,0.85)" />
+        <stop offset="60%" stop-color="rgba(15,23,42,0.2)" />
+        <stop offset="100%" stop-color="rgba(15,23,42,0.4)" />
+      </linearGradient>
+    </defs>
+    <rect width="400" height="250" fill="url(#bg)" />
+    <g opacity="0.08" stroke="#ffffff" stroke-width="1">
+      <line x1="0" y1="50" x2="400" y2="50" />
+      <line x1="0" y1="100" x2="400" y2="100" />
+      <line x1="0" y1="150" x2="400" y2="150" />
+      <line x1="0" y1="200" x2="400" y2="200" />
+      <line x1="100" y1="0" x2="100" y2="250" />
+      <line x1="200" y1="0" x2="200" y2="250" />
+      <line x1="300" y1="0" x2="300" y2="250" />
+    </g>
+    <rect width="400" height="250" fill="url(#overlay)" />
+    <g transform="translate(260, 30) scale(1.6)" opacity="0.15" fill="#ffffff">
+      <path d="M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H9v2H7v-2H5v-2h2V9h2v2h2v2zm4.5 2c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm3-3c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5-1.5z"/>
+    </g>
+    <g transform="translate(176, 50)" fill="rgba(255,255,255,0.9)">
+      <path d="M43.2 8H4.8C2.15 8 0 10.15 0 12.8v22.4C0 37.85 2.15 40 4.8 40h38.4c2.65 0 4.8-2.15 4.8-4.8V12.8C48 10.15 45.85 8 43.2 8zm-22.4 18h-4.8v4.8h-4.8v-4.8H6.4v-4.8h4.8v-4.8h4.8v4.8h4.8v4.8zm11.4 4.8c-1.99 0-3.6-1.61-3.6-3.6s1.61-3.6 3.6-3.6 3.6 1.61 3.6 3.6-1.61 3.6-3.6 3.6zm7.2-7.2c-1.99 0-3.6-1.61-3.6-3.6s1.61-3.6 3.6-3.6 3.6 1.61 3.6 3.6-1.61 3.6-3.6 3.6z" opacity="0.85"/>
+    </g>
+    <rect x="24" y="145" width="${upperCat.length * 8 + 16}" height="20" rx="10" fill="rgba(255,255,255,0.2)" />
+    <text x="32" y="159" font-family="system-ui, -apple-system, sans-serif" font-size="10" font-weight="700" fill="#ffffff" letter-spacing="1">${upperCat}</text>
+    <text x="24" y="195" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="800" fill="#ffffff">${escapeXml(cleanTitle)}</text>
+  </svg>`;
+
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
 export function gameCover(game: Game) {
-  if (game.image && game.image.startsWith("http")) {
+  const style = getCoverStyle();
+
+  // If style is "sdk", use the actual Lumin SDK icon if available
+  if (style === "sdk" && (game as any).imageToken) {
+    return `https://a.luminsdk.com/api/v1/icon/${(game as any).imageToken}`;
+  }
+
+  // Fallback to actual Lumin SDK icon instead of generated SVG covers
+  if (game.image && game.image.startsWith("data:image/svg+xml") && (game as any).imageToken) {
+    return `https://a.luminsdk.com/api/v1/icon/${(game as any).imageToken}`;
+  }
+
+  // Otherwise, use resolved high-res images
+  if (game.image) {
     return game.image;
   }
-  if (typeof game.id === "string" && game.id.startsWith("seraph-")) {
-    return "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&auto=format&fit=crop&q=80";
+
+  if (typeof game.id === "number" || (typeof game.id === "string" && !isNaN(Number(game.id)))) {
+    return `${GN_COVERS_CDN}/${game.id}.png`;
   }
-  if (typeof game.id === "string" && game.id.startsWith("3kh0-")) {
-    return "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=400&auto=format&fit=crop&q=80";
+
+  // If all else fails and there's an imageToken, use actual SDK icon
+  if ((game as any).imageToken) {
+    return `https://a.luminsdk.com/api/v1/icon/${(game as any).imageToken}`;
   }
-  return `${GN_COVERS_CDN}/${game.id}.png`;
+
+  return createStyledSvgCover(game.name || "Game", game.category);
 }
 
 function assignCategory(name: string, catRaw?: string): GameCategory {
@@ -223,7 +170,9 @@ function assignCategory(name: string, catRaw?: string): GameCategory {
     n.includes("drift") ||
     n.includes("paper.io") ||
     n.includes("basket") ||
-    n.includes("minecraft")
+    n.includes("minecraft") ||
+    n.includes("hole.io") ||
+    n.includes("among us")
   ) {
     return "popular";
   }
@@ -235,7 +184,8 @@ function assignCategory(name: string, catRaw?: string): GameCategory {
     n.includes("racing") ||
     n.includes("kart") ||
     n.includes("bike") ||
-    n.includes("truck")
+    n.includes("truck") ||
+    n.includes("smash karts")
   ) {
     return "driving";
   }
@@ -260,13 +210,16 @@ function assignCategory(name: string, catRaw?: string): GameCategory {
     n.includes("bullet") ||
     n.includes("gun") ||
     n.includes("zombie") ||
-    n.includes("action")
+    n.includes("action") ||
+    n.includes("happy wheels") ||
+    n.includes("baldi")
   ) {
     return "action";
   }
   if (
     n.includes("mario") ||
     n.includes("pacman") ||
+    n.includes("pac-man") ||
     n.includes("sonic") ||
     n.includes("tetris") ||
     n.includes("retro") ||
@@ -274,7 +227,11 @@ function assignCategory(name: string, catRaw?: string): GameCategory {
     n.includes("atari") ||
     n.includes("classic") ||
     n.includes("zelda") ||
-    n.includes("pokemon")
+    n.includes("pokemon") ||
+    n.includes("punch-out") ||
+    n.includes("punchout") ||
+    n.includes("sm64") ||
+    n.includes("fnf")
   ) {
     return "retro";
   }
@@ -284,6 +241,8 @@ function assignCategory(name: string, catRaw?: string): GameCategory {
     n.includes("chess") ||
     n.includes("checkers") ||
     n.includes("cut the rope") ||
+    n.includes("bad piggies") ||
+    n.includes("bloons") ||
     n.includes("word") ||
     n.includes("puzzle") ||
     n.includes("block") ||
@@ -296,16 +255,28 @@ function assignCategory(name: string, catRaw?: string): GameCategory {
 
 export const FEATURED_GAME_IDS = [
   "soundboard",
+  "sm64",
+  "holeio",
   "slope",
   "1v1lol",
   "retrobowl",
   "subwaysurfers",
   "motox3m",
   "cookieclicker",
+  "mariokart64",
+  "pokemonemerald",
+  "badicecream3",
+  "pandemic2",
+  "happywheels",
+  "amongus",
   "geometrydash",
   "bitlife",
   "basketballstars",
   "drifthunters",
+  "crossyroad",
+  "supermarioworld",
+  "tetris",
+  "ocarinaoftime",
 ];
 
 function formatGameName(folderName: string): string {
@@ -320,9 +291,13 @@ function formatGameName(folderName: string): string {
     achievementunlocked2: "Achievement Unlocked 2",
     achievementunlocked3: "Achievement Unlocked 3",
     slope: "Slope",
+    slope2: "Slope 2",
     retrobowl: "Retro Bowl",
     subwaysurfers: "Subway Surfers",
     motox3m: "Moto X3M",
+    motox3mpool: "Moto X3M Pool",
+    motox3mspooky: "Moto X3M Spooky",
+    motox3mwinter: "Moto X3M Winter",
     cookieclicker: "Cookie Clicker",
     geometrydash: "Geometry Dash",
     bitlife: "BitLife",
@@ -335,7 +310,50 @@ function formatGameName(folderName: string): string {
     fnf: "Friday Night Funkin'",
     minecraft: "Minecraft Eaglercraft",
     sm64: "Super Mario 64",
+    sm64ds: "Super Mario 64 DS",
+    holeio: "Hole.io",
+    pandemic2: "Pandemic 2",
+    punchout: "Punch-Out!!",
+    badicecream: "Bad Ice Cream",
+    badicecream2: "Bad Ice Cream 2",
+    badicecream3: "Bad Ice Cream 3",
+    badpiggies: "Bad Piggies",
+    baldisbasics: "Baldi's Basics",
+    bloonstd4: "Bloons TD 4",
+    bloonstd5: "Bloons TD 5",
+    crossyroad: "Crossy Road",
+    cuttherope: "Cut the Rope",
+    doodlejump: "Doodle Jump",
     happywheels: "Happy Wheels",
+    mariokart64: "Mario Kart 64",
+    mariokartds: "Mario Kart DS",
+    papermario: "Paper Mario",
+    pokemonemerald: "Pokemon Emerald",
+    pokemonfirered: "Pokemon FireRed",
+    pokemonsoulsilver: "Pokemon SoulSilver",
+    pokemonplatinum: "Pokemon Platinum",
+    supermarioworld: "Super Mario World",
+    supermariobros: "Super Mario Bros.",
+    supermariobros3: "Super Mario Bros. 3",
+    supermariokart: "Super Mario Kart",
+    thelegendofzelda: "The Legend of Zelda",
+    ocarinaoftime: "The Legend of Zelda: Ocarina of Time",
+    pacman: "Pac-Man",
+    pacmanworld: "Pac-Man World",
+    tetris: "Tetris Classic",
+    worldshardestgame: "World's Hardest Game",
+    stickmanhook: "Stickman Hook",
+    amongus: "Among Us",
+    alteredbeast: "Altered Beast",
+    aquaparkslides: "Aquapark Slides",
+    amazingropepolice: "Amazing Rope Police",
+    advancewars: "Advance Wars",
+    advancewars2: "Advance Wars 2",
+    sonicthehedgehog: "Sonic the Hedgehog",
+    sonicthehedgehog2: "Sonic the Hedgehog 2",
+    sonicadvance: "Sonic Advance",
+    smashkarts: "Smash Karts",
+    deathrun3d: "Death Run 3D",
   };
   const mapped = customMap[folderName.toLowerCase()];
   if (mapped) {
@@ -364,54 +382,6 @@ export async function fetchGames(): Promise<Game[]> {
     plays: 99999,
     rating: 5.0,
   };
-
-  let seraphGames: Game[] = [];
-  try {
-    const res = await fetch("https://api.github.com/repos/a456pur/seraph/contents/games", {
-      headers: { "User-Agent": "Mozilla/5.0" },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        seraphGames = data
-          .filter((item: any) => item && item.name && item.name !== ".DS_Store")
-          .map((item: any, idx: number) => {
-            const folderName = String(item.name);
-            const name = formatGameName(folderName);
-            const directory = `games/${folderName}/index.html`;
-            const image = `https://cdn.jsdelivr.net/gh/a456pur/seraph@main/images/thumbnails/${folderName}.jpg`;
-            const category = assignCategory(name);
-            const featured =
-              idx < 25 ||
-              category === "popular" ||
-              name.toLowerCase().includes("slope") ||
-              name.toLowerCase().includes("1v1") ||
-              name.toLowerCase().includes("retro bowl") ||
-              name.toLowerCase().includes("subway surfers") ||
-              name.toLowerCase().includes("moto x3m");
-
-            return {
-              id: `seraph-${folderName}`,
-              name,
-              directory,
-              image,
-              category,
-              featured,
-              plays: Math.floor(Math.random() * 800000) + 150000,
-              rating: Number((4.6 + Math.random() * 0.3).toFixed(1)),
-            };
-          });
-      }
-    }
-  } catch (err) {
-    console.warn(
-      "Failed to fetch full Seraph games list from GitHub API (rate limit likely). Proceeding with fallback list.",
-    );
-  }
-
-  if (seraphGames.length === 0) {
-    seraphGames = SERAPH_GAMES;
-  }
 
   let gnMathGames: Game[] = [];
   try {
@@ -450,6 +420,7 @@ export async function fetchGames(): Promise<Game[]> {
               featured,
               plays: Math.floor(Math.random() * 50000) + 12000,
               rating: Number((4.5 + Math.random() * 0.4).toFixed(1)),
+              isGnGame: true,
             };
           });
       }
@@ -458,5 +429,216 @@ export async function fetchGames(): Promise<Game[]> {
     console.warn("Failed to fetch gn-math games:", err);
   }
 
-  return [customGame, ...gnMathGames, ...seraphGames];
+  const gnCoverLookup = new Map<string, string>();
+  const gnCoverList: Array<{ clean: string; urlSlug: string; cover: string }> = [];
+
+  for (const g of gnMathGames) {
+    if (g.image && g.image.startsWith("http")) {
+      const clean = (g.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      gnCoverLookup.set(clean, g.image);
+
+      let urlSlug = "";
+      if (g.directory) {
+        const parts = g.directory.split("/");
+        urlSlug = (parts[parts.length - 1] || parts[parts.length - 2] || "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "")
+          .replace(/\.html$/, "");
+      }
+      gnCoverList.push({ clean, urlSlug, cover: g.image });
+    }
+  }
+
+  function resolveCoverForSdkGame(g: Game): string {
+    // 1. Use already resolved high-res images from our JSON (Steam, Wiki)
+    if (g.image && !g.image.startsWith("data:image/svg+xml")) {
+      return g.image;
+    }
+
+    const nameClean = (g.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+    // 2. Exact clean name match in GN math list
+    if (gnCoverLookup.has(nameClean)) {
+      return gnCoverLookup.get(nameClean)!;
+    }
+
+    let dirSlug = "";
+    if (g.directory) {
+      const parts = g.directory.split("/");
+      dirSlug = (parts[parts.length - 1] || parts[parts.length - 2] || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "")
+        .replace(/\.html$/, "");
+    }
+
+    const sdkId = (g as any).sdkGameId || "";
+    const sdkIdSlug = sdkId
+      .replace(/^[^/]+\//, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+
+    // 3. Exact dir / sdkId slug match in GN math list
+    if (dirSlug) {
+      const hit = gnCoverList.find((x) => x.urlSlug === dirSlug || x.clean === dirSlug);
+      if (hit) return hit.cover;
+    }
+    if (sdkIdSlug) {
+      const hit = gnCoverList.find((x) => x.urlSlug === sdkIdSlug || x.clean === sdkIdSlug);
+      if (hit) return hit.cover;
+    }
+
+    // 4. Substring / Fuzzy match in GN math list
+    const hit = gnCoverList.find((x) => {
+      if (x.clean.length > 3 && (nameClean.includes(x.clean) || x.clean.includes(nameClean)))
+        return true;
+      if (
+        dirSlug &&
+        dirSlug.length > 3 &&
+        (x.urlSlug.includes(dirSlug) || dirSlug.includes(x.urlSlug))
+      )
+        return true;
+      return false;
+    });
+
+    if (hit) return hit.cover;
+
+    // 5. Fallback to actual Lumin SDK icon if available
+    if ((g as any).imageToken) {
+      return `https://a.luminsdk.com/api/v1/icon/${(g as any).imageToken}`;
+    }
+
+    // 6. Default high-res SVG cover
+    return createStyledSvgCover(g.name || "Game", g.category);
+  }
+
+  const sdkGames = (luminSdkGamesData as Game[]).map((g) => {
+    const sdkId =
+      (g as any).sdkGameId ||
+      (g.directory ? g.directory.replace(/^sdk\//, "") : String(g.id).replace(/^sdk-/, ""));
+
+    const resolvedImage = resolveCoverForSdkGame(g);
+
+    return {
+      ...g,
+      sdkGameId: sdkId,
+      image: resolvedImage,
+      isSdkGame: true,
+    };
+  });
+  const allList = [customGame, ...sdkGames, ...gnMathGames];
+
+  // Smart normalization & deduplication engine
+  const gameMap = new Map<string, Game>();
+
+  function getNormalizedKey(game: Game): string {
+    if (game.id === "soundboard" || game.id === "custom-soundboard") return "soundboard";
+
+    const nameLower = (game.name || "").toLowerCase();
+
+    // Explicit FNF/Mod normalization mapping
+    if (nameLower.includes("funkin") || nameLower.includes("fnf")) {
+      if (
+        nameLower.includes("sarvente") ||
+        nameLower.includes("mid-fight masses") ||
+        nameLower.includes("midfight") ||
+        nameLower.includes("masses")
+      ) {
+        return "fnfsarventes";
+      }
+      if (nameLower.includes("miku")) {
+        return "fnfmiku";
+      }
+      if (nameLower.includes("whitty")) {
+        return "fnfwhitty";
+      }
+      if (nameLower.includes("hex")) {
+        return "fnfhex";
+      }
+      if (nameLower.includes("tricky")) {
+        return "fnftricky";
+      }
+      if (nameLower.includes("sky")) {
+        return "fnfsky";
+      }
+      if (nameLower.includes("neo")) {
+        return "fnfneo";
+      }
+      if (nameLower.includes("undertale")) {
+        return "fnfundertale";
+      }
+    }
+
+    // Explicit Undertale normalization mapping
+    if (nameLower.includes("undertale")) {
+      if (nameLower.includes("yellow")) {
+        return "undertaleyellow";
+      }
+      if (nameLower.includes("last breath") || nameLower.includes("lastbreath")) {
+        if (nameLower.includes("phase three") || nameLower.includes("phase 3")) {
+          return "undertale_lastbreath_phase3";
+        }
+        return "undertale_lastbreath";
+      }
+      return "undertale";
+    }
+
+    let raw = "";
+    if (game.directory) {
+      const parts = String(game.directory).split("/");
+      const last = parts[parts.length - 1];
+      raw = last === "index.html" && parts.length > 1 ? parts[parts.length - 2] : last;
+    }
+    if (!raw || raw.endsWith(".html")) {
+      raw = game.name || String(game.id);
+    }
+
+    // Fallback directory-based normalization for other FNF mods / SDK games
+    const rawClean = raw.toLowerCase().replace(/[-_.\s]/g, "");
+    if (rawClean.includes("sarventes")) return "fnfsarventes";
+    if (rawClean.includes("fnfmiku")) return "fnfmiku";
+    if (rawClean.includes("whitty")) return "fnfwhitty";
+    if (rawClean.includes("hex")) return "fnfhex";
+    if (rawClean.includes("tricky")) return "fnftricky";
+    if (rawClean.includes("sky")) return "fnfsky";
+    if (rawClean.includes("neo")) return "fnfneo";
+
+    return raw
+      .toLowerCase()
+      .replace(/^sdk\//, "")
+      .replace(/^(selenite|truffled|quasar|builtin|games)\//, "")
+      .replace(/[-_.\s]/g, "")
+      .replace(/game$/g, "")
+      .replace(/unblocked$/g, "");
+  }
+
+  for (const g of allList) {
+    const key = getNormalizedKey(g);
+    if (!gameMap.has(key)) {
+      gameMap.set(key, g);
+    } else {
+      const existing = gameMap.get(key)!;
+      const bestImage =
+        (existing.image && existing.image.startsWith("http") ? existing.image : null) ||
+        (g.image && g.image.startsWith("http") ? g.image : null) ||
+        existing.image ||
+        g.image;
+
+      if ((existing as any).isSdkGame) {
+        // Lumin SDK game takes priority for SDK game directory/config, but use best available cover image
+        gameMap.set(key, {
+          ...g,
+          ...existing,
+          image: bestImage,
+          featured: existing.featured || g.featured,
+          rating: Math.max(existing.rating || 0, g.rating || 0),
+        });
+      } else if (!existing.featured && g.featured) {
+        gameMap.set(key, { ...existing, ...g, image: bestImage, featured: true });
+      } else {
+        gameMap.set(key, { ...existing, ...g, image: bestImage });
+      }
+    }
+  }
+
+  return Array.from(gameMap.values());
 }

@@ -470,6 +470,52 @@ export async function loadGameSource(directory: string): Promise<GameLoadResult>
     return { type: "url", src: directory };
   }
 
+  // Handle games from Lumin SDK
+  if (directory.startsWith("sdk/")) {
+    const sdkGameId = directory.replace(/^sdk\//, "");
+    if (typeof window !== "undefined") {
+      try {
+        if (!(window as any).Lumin) {
+          await new Promise<void>((resolve) => {
+            const script = document.createElement("script");
+            script.src = "https://cdn.jsdelivr.net/gh/luminsdk/script@latest/lumin.min.js";
+            script.onload = () => resolve();
+            script.onerror = () => resolve();
+            document.body.appendChild(script);
+          });
+        }
+
+        if ((window as any).Lumin) {
+          const l = (window as any).Lumin;
+          if (!l._initPromise) {
+            let div = document.getElementById("lumin-sdk-hidden");
+            if (!div) {
+              div = document.createElement("div");
+              div.id = "lumin-sdk-hidden";
+              div.style.display = "none";
+              document.body.appendChild(div);
+            }
+            l._initPromise = l.init({ container: "#lumin-sdk-hidden", theme: "dark" });
+          }
+          await l._initPromise;
+
+          if (typeof l.getGameUrl === "function") {
+            const gameData = await l.getGameUrl(sdkGameId);
+            if (gameData && gameData.url) {
+              return { type: "url", src: gameData.url, cdnUsed: "Lumin Cloud" };
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to load via Lumin SDK launcher:", err);
+      }
+    }
+
+    // Fallback for SDK games to Seraph repository
+    const slug = sdkGameId.replace(/^(selenite|truffled|quasar|builtin)\//, "");
+    return loadGameSource(`games/${slug}/index.html`);
+  }
+
   const filename = directory.replace(/^\/+/, "");
   const candidates = getGameCandidateUrls(filename);
 

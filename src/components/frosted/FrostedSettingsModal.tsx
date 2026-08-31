@@ -1,16 +1,25 @@
-import { Eye, X, Check, Shield } from "lucide-react";
-import { CLOAK_PRESETS, type CloakPreset } from "@/lib/frostedStore";
+import { Eye, X, Check, Shield, Gamepad2, Image } from "lucide-react";
+import { CLOAK_PRESETS, type CloakPreset, type CoverStyle } from "@/lib/frostedStore";
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   currentCloak: CloakPreset;
   onSelectCloak: (preset: CloakPreset) => void;
+  currentCoverStyle: CoverStyle;
+  onSelectCoverStyle: (style: CoverStyle) => void;
   cachedCount?: number;
   onClearCache?: () => void;
 }
 
-export function FrostedSettingsModal({ isOpen, onClose, currentCloak, onSelectCloak }: Props) {
+export function FrostedSettingsModal({
+  isOpen,
+  onClose,
+  currentCloak,
+  onSelectCloak,
+  currentCoverStyle,
+  onSelectCoverStyle,
+}: Props) {
   if (!isOpen) return null;
 
   return (
@@ -24,7 +33,7 @@ export function FrostedSettingsModal({ isOpen, onClose, currentCloak, onSelectCl
             </div>
             <div>
               <h2 className="text-sm font-semibold text-white">Arcade Settings</h2>
-              <p className="text-xs text-neutral-400">Tab cloaking &amp; stealth presets</p>
+              <p className="text-xs text-neutral-400">Tab cloaking &amp; visual customization</p>
             </div>
           </div>
           <button
@@ -37,6 +46,63 @@ export function FrostedSettingsModal({ isOpen, onClose, currentCloak, onSelectCl
 
         {/* Modal Body */}
         <div className="p-6 space-y-6 overflow-y-auto no-scrollbar">
+          {/* Game Cover Art Style Option */}
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-300 mb-2 flex items-center gap-2">
+              <Image className="h-4 w-4 text-neutral-400" />
+              <span>Game Cover Art Style</span>
+            </h3>
+            <p className="text-xs text-neutral-400 mb-3">
+              Choose the visual presentation style for the games catalog in your library.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <button
+                onClick={() => onSelectCoverStyle("fanart")}
+                className={`smooth-btn flex items-center justify-between rounded-xl border p-4 text-left cursor-pointer transition-all ${
+                  currentCoverStyle === "fanart"
+                    ? "border-neutral-400 bg-neutral-800 text-white shadow-sm"
+                    : "border-neutral-800/80 bg-black/60 text-neutral-300 hover:border-neutral-700 hover:bg-neutral-900"
+                }`}
+              >
+                <div className="flex items-center gap-3 overflow-hidden">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400 shrink-0">
+                    <Image className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-white">High-Res Fanart</div>
+                    <div className="text-[10px] text-neutral-400">Steam, Wiki, and G-N Covers</div>
+                  </div>
+                </div>
+                {currentCoverStyle === "fanart" && (
+                  <Check className="h-4 w-4 text-emerald-400 shrink-0 ml-2" />
+                )}
+              </button>
+
+              <button
+                onClick={() => onSelectCoverStyle("sdk")}
+                className={`smooth-btn flex items-center justify-between rounded-xl border p-4 text-left cursor-pointer transition-all ${
+                  currentCoverStyle === "sdk"
+                    ? "border-neutral-400 bg-neutral-800 text-white shadow-sm"
+                    : "border-neutral-800/80 bg-black/60 text-neutral-300 hover:border-neutral-700 hover:bg-neutral-900"
+                }`}
+              >
+                <div className="flex items-center gap-3 overflow-hidden">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-pink-500/10 text-pink-400 shrink-0">
+                    <Gamepad2 className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-white">Classic SDK Icons</div>
+                    <div className="text-[10px] text-neutral-400">Actual Lumin SDK game icons</div>
+                  </div>
+                </div>
+                {currentCoverStyle === "sdk" && (
+                  <Check className="h-4 w-4 text-emerald-400 shrink-0 ml-2" />
+                )}
+              </button>
+            </div>
+          </div>
+
           {/* Tab Cloaking Presets */}
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-300 mb-2 flex items-center gap-2">

@@ -42,11 +42,7 @@ export function getGameTargetUrls(game: Game): string[] {
   const filename = dir.replace(/^\/+/, "");
   const urls: string[] = [];
 
-  if (filename.startsWith("games/")) {
-    urls.push(`/api/public/seraph/${filename}`);
-    urls.push(`https://cdn.jsdelivr.net/gh/a456pur/seraph@main/${filename}`);
-    urls.push(`https://raw.githubusercontent.com/a456pur/seraph/main/${filename}`);
-  } else if (filename.startsWith("3kh0/")) {
+  if (filename.startsWith("3kh0/")) {
     const rawF = filename.replace("3kh0/", "");
     urls.push(`/api/public/3kh0/${rawF}`);
     urls.push(`https://cdn.jsdelivr.net/gh/3kh0/3kh0-Assets@main/${rawF}`);

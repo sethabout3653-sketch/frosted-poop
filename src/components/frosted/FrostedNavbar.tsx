@@ -18,8 +18,10 @@ interface Props {
   onRandomGame: () => void;
   onOpenSettingsModal: () => void;
   onOpenChat: () => void;
+  onOpenLumin: () => void;
   activeGame: Game | null;
   isChatActive: boolean;
+  isLuminActive: boolean;
   isOffline?: boolean;
 }
 
@@ -30,8 +32,10 @@ export function FrostedNavbar({
   onRandomGame,
   onOpenSettingsModal,
   onOpenChat,
+  onOpenLumin,
   activeGame,
   isChatActive,
+  isLuminActive,
   isOffline = false,
 }: Props) {
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -128,6 +132,18 @@ export function FrostedNavbar({
               <span>Library</span>
             </button>
           )}
+
+          <button
+            onClick={onOpenLumin}
+            title="Lumin"
+            className={`smooth-btn relative flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium cursor-pointer transition-all ${
+              isLuminActive
+                ? "border-white bg-white text-black shadow-[0_0_15px_rgba(255,255,255,0.2)]"
+                : "border-neutral-800 bg-[#0d0d0d] text-neutral-300 hover:border-white hover:text-white"
+            }`}
+          >
+            <span className="hidden sm:inline font-bold">Lumin</span>
+          </button>
 
           <button
             onClick={onOpenChat}

@@ -13,7 +13,7 @@ import {
   WifiOff,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { gameCover, type Game } from "@/lib/games";
+import { gameCover, createStyledSvgCover, type Game } from "@/lib/games";
 import { loadGameSource } from "@/lib/gameLoader";
 import { isGameCached } from "@/lib/offlineManager";
 
@@ -387,10 +387,14 @@ export function GamePlayer({
                         alt={g.name}
                         loading="lazy"
                         decoding="async"
+                        referrerPolicy="no-referrer"
                         className="smooth-image h-full w-full object-cover group-hover:scale-105"
                         onError={(e) => {
-                          e.currentTarget.src =
-                            "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&auto=format&fit=crop&q=80";
+                          const target = e.currentTarget;
+                          const svgCover = createStyledSvgCover(g.name || "Game", g.category);
+                          if (target.src !== svgCover) {
+                            target.src = svgCover;
+                          }
                         }}
                       />
                     </div>

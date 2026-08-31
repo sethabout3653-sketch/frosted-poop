@@ -16,7 +16,7 @@ import {
   WifiOff,
   CheckCircle2,
 } from "lucide-react";
-import { gameCover, type Game, type GameCategory } from "@/lib/games";
+import { gameCover, createStyledSvgCover, type Game, type GameCategory } from "@/lib/games";
 import { isGameCached } from "@/lib/offlineManager";
 import { AdBanner } from "./AdBanner";
 import { triggerAdImpression } from "@/lib/adManager";
@@ -74,12 +74,12 @@ export function GamesGrid({
     GameCategory | "favorites" | "recent" | "offline"
   >(isOffline ? "offline" : "all");
 
-  // Lazy loading pagination to render 830+ games fast and fluid without crashing lower-end browsers
-  const [visibleCount, setVisibleCount] = useState(48);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 48;
 
   // Reset pagination on category or search change
   useEffect(() => {
-    setVisibleCount(48);
+    setCurrentPage(1);
   }, [activeCategory, searchQuery]);
 
   // Filter games according to search & category
@@ -105,14 +105,17 @@ export function GamesGrid({
     return list;
   }, [games, activeCategory, searchQuery, favorites, recentlyPlayed, cachedUrls]);
 
+  const totalPages = Math.ceil(filteredGames.length / itemsPerPage);
+
   // Sliced games list for progressive rendering
   const visibleGames = useMemo(() => {
-    return filteredGames.slice(0, visibleCount);
-  }, [filteredGames, visibleCount]);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredGames.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredGames, currentPage, itemsPerPage]);
 
   // Top featured games for the hero section
   const featuredGames = useMemo(() => {
-    return games.filter((g) => g.featured || g.category === "popular").slice(0, 4);
+    return games.filter((g) => g.featured || g.category === "popular").slice(0, 8);
   }, [games]);
 
   const handleGameCardClick = (game: Game) => {
@@ -183,10 +186,14 @@ export function GamesGrid({
                         alt={game.name}
                         loading="lazy"
                         decoding="async"
+                        referrerPolicy="no-referrer"
                         className="smooth-image h-full w-full object-cover group-hover:scale-105"
                         onError={(e) => {
-                          e.currentTarget.src =
-                            "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&auto=format&fit=crop&q=80";
+                          const target = e.currentTarget;
+                          const svgCover = createStyledSvgCover(game.name || "Game", game.category);
+                          if (target.src !== svgCover) {
+                            target.src = svgCover;
+                          }
                         }}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent opacity-80 group-hover:opacity-60 transition-opacity duration-300 ease-out" />
@@ -291,10 +298,14 @@ export function GamesGrid({
                   alt={game.name}
                   loading="lazy"
                   decoding="async"
+                  referrerPolicy="no-referrer"
                   className="smooth-image h-full w-full object-cover group-hover:scale-105"
                   onError={(e) => {
-                    e.currentTarget.src =
-                      "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&auto=format&fit=crop&q=80";
+                    const target = e.currentTarget;
+                    const svgCover = createStyledSvgCover(game.name || "Game", game.category);
+                    if (target.src !== svgCover) {
+                      target.src = svgCover;
+                    }
                   }}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity duration-300 ease-out" />
@@ -343,25 +354,67 @@ export function GamesGrid({
         })}
       </div>
 
-      {/* Modern Load More Controller */}
-      {filteredGames.length > visibleCount && (
-        <div className="mt-12 flex flex-col items-center justify-center gap-3">
+      {/* Modern Pagination Controller */}
+      {filteredGames.length > 0 && (
+        <div className="mt-12 flex justify-center items-center gap-2">
           <button
             onClick={() => {
               triggerAdImpression();
-              setVisibleCount((prev) => prev + 48);
+              setCurrentPage((p) => Math.max(1, p - 1));
+              window.scrollTo({ top: 0, behavior: "smooth" });
             }}
-            className="smooth-btn group cursor-pointer flex items-center gap-2 rounded-2xl border border-neutral-800 bg-neutral-900/60 px-6 py-3.5 text-sm font-semibold text-white hover:border-neutral-500 hover:bg-neutral-900 shadow-[0_4px_20px_rgba(0,0,0,0.4)] hover:shadow-[0_0_20px_rgba(255,255,255,0.06)]"
+            disabled={currentPage === 1}
+            className="smooth-btn rounded-xl border border-neutral-800 bg-[#141414] px-4 py-2 text-sm font-medium text-neutral-400 hover:border-neutral-600 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <span>Load More Games</span>
-            <span className="text-neutral-500 font-normal">|</span>
-            <span className="text-amber-300 font-mono text-xs bg-amber-400/10 px-2 py-0.5 rounded-lg border border-amber-400/20">
-              +{Math.min(48, filteredGames.length - visibleCount)}
-            </span>
+            Prev
           </button>
-          <p className="text-[11px] text-neutral-500 tracking-wide">
-            Showing {visibleCount} of {filteredGames.length} available titles
-          </p>
+
+          <div className="flex items-center gap-2">
+            {Array.from({ length: totalPages }).map((_, i) => {
+              const pageNum = i + 1;
+              const isActive = pageNum === currentPage;
+
+              // Only show a sliding window of pages (e.g. current, prev, next)
+              if (pageNum === 1 || pageNum === totalPages || Math.abs(currentPage - pageNum) <= 1) {
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => {
+                      triggerAdImpression();
+                      setCurrentPage(pageNum);
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                    className={`smooth-btn flex h-10 w-10 items-center justify-center rounded-xl border text-sm font-semibold transition-all ${
+                      isActive
+                        ? "border-white bg-white text-black shadow-[0_0_15px_rgba(255,255,255,0.2)]"
+                        : "border-neutral-800 bg-[#141414] text-neutral-400 hover:border-neutral-600 hover:text-white"
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              } else if (pageNum === currentPage - 2 || pageNum === currentPage + 2) {
+                return (
+                  <span key={pageNum} className="text-neutral-600">
+                    ...
+                  </span>
+                );
+              }
+              return null;
+            })}
+          </div>
+
+          <button
+            onClick={() => {
+              triggerAdImpression();
+              setCurrentPage((p) => Math.min(totalPages, p + 1));
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            disabled={currentPage === totalPages}
+            className="smooth-btn rounded-xl border border-neutral-800 bg-[#141414] px-4 py-2 text-sm font-medium text-neutral-400 hover:border-neutral-600 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
         </div>
       )}
 
