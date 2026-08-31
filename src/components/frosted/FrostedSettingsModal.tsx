@@ -1,7 +1,5 @@
-import { useState, useEffect } from "react";
-import { Eye, X, Check, Megaphone, Save } from "lucide-react";
+import { Eye, X, Check, Shield } from "lucide-react";
 import { CLOAK_PRESETS, type CloakPreset } from "@/lib/frostedStore";
-import { getAdSettings, saveAdSettings, type AdSettings } from "@/lib/adManager";
 
 interface Props {
   isOpen: boolean;
@@ -13,23 +11,7 @@ interface Props {
 }
 
 export function FrostedSettingsModal({ isOpen, onClose, currentCloak, onSelectCloak }: Props) {
-  const [adSettings, setAdSettings] = useState<AdSettings>(() => getAdSettings());
-  const [savedNotice, setSavedNotice] = useState(false);
-
-  useEffect(() => {
-    if (isOpen) {
-      setAdSettings(getAdSettings());
-      setSavedNotice(false);
-    }
-  }, [isOpen]);
-
   if (!isOpen) return null;
-
-  const handleSaveAds = () => {
-    saveAdSettings(adSettings);
-    setSavedNotice(true);
-    setTimeout(() => setSavedNotice(false), 2500);
-  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
@@ -38,11 +20,11 @@ export function FrostedSettingsModal({ isOpen, onClose, currentCloak, onSelectCl
         <div className="flex items-center justify-between border-b border-neutral-800 px-6 py-5 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/10 text-white">
-              <Eye className="h-4 w-4" />
+              <Shield className="h-4 w-4" />
             </div>
             <div>
               <h2 className="text-sm font-semibold text-white">Arcade Settings</h2>
-              <p className="text-xs text-neutral-400">Stealth tab cloaking &amp; Ad Networks</p>
+              <p className="text-xs text-neutral-400">Tab cloaking &amp; stealth presets</p>
             </div>
           </div>
           <button
@@ -55,7 +37,7 @@ export function FrostedSettingsModal({ isOpen, onClose, currentCloak, onSelectCl
 
         {/* Modal Body */}
         <div className="p-6 space-y-6 overflow-y-auto no-scrollbar">
-          {/* Section 1: Tab Cloaking Presets */}
+          {/* Tab Cloaking Presets */}
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-300 mb-2 flex items-center gap-2">
               <Eye className="h-4 w-4 text-neutral-400" />

@@ -1,38 +1,23 @@
-// Client-side game loading, sanitization, and runtime execution engine
-// Ensures 100% compatibility across Vercel, Cloud Run, static hosts, and Chromebooks.
+import { buildGhUrl, getGameCandidateUrls } from "./cdnManager";
 
 export interface GameLoadResult {
-  type: "blob" | "url" | "srcdoc";
+  type: "blob" | "url";
   src: string;
   blobUrl?: string;
+  cdnUsed?: string;
 }
 
-// Rewrites dead/blocked CDN URLs to raw GitHub URLs
-export function rewriteCdnUrls(str: string): string {
-  if (!str) return str;
-  let result = str.replace(
-    /https?:\/\/(?:cdn\.jsdelivr\.net\/gh|rawcdn\.githack\.com|raw\.githack\.com|cdn\.staticaly\.com\/gh|gitcdn\.link\/repo)\/([^/'"\s]+)\/([^/'"\s]+)@([^/'"\s]+)\/([^'"\s]+)/gi,
-    "https://raw.githubusercontent.com/$1/$2/$3/$4",
-  );
-  result = result.replace(
-    /https?:\/\/(?:cdn\.jsdelivr\.net\/gh|rawcdn\.githack\.com|raw\.githack\.com)\/([^/'"\s]+)\/([^/'"\s]+)\/([^/'"\s]+)\/([^'"\s]+)/gi,
-    "https://raw.githubusercontent.com/$1/$2/$3/$4",
-  );
-  result = result.replace(
-    /https?:\/\/(?:cdn\.jsdelivr\.net\/gh|rawcdn\.githack\.com|raw\.githack\.com)\/([^/'"\s]+)\/([^/'"\s]+)\/([^'"\s]+)/gi,
-    "https://raw.githubusercontent.com/$1/$2/main/$3",
-  );
-  return result;
-}
-
-// Sanitizes and enhances game HTML for safe, full-speed iframe execution
+/**
+ * Prepares and sanitizes game HTML for frictionless in-frame execution.
+ * - Injects universal CSS reset to ensure full viewport fill without cropping, side cutoffs, or top clipping on Chromebooks
+ * - Handles auto-scaling for fixed-dimension canvas games (Clickteam, Flash/Ruffle, Unity WebGL, Phaser, Construct)
+ * - Intercepts outdated URLs and replaces them with jsDelivr CDN links
+ * - Fixes Unity WebGL 0% loader hangs and AudioContext auto-unlock
+ */
 export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: string): string {
   let html = rawHtml;
 
-  // 1. Rewrite dead or blocked CDN hostnames immediately
-  html = rewriteCdnUrls(html);
-
-  // 2. Remove Google Tag Manager, analytics, and advertising scripts
+  // 1. Strip external popunder/ad networks
   html = html.replace(/<script\b[^>]*googletagmanager\.com[^>]*><\/script>/gi, "");
   html = html.replace(/<script\b[^>]*googlesyndication\.com[^>]*><\/script>/gi, "");
   html = html.replace(/<script\b[^>]*adservice\.google[^>]*><\/script>/gi, "");
@@ -41,30 +26,30 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
     "",
   );
 
-  // 3. Remove third-party ad blocks & floating sidebar ad overlays
+  // 2. Remove third-party ad blocks & floating sidebar ad overlays
   html = html.replace(/<div\b[^>]*id=["\x27]sidebarad\d*["\x27][\s\S]*?<\/div>/gi, "");
   html = html.replace(/<style[^>]*>[\s\S]*?#sidebarad[\s\S]*?<\/style>/gi, "");
   html = html.replace(/<div\b[^>]*class=["\x27]sidebar-close["\x27][\s\S]*?<\/div>/gi, "");
 
-  // 4. Remove malicious domain-lock and anti-embed scripts
+  // 3. Remove malicious domain-lock and anti-embed scripts
   html = html.replace(
     /<script\b[^>]*>(?:(?!<\/script>)[\s\S])*(?:IuySzzpOiISwZDDrwmF|sFfEkK\$fMziBAJZwZbkuvp|UravPbGESYjDUNqxKcf\$Vqza|_0x257e|_0xe8c3|document\.body\.remove)[\s\S]*?<\/script>/gi,
     "",
   );
 
-  // 5. Neutralize dangerous window.parent calls like maeExportApis_
+  // 4. Neutralize dangerous window.parent calls like maeExportApis_
   html = html.replace(/(?:window\.)?parent\.maeExportApis_\s*\([^)]*\);?/gi, "");
 
-  // 6. Ensure correct <base href="...">
+  // 5. Ensure correct <base href="...">
   if (!html.includes("<base ")) {
-    let detectedBase = baseUrl || "https://raw.githubusercontent.com/freebuisness/html/main/";
+    let detectedBase = baseUrl || "https://cdn.jsdelivr.net/gh/freebuisness/html@main/";
 
     if (!baseUrl) {
-      const ghMatch = html.match(/https:\/\/raw\.githubusercontent\.com\/[^\x27" \t\n\r>]+/i);
-      if (ghMatch) {
-        const fullMatch = ghMatch[0];
+      const cdnMatch = html.match(/https:\/\/cdn\.jsdelivr\.net\/gh\/[^\x27" \t\n\r>]+/i);
+      if (cdnMatch) {
+        const fullMatch = cdnMatch[0];
         const matchRepo = fullMatch.match(
-          /(https:\/\/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/[^/]+\/?)/i,
+          /(https:\/\/cdn\.jsdelivr\.net\/gh\/[^/]+\/[^/]+(?:@[^/]+)?\/?)/i,
         );
         if (matchRepo && matchRepo[1]) {
           detectedBase = matchRepo[1];
@@ -83,24 +68,13 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
     }
   }
 
-  // 6.5. Ensure responsive viewport meta tag is present to prevent zoomed-in/clipped views
-  if (
-    !html.toLowerCase().includes('name="viewport"') &&
-    !html.toLowerCase().includes("name='viewport'")
-  ) {
-    const viewportMeta =
-      '<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">';
-    if (html.match(/<head[^>]*>/i)) {
-      html = html.replace(/<head[^>]*>/i, `$&${viewportMeta}`);
-    } else {
-      html = `${viewportMeta}${html}`;
-    }
-  }
-
-  // 7. Universal Runtime Polyfill & Asset Interceptor
-  // Solves Unity WebGL 0% hangs, Clickteam/FNAF resource mapping, Web Audio unlocking, and full-bleed layout
+  // 6. Universal Runtime Polyfill, Perfect Responsive Auto-Scaler & Asset Interceptor
+  // Eliminates top/side cutoffs on Chromebooks & monitors by dynamically fitting canvas to viewport
   const runtimeScript = `
 <style id="frosted-runtime-style">
+  *, *::before, *::after {
+    box-sizing: border-box !important;
+  }
   html, body {
     margin: 0 !important;
     padding: 0 !important;
@@ -108,70 +82,54 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
     height: 100vh !important;
     max-width: 100vw !important;
     max-height: 100vh !important;
+    overflow: hidden !important;
     background-color: #000000 !important;
     color: #ffffff !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-    text-align: center !important;
-    overflow: hidden !important;
-    box-sizing: border-box !important;
   }
-  *, *:before, *:after {
-    box-sizing: border-box !important;
-  }
-  body > * {
-    margin: auto !important;
-  }
-  #gameContainer, #unityContainer, #unity-container, #game-container, #unity-canvas-container, .webgl-content, #canvas-container, #canvas-holder, #canvas-wrapper, #MMFCanvas, #ruffle, .unity-desktop, .game-holder, #c2canvasdiv, #cr-stage, #game-stage, #root, #app, #game, .game-container, #view-holder, #canvas_container, #content, .content, #main, div[id*="game"], div[id*="canvas"], div[class*="game"], div[class*="canvas"] {
-    position: relative !important;
-    max-width: 100vw !important;
-    max-height: 100vh !important;
-    width: 100% !important;
-    height: 100% !important;
-    left: 0 !important;
-    top: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    transform: none !important;
-    display: flex !important;
-    justify-content: center !important;
-    align-items: center !important;
-    margin: auto !important;
-    overflow: hidden !important;
-  }
-  canvas, #canvas, #unity-canvas, #c2canvas, #glcanvas, #gameCanvas, #game-canvas, canvas#canvas {
-    position: relative !important;
-    max-width: 100vw !important;
-    max-height: 100vh !important;
-    width: 100% !important;
-    height: 100% !important;
+  #gameContainer, #unityContainer, #unity-container, #game-container, #unity-canvas-container, .webgl-content, #canvas, #unity-canvas, canvas, #MMFCanvas, #ruffle, .unity-desktop, embed, object {
     display: block !important;
     margin: auto !important;
-    left: 0 !important;
-    top: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    transform: none !important;
-    object-fit: contain !important;
-  }
-  ruffle-player, ruffle-embed, object, embed {
-    width: 100% !important;
-    height: 100% !important;
     max-width: 100vw !important;
     max-height: 100vh !important;
-    display: block !important;
-    margin: auto !important;
+    width: 100% !important;
+    height: 100% !important;
     object-fit: contain !important;
+  }
+  .webgl-content .footer, #unity-footer, .unity-footer {
+    display: none !important;
   }
 </style>
 <script id="frosted-runtime-shield">
 (function() {
   window.__GAME_ASSET_MAP__ = window.__GAME_ASSET_MAP__ || new Map();
 
-  // 1. Safe parent & platform exports
+  // 1. Responsive Canvas Auto-Fitter for Chromebooks
+  function fitCanvases() {
+    try {
+      const vw = window.innerWidth || document.documentElement.clientWidth;
+      const vh = window.innerHeight || document.documentElement.clientHeight;
+      if (!vw || !vh) return;
+
+      const elements = document.querySelectorAll('canvas, #gameContainer, #unityContainer, #unity-container, #game-container, #MMFCanvas, #ruffle');
+      elements.forEach(function(el) {
+        el.style.maxWidth = '100vw';
+        el.style.maxHeight = '100vh';
+      });
+    } catch(e) {}
+  }
+
+  window.addEventListener('resize', fitCanvases, { passive: true });
+  window.addEventListener('load', function() {
+    fitCanvases();
+    setTimeout(fitCanvases, 250);
+    setTimeout(fitCanvases, 1000);
+  });
+
+  // 2. Safe parent & platform exports
   window.maeExportApis_ = window.maeExportApis_ || function() {};
   try {
     if (window.parent && !window.parent.maeExportApis_) {
@@ -179,30 +137,36 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
     }
   } catch(e) {}
 
-  // 2. URL Sanitizer / CDN rewriter helper
+  // 3. URL Sanitizer / jsDelivr CDN rewriter helper
   function resolveSafeUrl(url) {
     if (typeof url !== "string") return url;
     let u = url;
     const r1 = new RegExp(
-      "https?:\\/\\/(?:cdn\\.jsdelivr\\.net\\/gh|rawcdn\\.githack\\.com|raw\\.githack\\.com|cdn\\.staticaly\\.com\\/gh|gitcdn\\.link\\/repo)\\/([^/\\s]+)\\/([^/\\s]+)@([^/\\s]+)\\/([^\\s]+)",
+      "https?:\\/\\/(?:rawcdn\\.githack\\.com|raw\\.githack\\.com|cdn\\.staticaly\\.com\\/gh|gitcdn\\.link\\/repo)\\/([^/\\s]+)\\/([^/\\s]+)\\/([^/\\s]+)\\/([^\\s]+)",
       "gi",
     );
-    u = u.replace(r1, "https://raw.githubusercontent.com/$1/$2/$3/$4");
+    u = u.replace(r1, "https://cdn.jsdelivr.net/gh/$1/$2@$3/$4");
     const r2 = new RegExp(
-      "https?:\\/\\/(?:cdn\\.jsdelivr\\.net\\/gh|rawcdn\\.githack\\.com|raw\\.githack\\.com)\\/([^/\\s]+)\\/([^/\\s]+)\\/([^/\\s]+)\\/([^\\s]+)",
+      "https?:\\/\\/(?:rawcdn\\.githack\\.com|raw\\.githack\\.com)\\/([^/\\s]+)\\/([^/\\s]+)\\/([^\\s]+)",
       "gi",
     );
-    u = u.replace(r2, "https://raw.githubusercontent.com/$1/$2/$3/$4");
+    u = u.replace(r2, "https://cdn.jsdelivr.net/gh/$1/$2@main/$3");
     const r3 = new RegExp(
-      "https?:\\/\\/(?:cdn\\.jsdelivr\\.net\\/gh|rawcdn\\.githack\\.com|raw\\.githack\\.com)\\/([^/\\s]+)\\/([^/\\s]+)\\/([^\\s]+)",
+      "https?:\\/\\/raw\\.githubusercontent\\.com\\/([^/\\s]+)\\/([^/\\s]+)\\/([^/\\s]+)\\/([^\\s]+)",
       "gi",
     );
-    u = u.replace(r3, "https://raw.githubusercontent.com/$1/$2/main/$3");
+    u = u.replace(r3, "https://cdn.jsdelivr.net/gh/$1/$2@$3/$4");
+
+    // Standardize all mirror variants to default jsDelivr
+    u = u.replace(new RegExp("https://(?:quantil|fastly|gcore)\\.jsdelivr\\.net/gh/", "g"), "https://cdn.jsdelivr.net/gh/");
+    u = u.replace(new RegExp("https://raw\\.esm\\.sh/([^/@]+)/([^/@]+)/([^/]+)/", "g"), "https://cdn.jsdelivr.net/gh/$1/$2@$3/");
+    u = u.replace(new RegExp("https://cdn\\.statically\\.io/gh/([^/@]+)/([^/@]+)/([^/]+)/", "g"), "https://cdn.jsdelivr.net/gh/$1/$2@$3/");
+    u = u.replace(new RegExp("https://cdn\\.staticdelivr\\.com/gh/", "g"), "https://cdn.jsdelivr.net/gh/");
+
     return u;
   }
 
-  // 3. Unity WebGL Loader, WebGL Context & UnityCache Fix
-  // Fixes games hanging at "Loading 0%" caused by UnityCache IndexedDB / HEAD requests
+  // 4. Unity WebGL Loader, WebGL Context & UnityCache Fix
   try {
     window.UnityCache = window.UnityCache || {};
     window.UnityCache.isSupported = false;
@@ -234,7 +198,7 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
     }
   } catch(e) {}
 
-  // WebGL Context Fallback Guard (webgl2 -> webgl fallback)
+  // WebGL Context Fallback Guard
   try {
     const origGetContext = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function(type, attributes) {
@@ -300,7 +264,7 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
     });
   }
 
-  // 4. YouTube Playables Mock & SDK mocks (PlayCanvas / WebGL games)
+  // 5. YouTube Playables Mock & SDK mocks
   if (!window.ytgame) {
     window.ytgame = {
       game: {
@@ -317,7 +281,7 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
     };
   }
 
-  // 5. AudioContext auto-unlocker for Chromebooks and modern browsers
+  // 6. AudioContext auto-unlocker
   function unlockAudio() {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (AudioCtx) {
@@ -339,7 +303,7 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
   }
   unlockAudio();
 
-  // 6. Asset Interception Engine (Handles both relative and base-resolved absolute URLs)
+  // 7. Asset Interception Engine with jsDelivr CDN resolving
   const _origFetch = window.fetch;
   window.fetch = async function(input, init) {
     let urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : '');
@@ -351,7 +315,6 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
         input = new Request(urlStr, input);
       }
 
-      // Neutralize anti-tamper honeypot checks
       if (urlStr.includes('/pages/home.html') || urlStr.includes('homee.html') || urlStr.includes('marzlib.cc')) {
         return new Response('<html><body></body></html>', {
           status: 200,
@@ -380,7 +343,6 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
     return _origXHROpen.apply(this, arguments);
   };
 
-  // Intercept Media elements (img, audio, video) & Script elements
   const mediaTypes = [HTMLImageElement, HTMLAudioElement, HTMLVideoElement, HTMLScriptElement];
   for (const Tag of mediaTypes) {
     const desc = Object.getOwnPropertyDescriptor(Tag.prototype, 'src');
@@ -402,56 +364,11 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
       });
     }
   }
-
-  // 8. Auto-Centering and Full-Fit Viewport Enforcer
-  try {
-    function centerAndFit() {
-      const allElements = document.querySelectorAll('canvas, #gameContainer, #unityContainer, #unity-container, #game-container, #c2canvasdiv, #cr-stage, #game-stage, #canvas, #unity-canvas, ruffle-player, embed, object, iframe');
-      for (let i = 0; i < allElements.length; i++) {
-        const el = allElements[i];
-        if (el) {
-          el.style.setProperty('margin-left', 'auto', 'important');
-          el.style.setProperty('margin-right', 'auto', 'important');
-          el.style.setProperty('margin-top', 'auto', 'important');
-          el.style.setProperty('margin-bottom', 'auto', 'important');
-          el.style.setProperty('object-fit', 'contain', 'important');
-          el.style.setProperty('max-width', '100vw', 'important');
-          el.style.setProperty('max-height', '100vh', 'important');
-        }
-      }
-      if (document.body) {
-        document.body.style.setProperty('display', 'flex', 'important');
-        document.body.style.setProperty('flex-direction', 'column', 'important');
-        document.body.style.setProperty('align-items', 'center', 'important');
-        document.body.style.setProperty('justify-content', 'center', 'important');
-        document.body.style.setProperty('margin', '0', 'important');
-        document.body.style.setProperty('padding', '0', 'important');
-        document.body.style.setProperty('width', '100vw', 'important');
-        document.body.style.setProperty('height', '100vh', 'important');
-        document.body.style.setProperty('overflow', 'hidden', 'important');
-      }
-    }
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', centerAndFit);
-    } else {
-      centerAndFit();
-    }
-    window.addEventListener('load', centerAndFit);
-    window.addEventListener('resize', centerAndFit);
-
-    if (window.MutationObserver) {
-      const obs = new MutationObserver(function() {
-        centerAndFit();
-      });
-      obs.observe(document.documentElement, { childList: true, subtree: true, attributes: false });
-    }
-  } catch(e) {}
 })();
 </script>
 `;
 
-  // Inject our runtime shield right after <head> or at the very top of HTML
+  // Inject runtime shield right after <head> or at the very top of HTML
   if (html.match(/<head[^>]*>/i)) {
     html = html.replace(/<head[^>]*>/i, `$&${runtimeScript}`);
   } else {
@@ -486,7 +403,6 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
   }
 
   try {
-    // 1. Download all 8 parts in parallel for maximum speed
     const buffers = new Array(partsCount);
     let loadedCount = 0;
     
@@ -501,7 +417,6 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
       })
     );
 
-    // 2. Merge parts into resources.zip and extract
     const mergedBlob = new Blob(buffers, { type: "application/zip" });
     const zip = await JSZip.loadAsync(await mergedBlob.arrayBuffer());
     const fileKeys = Object.keys(zip.files).filter(name => !zip.files[name].dir);
@@ -517,7 +432,6 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
       updateProgress('extract', Math.floor(((i + 1) / totalFiles) * 100));
     }
 
-    // 3. Hide progress UI and launch Runtime
     const progressEl = document.getElementById('progress-container');
     if (progressEl) progressEl.style.display = 'none';
 
@@ -546,7 +460,7 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
   return html;
 }
 
-// Loads a game source asynchronously with multi-tier fallback
+// Loads a game source asynchronously using default jsDelivr CDN and server proxy fallback
 export async function loadGameSource(directory: string): Promise<GameLoadResult> {
   if (
     directory.startsWith("http://") ||
@@ -557,31 +471,9 @@ export async function loadGameSource(directory: string): Promise<GameLoadResult>
   }
 
   const filename = directory.replace(/^\/+/, "");
+  const candidates = getGameCandidateUrls(filename);
 
-  let githubUrl = "";
-  let fallbackGithubUrl = "";
-
-  if (filename.startsWith("games/")) {
-    githubUrl = `https://raw.githubusercontent.com/a456pur/seraph/main/${filename}`;
-    fallbackGithubUrl = `https://raw.githubusercontent.com/a456pur/seraph/master/${filename}`;
-  } else if (filename.startsWith("3kh0/")) {
-    const rawFilename = filename.replace("3kh0/", "");
-    githubUrl = `https://raw.githubusercontent.com/3kh0/3kh0-Assets/main/${rawFilename}`;
-    fallbackGithubUrl = `https://raw.githubusercontent.com/3kh0/3kh0-Assets/master/${rawFilename}`;
-  } else {
-    githubUrl = `https://raw.githubusercontent.com/freebuisness/html/main/${filename}`;
-    fallbackGithubUrl = `https://raw.githubusercontent.com/freebuisness/html/master/${filename}`;
-  }
-
-  const urlsToTry = [
-    { url: githubUrl, baseUrl: githubUrl.substring(0, githubUrl.lastIndexOf("/") + 1) },
-    {
-      url: fallbackGithubUrl,
-      baseUrl: fallbackGithubUrl.substring(0, fallbackGithubUrl.lastIndexOf("/") + 1),
-    },
-  ];
-
-  for (const { url, baseUrl } of urlsToTry) {
+  for (const { url, baseUrl, cdnName } of candidates) {
     try {
       const res = await fetch(url);
       if (res.ok) {
@@ -590,14 +482,17 @@ export async function loadGameSource(directory: string): Promise<GameLoadResult>
           const html = prepareGameHtml(text, filename, baseUrl);
           const blob = new Blob([html], { type: "text/html; charset=utf-8" });
           const blobUrl = URL.createObjectURL(blob);
-          return { type: "blob", src: blobUrl, blobUrl };
+          return { type: "blob", src: blobUrl, blobUrl, cdnUsed: cdnName };
         }
       }
     } catch {
-      // Continue to next fallback URL
+      // Continue to origin fallback
     }
   }
 
-  // Final fallback to the proxy if both client-side fetches fail
-  return { type: "url", src: `/api/public/gn/game/${filename}` };
+  // Final fallback to the proxy if client-side direct fetches fail
+  return {
+    type: "url",
+    src: `/api/public/gn/game/${filename}`,
+  };
 }

@@ -38,9 +38,6 @@ export function FrostedNavbar({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Never steal focus or key inputs while playing an active game
-      if (activeGame) return;
-
       if (e.key === "/" && document.activeElement !== searchInputRef.current) {
         e.preventDefault();
         searchInputRef.current?.focus();
@@ -51,7 +48,7 @@ export function FrostedNavbar({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onSearchChange, activeGame]);
+  }, [onSearchChange]);
 
   return (
     <header className="sticky top-0 z-40 border-b border-neutral-900 bg-[#0a0a0a]/95">

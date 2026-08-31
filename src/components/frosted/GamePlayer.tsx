@@ -12,7 +12,7 @@ import {
   CheckCircle2,
   WifiOff,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { gameCover, type Game } from "@/lib/games";
 import { loadGameSource } from "@/lib/gameLoader";
 import { isGameCached } from "@/lib/offlineManager";
@@ -46,7 +46,7 @@ export function GamePlayer({
   const [copied, setCopied] = useState(false);
   const [isReloading, setIsReloading] = useState(false);
   const [showKeybinds, setShowKeybinds] = useState(false);
-  const [, setIframeLoading] = useState(true);
+  const [iframeLoading, setIframeLoading] = useState(true);
   const [activeSrc, setActiveSrc] = useState<string>("");
   const [isSavingOffline, setIsSavingOffline] = useState(false);
   const currentBlobUrlRef = useRef<string | null>(null);
@@ -54,57 +54,7 @@ export function GamePlayer({
   const isFav = favorites.includes(game.id);
   const isCached = isGameCached(game, cachedUrls);
 
-  const toggleFullscreen = useCallback(() => {
-    if (!document.fullscreenElement) {
-      containerRef.current?.requestFullscreen?.();
-    } else {
-      document.exitFullscreen?.();
-    }
-  }, []);
-
-  const handleReload = useCallback(() => {
-    setIsReloading(true);
-    setIframeLoading(true);
-    if (currentBlobUrlRef.current) {
-      URL.revokeObjectURL(currentBlobUrlRef.current);
-      currentBlobUrlRef.current = null;
-    }
-    async function reloadProxyAndGame() {
-      const result = await loadGameSource(game.directory);
-      if (result.blobUrl) {
-        currentBlobUrlRef.current = result.blobUrl;
-      }
-      setActiveSrc(result.src);
-      if (iframeRef.current) {
-        iframeRef.current.src = result.src;
-      }
-      setTimeout(() => setIsReloading(false), 500);
-    }
-    reloadProxyAndGame();
-  }, [game.directory]);
-
-  // Keyboard shortcut handler for F (fullscreen) and R (reload)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if user is typing in an input
-      if (["INPUT", "TEXTAREA", "SELECT"].includes((e.target as HTMLElement)?.tagName)) return;
-      if (e.key === "f" || e.key === "F") {
-        if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-          e.preventDefault();
-          toggleFullscreen();
-        }
-      } else if (e.key === "r" || e.key === "R") {
-        if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-          e.preventDefault();
-          handleReload();
-        }
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [toggleFullscreen, handleReload]);
-
-  // Load and sanitize game HTML with multi-tier fallback (Vercel & static host compatible)
+  // Load and sanitize game HTML with universal framing
   useEffect(() => {
     let cancelled = false;
     setIframeLoading(true);
@@ -167,6 +117,35 @@ export function GamePlayer({
       }
     };
   }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      containerRef.current?.requestFullscreen?.();
+    } else {
+      document.exitFullscreen?.();
+    }
+  };
+
+  const handleReload = () => {
+    setIsReloading(true);
+    setIframeLoading(true);
+    if (currentBlobUrlRef.current) {
+      URL.revokeObjectURL(currentBlobUrlRef.current);
+      currentBlobUrlRef.current = null;
+    }
+    async function reloadProxyAndGame() {
+      const result = await loadGameSource(game.directory);
+      if (result.blobUrl) {
+        currentBlobUrlRef.current = result.blobUrl;
+      }
+      setActiveSrc(result.src);
+      if (iframeRef.current) {
+        iframeRef.current.src = result.src;
+      }
+      setTimeout(() => setIsReloading(false), 500);
+    }
+    reloadProxyAndGame();
+  };
 
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href);
@@ -301,7 +280,7 @@ export function GamePlayer({
 
             <button
               onClick={toggleFullscreen}
-              title={isFullscreen ? "Exit Fullscreen (F)" : "Fullscreen (F)"}
+              title={isFullscreen ? "Exit Fullscreen" : "Fullscreen (F)"}
               className="smooth-btn flex items-center gap-1.5 rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white hover:border-neutral-500 cursor-pointer"
             >
               {isFullscreen ? (
@@ -315,25 +294,25 @@ export function GamePlayer({
         </div>
       </div>
 
-      {/* Main Game Screen Container */}
-      <div
-        className={`w-full flex-1 flex flex-col items-center justify-center ${isFullscreen ? "p-0" : "p-2 sm:p-4 md:p-6"}`}
-      >
+      {/* Main Game Screen Container - Perfectly framed for Chromebooks & Desktop */}
+      <div className="flex-1 flex flex-col items-center justify-center p-2 sm:p-4">
         <div
           ref={containerRef}
-          className={`relative mx-auto transition-all duration-300 ease-out flex items-center justify-center ${
-            isFullscreen
-              ? "fixed inset-0 z-50 w-screen h-screen max-w-none max-h-none rounded-none border-0 aspect-auto shadow-none"
-              : "w-full max-w-6xl aspect-[16/9] max-h-[calc(100vh-140px)] min-h-[400px] rounded-2xl border border-neutral-800 bg-black shadow-2xl overflow-hidden"
-          }`}
+          className="relative w-full max-w-6xl h-[65vh] min-h-[440px] max-h-[820px] overflow-hidden rounded-2xl border border-neutral-800 bg-black shadow-2xl flex items-center justify-center"
         >
+          {iframeLoading && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/90 backdrop-blur-sm">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-neutral-600 border-t-white" />
+              <p className="mt-3 text-xs text-neutral-400 font-mono">Loading full game...</p>
+            </div>
+          )}
           <iframe
             ref={iframeRef}
             src={activeSrc || undefined}
             title={game.name}
             onLoad={() => setIframeLoading(false)}
-            className="h-full w-full border-0 bg-black block mx-auto my-auto"
-            allow="fullscreen; autoplay; gamepad; pointer-lock; clipboard-write; encrypted-media; camera; microphone; focus-without-user-activation *"
+            className="h-full w-full border-0 bg-black block"
+            allow="fullscreen; autoplay; gamepad; pointer-lock; clipboard-write; encrypted-media"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
           />
         </div>
