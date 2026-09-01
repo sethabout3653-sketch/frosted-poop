@@ -194,20 +194,32 @@ function sanitizeAndCleanGameHtml(rawHtml: string): string {
   html = html.replace(/<script\b[^>]*googletagmanager\.com[^>]*><\/script>/gi, "");
   html = html.replace(/<script\b[^>]*googlesyndication\.com[^>]*><\/script>/gi, "");
   html = html.replace(/<script\b[^>]*adservice\.google[^>]*><\/script>/gi, "");
-  html = html.replace(
-    /<script\b[^>]*>\s*(?:window\.dataLayer|\(function\([^)]*\)\s*\{\s*dataLayer)[\s\S]*?<\/script>/gi,
-    "",
-  );
 
-  // 2. Remove third-party ad blocks & floating sidebar ad overlays
+  // 2. Remove malicious domain-lock, anti-embed, anti-leech, and obfuscated ad scripts
+  html = html.replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gi, (match, body) => {
+    if (
+      body.includes("sFfEkK") ||
+      body.includes("IuySzzp") ||
+      body.includes("UravPb") ||
+      body.includes("_0x257e") ||
+      body.includes("_0xe8c3") ||
+      body.includes("googletagmanager") ||
+      body.includes("dataLayer") ||
+      body.includes("google-analytics") ||
+      body.includes("googlesyndication") ||
+      body.includes("adservice.google") ||
+      body.includes("document.body.remove") ||
+      body.includes("document['body']['remove']")
+    ) {
+      return "<!-- [Frosted] Blocked third-party script -->";
+    }
+    return match;
+  });
+
+  // 3. Remove third-party ad blocks & floating sidebar ad overlays
   html = html.replace(/<div\b[^>]*id=["\x27]sidebarad\d*["\x27][\s\S]*?<\/div>/gi, "");
   html = html.replace(/<style[^>]*>[\s\S]*?#sidebarad[\s\S]*?<\/style>/gi, "");
-
-  // 3. Remove malicious domain-lock and anti-leech scripts (e.g. scripts checking location.hostname)
-  html = html.replace(
-    /<script\b[^>]*>[\s\S]*?(?:IuySzzpOiISwZDDrwmF|sFfEkK\$fMziBAJZwZbkuvp|UravPbGESYjDUNqxKcf\$Vqza|_0x257e|_0xe8c3)[\s\S]*?<\/script>/gi,
-    "",
-  );
+  html = html.replace(/<div\b[^>]*class=["\x27]sidebar-close["\x27][\s\S]*?<\/div>/gi, "");
 
   // 4. Inject anti-popunder, anti-alert and frame-locking shield script to block third-party annoyances
   const shieldScript = `
@@ -226,102 +238,36 @@ function sanitizeAndCleanGameHtml(rawHtml: string): string {
       Object.defineProperty(window, 'top', { get: function() { return window.self; } });
       Object.defineProperty(window, 'parent', { get: function() { return window.self; } });
 
-      // 4. Direct Touchscreen Interaction Engine (Touch, Pointer & Mouse Synthesizer)
-      function findTouchTarget(touch) {
-        if (!touch) return document.body;
-        var el = document.elementFromPoint(touch.clientX, touch.clientY);
-        if (el && (el.tagName === "CANVAS" || el.id === "gameContainer" || el.id === "unity-container")) {
-          return el;
-        }
-        var canvas = document.querySelector("canvas");
-        return el || canvas || document.body;
-      }
-
-      function dispatchSimulatedPointer(type, touch) {
-        if (!touch) return;
-        var target = findTouchTarget(touch);
-        var isUp = type === "mouseup";
-
-        // Auto-focus game canvas on touch
-        try {
-          if (target && target.focus && typeof target.focus === "function") {
-            target.focus();
-          }
-        } catch(_) {}
-
-        // 1. Mouse Event Synthesis
-        var mouseEvt = new MouseEvent(type, {
-          bubbles: true,
-          cancelable: true,
-          view: window,
-          detail: isUp ? 0 : 1,
-          screenX: touch.screenX,
-          screenY: touch.screenY,
-          clientX: touch.clientX,
-          clientY: touch.clientY,
-          buttons: isUp ? 0 : 1,
-          button: 0
-        });
-        target.dispatchEvent(mouseEvt);
-
-        // 2. Pointer Event Synthesis (for Pixi, Phaser, Unity, Three.js)
-        if (window.PointerEvent) {
-          var pType = type === "mousedown" ? "pointerdown" : (isUp ? "pointerup" : "pointermove");
-          var pEvt = new PointerEvent(pType, {
-            bubbles: true,
-            cancelable: true,
-            view: window,
-            clientX: touch.clientX,
-            clientY: touch.clientY,
-            screenX: touch.screenX,
-            screenY: touch.screenY,
-            pointerId: touch.identifier || 1,
-            pointerType: "touch",
-            isPrimary: true,
-            pressure: isUp ? 0 : 0.5,
-            buttons: isUp ? 0 : 1,
-            button: 0
-          });
-          target.dispatchEvent(pEvt);
-        }
-      }
-
-      document.addEventListener("touchstart", function(e) {
-        if (e.touches && e.touches.length > 0) {
-          for (var i = 0; i < e.touches.length; i++) {
-            dispatchSimulatedPointer("mousedown", e.touches[i]);
+      // 4. Intercept Lumin SDK fetches to bypass CORS/CSP through our proxy
+      const originalFetch = window.fetch;
+      window.fetch = async function(...args) {
+        let [resource, config] = args;
+        if (typeof resource === "string") {
+          if (resource.includes("a.luminsdk.com/api/v1/")) {
+            const relPath = resource.split("a.luminsdk.com/api/v1/")[1];
+            resource = "/api/public/sdk/" + relPath;
+          } else if (resource.startsWith("/api/v1/")) {
+            const relPath = resource.split("/api/v1/")[1];
+            resource = "/api/public/sdk/" + relPath;
           }
         }
-      }, { passive: true });
+        return originalFetch(resource, config);
+      };
 
-      document.addEventListener("touchmove", function(e) {
-        if (e.touches && e.touches.length > 0) {
-          for (var i = 0; i < e.touches.length; i++) {
-            dispatchSimulatedPointer("mousemove", e.touches[i]);
+      // 5. Intercept XMLHttpRequest for same reasons
+      const originalOpen = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function(method, url) {
+        if (typeof url === "string") {
+          if (url.includes("a.luminsdk.com/api/v1/")) {
+            const relPath = url.split("a.luminsdk.com/api/v1/")[1];
+            url = "/api/public/sdk/" + relPath;
+          } else if (url.startsWith("/api/v1/")) {
+            const relPath = url.split("/api/v1/")[1];
+            url = "/api/public/sdk/" + relPath;
           }
         }
-      }, { passive: true });
-
-      document.addEventListener("touchend", function(e) {
-        if (e.changedTouches && e.changedTouches.length > 0) {
-          for (var i = 0; i < e.changedTouches.length; i++) {
-            var touch = e.changedTouches[i];
-            dispatchSimulatedPointer("mouseup", touch);
-            var target = findTouchTarget(touch);
-            var clickEvt = new MouseEvent("click", {
-              bubbles: true,
-              cancelable: true,
-              view: window,
-              clientX: touch.clientX,
-              clientY: touch.clientY,
-              detail: 1,
-              button: 0,
-              buttons: 0
-            });
-            target.dispatchEvent(clickEvt);
-          }
-        }
-      }, { passive: true });
+        return originalOpen.apply(this, [method, url].concat(Array.prototype.slice.call(arguments, 2)));
+      };
     } catch(e) {
       console.warn("[Shield] Failed to inject protection framework:", e);
     }
@@ -653,8 +599,6 @@ router.get("/gn/*", async (req, res) => {
       return res.send(sanitizedHtml);
     }
 
-    const originalUrl = response.url;
-
     // JS/CSS/JSON Rewrites (can also be cached to save bandwidth and compute)
     if (cleanPathNoQuery.endsWith(".js") || cleanPathNoQuery.endsWith(".mjs")) {
       let jsText = await response.text();
@@ -662,7 +606,7 @@ router.get("/gn/*", async (req, res) => {
       jsText = jsText.replace(/https:\/\/raw\.githubusercontent\.com\//g, "/api/public/gn/gh/");
       const buffer = Buffer.from(jsText, "utf-8");
       setCachedAsset(cacheKey, buffer, "application/javascript");
-      return serveAsset(req, res, buffer, rawPath, "application/javascript", false, response.url);
+      return serveAsset(req, res, buffer, rawPath, "application/javascript");
     }
 
     if (cleanPathNoQuery.endsWith(".css")) {
@@ -671,7 +615,7 @@ router.get("/gn/*", async (req, res) => {
       cssText = cssText.replace(/https:\/\/raw\.githubusercontent\.com\//g, "/api/public/gn/gh/");
       const buffer = Buffer.from(cssText, "utf-8");
       setCachedAsset(cacheKey, buffer, "text/css");
-      return serveAsset(req, res, buffer, rawPath, "text/css", false, response.url);
+      return serveAsset(req, res, buffer, rawPath, "text/css");
     }
 
     if (cleanPathNoQuery.endsWith(".json")) {
@@ -680,7 +624,7 @@ router.get("/gn/*", async (req, res) => {
       jsonText = jsonText.replace(/https:\/\/raw\.githubusercontent\.com\//g, "/api/public/gn/gh/");
       const buffer = Buffer.from(jsonText, "utf-8");
       setCachedAsset(cacheKey, buffer, "application/json");
-      return serveAsset(req, res, buffer, rawPath, "application/json", false, originalUrl);
+      return serveAsset(req, res, buffer, rawPath, "application/json");
     }
 
     // Binary Assets
@@ -746,7 +690,7 @@ router.get("/seraph/*", async (req, res) => {
       );
       const buffer = Buffer.from(jsText, "utf-8");
       setCachedAsset(cacheKey, buffer, "application/javascript");
-      return serveAsset(req, res, buffer, rawPath, "application/javascript", false, response.url);
+      return serveAsset(req, res, buffer, rawPath, "application/javascript");
     }
 
     if (cleanPathNoQuery.endsWith(".css")) {
@@ -757,7 +701,7 @@ router.get("/seraph/*", async (req, res) => {
       );
       const buffer = Buffer.from(cssText, "utf-8");
       setCachedAsset(cacheKey, buffer, "text/css");
-      return serveAsset(req, res, buffer, rawPath, "text/css", false, response.url);
+      return serveAsset(req, res, buffer, rawPath, "text/css");
     }
 
     const mime = getMimeType(cleanPathNoQuery, response.headers.get("content-type"));
@@ -824,7 +768,7 @@ router.get("/3kh0/*", async (req, res) => {
       );
       const buffer = Buffer.from(jsText, "utf-8");
       setCachedAsset(cacheKey, buffer, "application/javascript");
-      return serveAsset(req, res, buffer, rawPath, "application/javascript", false, response.url);
+      return serveAsset(req, res, buffer, rawPath, "application/javascript");
     }
 
     const mime = getMimeType(cleanPathNoQuery, response.headers.get("content-type"));
@@ -841,6 +785,120 @@ router.get("/3kh0/*", async (req, res) => {
   } catch (err) {
     console.error("3kh0 proxy error:", err);
     return res.status(500).send("3kh0 proxy error");
+  }
+});
+
+// Route 5: Lumin SDK Proxy
+router.all("/sdk/*", async (req, res) => {
+  try {
+    const rawPath = (req.params as Record<string, string>)[0] || "";
+    const method = req.method;
+
+    // Special case: serve local lumin.js if requested to avoid external fetch for the core script
+    if (rawPath === "lumin.js" && method === "GET") {
+      try {
+        const localPath = path.join(process.cwd(), "public", "lumin.js");
+        if (fs.existsSync(localPath)) {
+          const content = fs.readFileSync(localPath);
+          return serveAsset(req, res, content, "lumin.js", "application/javascript");
+        }
+      } catch (e) {
+        console.warn("Local lumin.js serve failed, falling back to proxy:", e);
+      }
+    }
+
+    const cacheKey = `${method}:sdk:${rawPath}`;
+
+    // Only cache GET requests
+    if (method === "GET") {
+      const cached = getCachedAsset(cacheKey);
+      if (cached) {
+        return serveAsset(
+          req,
+          res,
+          cached.buffer,
+          rawPath,
+          cached.mime,
+          cached.encoding === "gzip",
+        );
+      }
+    }
+
+    let sdkUrl = `https://a.luminsdk.com/api/v1/${rawPath}`;
+
+    const headers: Record<string, string> = {
+      "User-Agent": req.headers["user-agent"] || "",
+      Referer: "https://a.luminsdk.com/",
+    };
+
+    // Only include Content-Type if we are sending a body
+    if (method !== "GET" && method !== "HEAD") {
+      if (req.headers["content-type"]) {
+        headers["Content-Type"] = req.headers["content-type"];
+      }
+    }
+
+    const fetchOptions: any = {
+      method,
+      redirect: "follow",
+      headers,
+    };
+
+    if (method !== "GET" && method !== "HEAD") {
+      const body = await readRawBody(req);
+      if (body && body.length > 0) {
+        fetchOptions.body = body;
+      }
+    }
+
+    const response = await fetch(sdkUrl, fetchOptions);
+
+    if (!response.ok && !rawPath.startsWith("game/") && method === "GET") {
+      // Fallback to game subpath for GET requests if direct v1 fetch fails
+      sdkUrl = `https://a.luminsdk.com/api/v1/game/${rawPath}`;
+      const secondResponse = await fetch(sdkUrl, fetchOptions);
+      if (secondResponse.ok) {
+        const cleanPathNoQuery = rawPath.split("?")[0] || "";
+        const mime = getMimeType(cleanPathNoQuery, secondResponse.headers.get("content-type"));
+        const encoding = secondResponse.headers.get("content-encoding") || undefined;
+
+        const buffer = await safeDownload(secondResponse, VERCEL_PAYLOAD_LIMIT);
+        if (!buffer) {
+          return res.redirect(302, sdkUrl);
+        }
+
+        setCachedAsset(cacheKey, buffer, mime, encoding);
+        return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip", sdkUrl);
+      }
+    }
+
+    if (!response.ok) {
+      return res.status(response.status).send(`Lumin SDK ${method} failed`);
+    }
+
+    const contentType = response.headers.get("content-type");
+
+    const buffer = await safeDownload(response, VERCEL_PAYLOAD_LIMIT);
+    if (!buffer) {
+      if (method === "GET") {
+        return res.redirect(302, sdkUrl);
+      }
+      return res.status(413).send("Payload Too Large");
+    }
+
+    if (method === "GET") {
+      const cleanPathNoQuery = rawPath.split("?")[0] || "";
+      const mime = getMimeType(cleanPathNoQuery, contentType);
+      const encoding = response.headers.get("content-encoding") || undefined;
+      setCachedAsset(cacheKey, buffer, mime, encoding);
+      return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip", sdkUrl);
+    }
+
+    res.setHeader("Content-Type", contentType || "application/json");
+    return res.send(buffer);
+  } catch (err) {
+    console.error("Lumin SDK proxy error:", err);
+    return res.status(500).send("Lumin SDK proxy error");
   }
 });
 

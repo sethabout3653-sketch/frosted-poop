@@ -1,0 +1,552 @@
+<style>
+  :host {
+    display: block;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: var(--lumin-text);
+    background: var(--lumin-bg);
+    border-radius: 12px;
+    overflow: hidden;
+    contain: layout style;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  .lumin-root {
+    padding: 16px;
+    min-height: 200px;
+  }
+
+  .lumin-header {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .lumin-search {
+    flex: 1;
+    min-width: 200px;
+    padding: 10px 14px;
+    background: var(--lumin-input-bg);
+    border: 1px solid var(--lumin-input-border);
+    border-radius: 8px;
+    color: var(--lumin-text);
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .lumin-search:focus {
+    border-color: var(--lumin-accent);
+  }
+  .lumin-search::placeholder {
+    color: var(--lumin-text-secondary);
+  }
+
+  .lumin-btn {
+    padding: 10px 18px;
+    background: var(--lumin-accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s;
+  }
+  .lumin-btn:hover {
+    background: var(--lumin-accent-hover);
+  }
+
+  .lumin-categories {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+  .lumin-categories::-webkit-scrollbar {
+    display: none;
+  }
+
+  .lumin-cat {
+    padding: 6px 14px;
+    background: var(--lumin-surface);
+    border: 1px solid var(--lumin-border);
+    border-radius: 20px;
+    color: var(--lumin-text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition:
+      background 0.15s,
+      color 0.15s;
+  }
+  .lumin-cat:hover,
+  .lumin-cat.active {
+    background: var(--lumin-accent);
+    color: #fff;
+    border-color: var(--lumin-accent);
+  }
+
+  .lumin-grid {
+    display: grid;
+    grid-template-columns: repeat(var(--lumin-columns, 8), 1fr);
+    gap: 8px;
+  }
+
+  @media (max-width: 1200px) {
+    .lumin-grid {
+      grid-template-columns: repeat(7, 1fr);
+    }
+  }
+  @media (max-width: 900px) {
+    .lumin-grid {
+      grid-template-columns: repeat(5, 1fr);
+    }
+  }
+  @media (max-width: 640px) {
+    .lumin-grid {
+      grid-template-columns: repeat(4, 1fr);
+    }
+  }
+  @media (max-width: 400px) {
+    .lumin-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+
+  .lumin-card {
+    position: relative;
+    aspect-ratio: 1;
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    background: var(--lumin-surface);
+    contain: layout;
+  }
+
+  .lumin-card-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    background: var(--lumin-skeleton);
+  }
+  .lumin-card-img.lumin-card-img-placeholder {
+    color: transparent;
+    font-size: 0;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+  }
+
+  .lumin-card-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: flex-end;
+    padding: 6px 8px;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0) 55%);
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .lumin-card:hover .lumin-card-overlay,
+  .lumin-card:focus-visible .lumin-card-overlay {
+    opacity: 1;
+  }
+
+  .lumin-card-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #fff;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .lumin-skeleton {
+    background: var(--lumin-skeleton);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .lumin-skeleton .lumin-card-img {
+    background: linear-gradient(
+      90deg,
+      var(--lumin-skeleton) 25%,
+      var(--lumin-skeleton-shine) 50%,
+      var(--lumin-skeleton) 75%
+    );
+    background-size: 200% 100%;
+    animation: lumin-shimmer 1.2s ease-in-out infinite;
+  }
+
+  @keyframes lumin-shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
+  .lumin-pagination {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 20px;
+  }
+
+  .lumin-page-btn {
+    padding: 6px 14px;
+    background: var(--lumin-surface);
+    border: 1px solid var(--lumin-border);
+    border-radius: 6px;
+    color: var(--lumin-text);
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .lumin-page-btn:hover,
+  .lumin-page-btn.active {
+    background: var(--lumin-accent);
+    color: #fff;
+    border-color: var(--lumin-accent);
+  }
+  .lumin-page-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .lumin-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--lumin-text-secondary);
+    font-size: 14px;
+  }
+</style>
+<div class="lumin-root">
+  <div class="lumin-header">
+    <input
+      type="text"
+      class="lumin-search"
+      placeholder="Search games..."
+      aria-label="Search games"
+    /><button class="lumin-btn">Random</button>
+  </div>
+  <div class="lumin-categories"></div>
+  <div class="lumin-grid">
+    <div class="lumin-card" role="button" tabindex="0" aria-label="Play Little Big Planet">
+      <img
+        class="lumin-card-img"
+        alt="Little Big Planet"
+        loading="eager"
+        fetchpriority="high"
+        draggable="false"
+        data-game-id="truffled/lbp"
+        src="/api/public/sdk/icon/1788206315-3dOpjPtCoKKlLSykcXiIHkiPenk08nTye7UyuH5CJ9A/truffled/lbp"
+      />
+      <div class="lumin-card-overlay"><span class="lumin-card-title">Little Big Planet</span></div>
+    </div>
+    <div class="lumin-card" role="button" tabindex="0" aria-label="Play My teardrop, daniel">
+      <img
+        class="lumin-card-img"
+        alt="My teardrop, daniel"
+        loading="eager"
+        fetchpriority="high"
+        draggable="false"
+        data-game-id="truffled/mytear"
+        src="/api/public/sdk/icon/1788206315-3dOpjPtCoKKlLSykcXiIHkiPenk08nTye7UyuH5CJ9A/truffled/mytear"
+      />
+      <div class="lumin-card-overlay">
+        <span class="lumin-card-title">My teardrop, daniel</span>
+      </div>
+    </div>
+    <div class="lumin-card" role="button" tabindex="0" aria-label="Play hole.io">
+      <img
+        class="lumin-card-img"
+        alt="hole.io"
+        loading="eager"
+        fetchpriority="high"
+        draggable="false"
+        data-game-id="selenite/holeio"
+        src="/api/public/sdk/icon/1788206315-3dOpjPtCoKKlLSykcXiIHkiPenk08nTye7UyuH5CJ9A/selenite/holeio"
+      />
+      <div class="lumin-card-overlay"><span class="lumin-card-title">hole.io</span></div>
+    </div>
+    <div class="lumin-card" role="button" tabindex="0" aria-label="Play Resident Evil 2">
+      <img
+        class="lumin-card-img"
+        alt="Resident Evil 2"
+        loading="eager"
+        fetchpriority="high"
+        draggable="false"
+        data-game-id="truffled/res2"
+        src="/api/public/sdk/icon/1788206315-3dOpjPtCoKKlLSykcXiIHkiPenk08nTye7UyuH5CJ9A/truffled/res2"
+      />
+      <div class="lumin-card-overlay"><span class="lumin-card-title">Resident Evil 2</span></div>
+    </div>
+    <div class="lumin-card" role="button" tabindex="0" aria-label="Play Paint Gal Adventures">
+      <img
+        class="lumin-card-img"
+        alt="Paint Gal Adventures"
+        loading="eager"
+        fetchpriority="high"
+        draggable="false"
+        data-game-id="truffled/paintgaladventures"
+        src="/api/public/sdk/icon/1788206315-3dOpjPtCoKKlLSykcXiIHkiPenk08nTye7UyuH5CJ9A/truffled/paintgaladventures"
+      />
+      <div class="lumin-card-overlay">
+        <span class="lumin-card-title">Paint Gal Adventures</span>
+      </div>
+    </div>
+    <div class="lumin-card" role="button" tabindex="0" aria-label="Play Pandemic">
+      <img
+        class="lumin-card-img"
+        alt="Pandemic"
+        loading="eager"
+        fetchpriority="high"
+        draggable="false"
+        data-game-id="selenite/pandemic"
+        src="/api/public/sdk/icon/1788206315-3dOpjPtCoKKlLSykcXiIHkiPenk08nTye7UyuH5CJ9A/selenite/pandemic"
+      />
+      <div class="lumin-card-overlay"><span class="lumin-card-title">Pandemic</span></div>
+    </div>
+    <div class="lumin-card" role="button" tabindex="0" aria-label="Play Bad Ice Cream 3">
+      <img
+        class="lumin-card-img"
+        alt="Bad Ice Cream 3"
+        loading="eager"
+        fetchpriority="high"
+        draggable="false"
+        data-game-id="selenite/badicecream3"
+        src="/api/public/sdk/icon/1788206315-3dOpjPtCoKKlLSykcXiIHkiPenk08nTye7UyuH5CJ9A/selenite/badicecream3"
+      />
+      <div class="lumin-card-overlay"><span class="lumin-card-title">Bad Ice Cream 3</span></div>
+    </div>
+    <div class="lumin-card" role="button" tabindex="0" aria-label="Play Go Ball">
+      <img
+        class="lumin-card-img"
+        alt="Go Ball"
+        loading="eager"
+        fetchpriority="high"
+        draggable="false"
+        data-game-id="selenite/goball"
+        src="/api/public/sdk/icon/1788206315-3dOpjPtCoKKlLSykcXiIHkiPenk08nTye7UyuH5CJ9A/selenite/goball"
+      />
+      <div class="lumin-card-overlay"><span class="lumin-card-title">Go Ball</span></div>
+    </div>
+    <div
+      class="lumin-card"
+      role="button"
+      tabindex="0"
+      aria-label="Play Steak and Jake: Midnight March"
+    >
+      <img
+        class="lumin-card-img"
+        alt="Steak and Jake: Midnight March"
+        loading="lazy"
+        draggable="false"
+        data-game-id="selenite/midnightmarch"
+        src="/api/public/sdk/icon/1788206315-3dOpjPtCoKKlLSykcXiIHkiPenk08nTye7UyuH5CJ9A/selenite/midnightmarch"
+      />
+      <div class="lumin-card-overlay">
+        <span class="lumin-card-title">Steak and Jake: Midnight March</span>
+      </div>
+    </div>
+    <div class="lumin-card" role="button" tabindex="0" aria-label="Play Aquapark Slides">
+      <img
+        class="lumin-card-img"
+        alt="Aquapark Slides"
+        loading="lazy"
+        draggable="false"
+        data-game-id="selenite/aquaparkslides"
+        src="/api/public/sdk/icon/1788206315-3dOpjPtCoKKlLSykcXiIHkiPenk08nTye7UyuH5CJ9A/selenite/aquaparkslides"
+      />
+      <div class="lumin-card-overlay"><span class="lumin-card-title">Aquapark Slides</span></div>
+    </div>
+    <div class="lumin-card" role="button" tabindex="0" aria-label="Play Dead Tapes">
+      <img
+        class="lumin-card-img"
+        alt="Dead Tapes"
+        loading="lazy"
+        draggable="false"
+        data-game-id="truffled/deadtapesfinal"
+        src="/api/public/sdk/icon/1788206315-3dOpjPtCoKKlLSykcXiIHkiPenk08nTye7UyuH5CJ9A/truffled/deadtapesfinal"
+      />
+      <div class="lumin-card-overlay"><span class="lumin-card-title">Dead Tapes</span></div>
+    </div>
+    <div class="lumin-card" role="button" tabindex="0" aria-label="Play Punch-Out!!">
+      <img
+        class="lumin-card-img"
+        alt="Punch-Out!!"
+        loading="lazy"
+        draggable="false"
+        data-game-id="selenite/punchout"
+        src="/api/public/sdk/icon/1788206315-3dOpjPtCoKKlLSykcXiIHkiPenk08nTye7UyuH5CJ9A/selenite/punchout"
+      />
+      <div class="lumin-card-overlay"><span class="lumin-card-title">Punch-Out!!</span></div>
+    </div>
+    <div class="lumin-card" role="button" tabindex="0" aria-label="Play Factory Balls 4">
+      <img
+        class="lumin-card-img"
+        alt="Factory Balls 4"
+        loading="lazy"
+        draggable="false"
+        data-game-id="selenite/factoryballs4"
+        src="/api/public/sdk/icon/1788206315-3dOpjPtCoKKlLSykcXiIHkiPenk08nTye7UyuH5CJ9A/selenite/factoryballs4"
+      />
+      <div class="lumin-card-overlay"><span class="lumin-card-title">Factory Balls 4</span></div>
+    </div>
+    <div class="lumin-card" role="button" tabindex="0" aria-label="Play Altered Beast">
+      <img
+        class="lumin-card-img"
+        alt="Altered Beast"
+        loading="lazy"
+        draggable="false"
+        data-game-id="selenite/alteredbeast"
+        src="/api/public/sdk/icon/1788206315-3dOpjPtCoKKlLSykcXiIHkiPenk08nTye7UyuH5CJ9A/selenite/alteredbeast"
+      />
+      <div class="lumin-card-overlay"><span class="lumin-card-title">Altered Beast</span></div>
+    </div>
+    <div class="lumin-card" role="button" tabindex="0" aria-label="Play Mine Blocks">
+      <img
+        class="lumin-card-img"
+        alt="Mine Blocks"
+        loading="lazy"
+        draggable="false"
+        data-game-id="selenite/minors"
+        src="/api/public/sdk/icon/1788206315-3dOpjPtCoKKlLSykcXiIHkiPenk08nTye7UyuH5CJ9A/selenite/minors"
+      />
+      <div class="lumin-card-overlay"><span class="lumin-card-title">Mine Blocks</span></div>
+    </div>
+    <div class="lumin-card" role="button" tabindex="0" aria-label="Play Class of '09">
+      <img
+        class="lumin-card-img"
+        alt="Class of '09"
+        loading="lazy"
+        draggable="false"
+        data-game-id="selenite/co09"
+        src="/api/public/sdk/icon/1788206315-3dOpjPtCoKKlLSykcXiIHkiPenk08nTye7UyuH5CJ9A/selenite/co09"
+      />
+      <div class="lumin-card-overlay"><span class="lumin-card-title">Class of '09</span></div>
+    </div>
+    <div class="lumin-card" role="button" tabindex="0" aria-label="Play SM64, Super Mario 64">
+      <img
+        class="lumin-card-img"
+        alt="SM64, Super Mario 64"
+        loading="lazy"
+        draggable="false"
+        data-game-id="truffled/sm64"
+        src="/api/public/sdk/icon/1788206315-3dOpjPtCoKKlLSykcXiIHkiPenk08nTye7UyuH5CJ9A/truffled/sm64"
+      />
+      <div class="lumin-card-overlay">
+        <span class="lumin-card-title">SM64, Super Mario 64</span>
+      </div>
+    </div>
+    <div class="lumin-card" role="button" tabindex="0" aria-label="Play Pacman">
+      <img
+        class="lumin-card-img"
+        alt="Pacman"
+        loading="lazy"
+        draggable="false"
+        data-game-id="selenite/pacman"
+        src="/api/public/sdk/icon/1788206315-3dOpjPtCoKKlLSykcXiIHkiPenk08nTye7UyuH5CJ9A/selenite/pacman"
+      />
+      <div class="lumin-card-overlay"><span class="lumin-card-title">Pacman</span></div>
+    </div>
+    <div class="lumin-card" role="button" tabindex="0" aria-label="Play Nitrome Must Die">
+      <img
+        class="lumin-card-img"
+        alt="Nitrome Must Die"
+        loading="lazy"
+        draggable="false"
+        data-game-id="selenite/nitme"
+        src="/api/public/sdk/icon/1788206315-3dOpjPtCoKKlLSykcXiIHkiPenk08nTye7UyuH5CJ9A/selenite/nitme"
+      />
+      <div class="lumin-card-overlay"><span class="lumin-card-title">Nitrome Must Die</span></div>
+    </div>
+    <div
+      class="lumin-card"
+      role="button"
+      tabindex="0"
+      aria-label="Play Legend of Zelda - Ocarina of Time"
+    >
+      <img
+        class="lumin-card-img"
+        alt="Legend of Zelda - Ocarina of Time"
+        loading="lazy"
+        draggable="false"
+        data-game-id="selenite/ocarinaoftime"
+        src="/api/public/sdk/icon/1788206315-3dOpjPtCoKKlLSykcXiIHkiPenk08nTye7UyuH5CJ9A/selenite/ocarinaoftime"
+      />
+      <div class="lumin-card-overlay">
+        <span class="lumin-card-title">Legend of Zelda - Ocarina of Time</span>
+      </div>
+    </div>
+    <div class="lumin-card" role="button" tabindex="0" aria-label="Play GTA Vice City">
+      <img
+        class="lumin-card-img"
+        alt="GTA Vice City"
+        loading="lazy"
+        draggable="false"
+        data-game-id="truffled/vicecity"
+        src="/api/public/sdk/icon/1788206315-3dOpjPtCoKKlLSykcXiIHkiPenk08nTye7UyuH5CJ9A/truffled/vicecity"
+      />
+      <div class="lumin-card-overlay"><span class="lumin-card-title">GTA Vice City</span></div>
+    </div>
+    <div class="lumin-card" role="button" tabindex="0" aria-label="Play CircloO">
+      <img
+        class="lumin-card-img"
+        alt="CircloO"
+        loading="lazy"
+        draggable="false"
+        data-game-id="selenite/circloo"
+        src="/api/public/sdk/icon/1788206315-3dOpjPtCoKKlLSykcXiIHkiPenk08nTye7UyuH5CJ9A/selenite/circloo"
+      />
+      <div class="lumin-card-overlay"><span class="lumin-card-title">CircloO</span></div>
+    </div>
+    <div
+      class="lumin-card"
+      role="button"
+      tabindex="0"
+      aria-label="Play Adventure Time: Hey Ice King"
+    >
+      <img
+        class="lumin-card-img"
+        alt="Adventure Time: Hey Ice King"
+        loading="lazy"
+        draggable="false"
+        data-game-id="selenite/adventuretime"
+        src="/api/public/sdk/icon/1788206315-3dOpjPtCoKKlLSykcXiIHkiPenk08nTye7UyuH5CJ9A/selenite/adventuretime"
+      />
+      <div class="lumin-card-overlay">
+        <span class="lumin-card-title">Adventure Time: Hey Ice King</span>
+      </div>
+    </div>
+    <div class="lumin-card" role="button" tabindex="0" aria-label="Play Universal Paperclips">
+      <img
+        class="lumin-card-img"
+        alt="Universal Paperclips"
+        loading="lazy"
+        draggable="false"
+        data-game-id="selenite/universal-paperclips"
+        src="/api/public/sdk/icon/1788206315-3dOpjPtCoKKlLSykcXiIHkiPenk08nTye7UyuH5CJ9A/selenite/universal-paperclips"
+      />
+      <div class="lumin-card-overlay">
+        <span class="lumin-card-title">Universal Paperclips</span>
+      </div>
+    </div>
+  </div>
+  <div class="lumin-pagination">
+    <button class="lumin-page-btn" disabled="">Prev</button
+    ><button class="lumin-page-btn active">1</button><button class="lumin-page-btn">2</button
+    ><button class="lumin-page-btn">3</button><button class="lumin-page-btn">Next</button>
+  </div>
+</div>

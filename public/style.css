@@ -1,0 +1,91 @@
+/* Lumin custom strict black and white theme */
+:root {
+  --lumin-background: #000000;
+  --lumin-card-bg: #000000;
+  --lumin-text: #ffffff;
+  --lumin-text-secondary: #ffffff;
+  --lumin-accent: #ffffff;
+  --lumin-border: #ffffff;
+  --lumin-border-radius: 16px;
+  --lumin-font: "Inter", "Plus Jakarta Sans", sans-serif;
+}
+
+body {
+  background-color: var(--lumin-background) !important;
+  color: var(--lumin-text) !important;
+  font-family: var(--lumin-font);
+  margin: 0;
+  padding: 0;
+}
+
+.lumin-game-card {
+  background-color: var(--lumin-card-bg) !important;
+  border: 2px solid var(--lumin-border) !important;
+  border-radius: var(--lumin-border-radius);
+  transition: all 0.2s ease;
+}
+
+.lumin-game-card:hover {
+  border-color: #ffffff !important;
+  box-shadow: 0 10px 30px -10px rgba(255, 255, 255, 0.2) !important;
+  transform: translateY(-2px);
+}
+
+.lumin-title {
+  font-weight: 600;
+  color: var(--lumin-text) !important;
+}
+
+.lumin-category {
+  color: var(--lumin-text) !important;
+}
+
+/* Make game thumbnails actually go saturation */
+img,
+canvas,
+.thumbnail,
+.lumin-thumb,
+picture,
+video {
+  filter: saturate(150%) !important;
+}
+
+/* Force other common elements to black and white, no grey */
+button,
+input,
+select,
+textarea {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+  border: 1px solid #ffffff !important;
+}
+
+a {
+  color: #ffffff !important;
+}
+
+/* Remove any SDK injected grey backgrounds */
+* {
+  scrollbar-color: #ffffff #000000 !important;
+}
+
+/* Force Lumin SDK specific buttons and active states to black and white */
+.lumin-btn,
+.lumin-page-btn.active,
+.lumin-category-btn.active {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  border-color: #ffffff !important;
+}
+
+.lumin-page-btn {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+  border: 1px solid #ffffff !important;
+}
+
+.lumin-page-btn:hover,
+.lumin-btn:hover {
+  background-color: #cccccc !important;
+  color: #000000 !important;
+}

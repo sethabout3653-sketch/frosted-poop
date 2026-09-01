@@ -1,5 +1,6 @@
 // Custom games list module
 // --- Existing code from your provided snippet ---
+import luminSdkGamesData from "../data/luminSdkGames.json";
 import { getCoverStyle } from "./frostedStore";
 
 export type GameCategory =
@@ -117,12 +118,30 @@ export function createStyledSvgCover(title: string, category: string = "game"): 
 }
 
 export function gameCover(game: Game) {
+  const style = getCoverStyle();
+
+  // If style is "sdk", use the actual Lumin SDK icon if available
+  if (style === "sdk" && (game as any).imageToken) {
+    return `https://a.luminsdk.com/api/v1/icon/${(game as any).imageToken}`;
+  }
+
+  // Fallback to actual Lumin SDK icon instead of generated SVG covers
+  if (game.image && game.image.startsWith("data:image/svg+xml") && (game as any).imageToken) {
+    return `https://a.luminsdk.com/api/v1/icon/${(game as any).imageToken}`;
+  }
+
+  // Otherwise, use resolved high-res images
   if (game.image) {
     return game.image;
   }
 
   if (typeof game.id === "number" || (typeof game.id === "string" && !isNaN(Number(game.id)))) {
     return `${GN_COVERS_CDN}/${game.id}.png`;
+  }
+
+  // If all else fails and there's an imageToken, use actual SDK icon
+  if ((game as any).imageToken) {
+    return `https://a.luminsdk.com/api/v1/icon/${(game as any).imageToken}`;
   }
 
   return createStyledSvgCover(game.name || "Game", game.category);
@@ -355,7 +374,7 @@ export async function fetchGames(): Promise<Game[]> {
   const customGame: Game = {
     id: "soundboard",
     name: "Soundboard",
-    directory: "https://myinstants.com",
+    directory: "https://soundboardguys.com",
     image:
       "https://play-lh.googleusercontent.com/QbPwdx7u46tJLd6SBJ6cCPajEKgiA620fYNSZb1VsdlKIBPs4m6itZRDmu9SWPo8vbV77H1H42cNefPDtoYM",
     category: "popular",
@@ -365,30 +384,64 @@ export async function fetchGames(): Promise<Game[]> {
   };
 
   let gnMathGames: Game[] = [];
+  const gnCoverLookup = new Map<string, string>();
+  const gnCoverList: Array<{ clean: string; urlSlug: string; cover: string }> = [];
+
   try {
     const res = await fetch(GN_ZONES_URL);
     if (res.ok) {
       const rawData = await res.json();
       if (Array.isArray(rawData)) {
+        // Collect covers for image resolution lookup across the library
+        for (const item of rawData) {
+          if (item && item["name"] && item["cover"]) {
+            const clean = String(item["name"])
+              .toLowerCase()
+              .replace(/[^a-z0-9]/g, "");
+            const coverUrl = String(item["cover"]).replace("{COVER_URL}", GN_COVERS_CDN);
+            gnCoverLookup.set(clean, coverUrl);
+
+            const rawUrl = String(item["url"] || "");
+            const filename = rawUrl.replace("{HTML_URL}/", "").replace(/^https?:\/\/[^/]+\//, "");
+            const parts = filename.split("/");
+            const dirSlug = (parts[parts.length - 1] || parts[parts.length - 2] || "")
+              .toLowerCase()
+              .replace(/[^a-z0-9]/g, "")
+              .replace(/\.html$/, "");
+
+            gnCoverList.push({ clean, urlSlug: dirSlug, cover: coverUrl });
+          }
+        }
+
+        // Keep ONLY Friday Night Funkin' (FNF) games from the gn-math games library
         gnMathGames = rawData
-          .filter(
-            (item: Record<string, unknown>) =>
-              item &&
-              typeof item["id"] === "number" &&
-              item["id"] >= 0 &&
-              item["url"] &&
-              item["name"],
-          )
+          .filter((item: Record<string, unknown>) => {
+            if (
+              !item ||
+              typeof item["id"] !== "number" ||
+              item["id"] < 0 ||
+              !item["url"] ||
+              !item["name"]
+            ) {
+              return false;
+            }
+            const name = String(item["name"]).toLowerCase();
+            const url = String(item["url"]).toLowerCase();
+            return (
+              name.includes("fnf") ||
+              name.includes("friday night") ||
+              name.includes("funkin") ||
+              url.includes("fnf") ||
+              url.includes("funkin")
+            );
+          })
           .map((item: Record<string, unknown>) => {
             const rawUrl = String(item["url"] || "");
             const filename = rawUrl.replace("{HTML_URL}/", "").replace(/^https?:\/\/[^/]+\//, "");
             const coverUrl = String(item["cover"] || "").replace("{COVER_URL}", GN_COVERS_CDN);
             const name = String(item["name"]);
             const category = assignCategory(name);
-            const featured =
-              category === "popular" ||
-              name.toLowerCase().includes("slope") ||
-              name.toLowerCase().includes("1v1");
+            const featured = true;
 
             return {
               id: item["id"] as number,
@@ -410,27 +463,223 @@ export async function fetchGames(): Promise<Game[]> {
     console.warn("Failed to fetch gn-math games:", err);
   }
 
-  const gnCoverLookup = new Map<string, string>();
-  const gnCoverList: Array<{ clean: string; urlSlug: string; cover: string }> = [];
+  function resolveCoverForSdkGame(g: Game): string {
+    // 1. Use already resolved high-res images from our JSON (Steam, Wiki)
+    if (g.image && !g.image.startsWith("data:image/svg+xml")) {
+      return g.image;
+    }
 
-  for (const g of gnMathGames) {
-    if (g.image && g.image.startsWith("http")) {
-      const clean = (g.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-      gnCoverLookup.set(clean, g.image);
+    const nameClean = (g.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
-      let urlSlug = "";
-      if (g.directory) {
-        const parts = g.directory.split("/");
-        urlSlug = (parts[parts.length - 1] || parts[parts.length - 2] || "")
-          .toLowerCase()
-          .replace(/[^a-z0-9]/g, "")
-          .replace(/\.html$/, "");
+    // 2. Exact clean name match in GN math list
+    if (gnCoverLookup.has(nameClean)) {
+      return gnCoverLookup.get(nameClean)!;
+    }
+
+    let dirSlug = "";
+    if (g.directory) {
+      const parts = g.directory.split("/");
+      dirSlug = (parts[parts.length - 1] || parts[parts.length - 2] || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "")
+        .replace(/\.html$/, "");
+    }
+
+    const sdkId = (g as any).sdkGameId || "";
+    const sdkIdSlug = sdkId
+      .replace(/^[^/]+\//, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+
+    // 3. Exact dir / sdkId slug match in GN math list
+    if (dirSlug) {
+      const hit = gnCoverList.find((x) => x.urlSlug === dirSlug || x.clean === dirSlug);
+      if (hit) return hit.cover;
+    }
+    if (sdkIdSlug) {
+      const hit = gnCoverList.find((x) => x.urlSlug === sdkIdSlug || x.clean === sdkIdSlug);
+      if (hit) return hit.cover;
+    }
+
+    // 4. Substring / Fuzzy match in GN math list
+    const hit = gnCoverList.find((x) => {
+      if (x.clean.length > 3 && (nameClean.includes(x.clean) || x.clean.includes(nameClean)))
+        return true;
+      if (
+        dirSlug &&
+        dirSlug.length > 3 &&
+        (x.urlSlug.includes(dirSlug) || dirSlug.includes(x.urlSlug))
+      )
+        return true;
+      return false;
+    });
+
+    if (hit) return hit.cover;
+
+    // 5. Fallback to actual Lumin SDK icon if available
+    if ((g as any).imageToken) {
+      return `https://a.luminsdk.com/api/v1/icon/${(g as any).imageToken}`;
+    }
+
+    // 6. Default high-res SVG cover
+    return createStyledSvgCover(g.name || "Game", g.category);
+  }
+
+  const sdkGames = (luminSdkGamesData as Game[]).map((g) => {
+    const sdkId =
+      (g as any).sdkGameId ||
+      (g.directory ? g.directory.replace(/^sdk\//, "") : String(g.id).replace(/^sdk-/, ""));
+
+    const resolvedImage = resolveCoverForSdkGame(g);
+
+    return {
+      ...g,
+      sdkGameId: sdkId,
+      image: resolvedImage,
+      isSdkGame: true,
+    };
+  });
+  const allList = [customGame, ...sdkGames, ...gnMathGames];
+
+  // Smart normalization & deduplication engine
+  const gameMap = new Map<string, Game>();
+
+  function getNormalizedKey(game: Game): string {
+    if (game.id === "soundboard" || game.id === "custom-soundboard") return "soundboard";
+
+    const nameLower = (game.name || "").toLowerCase();
+    const dirLower = String(game.directory || "").toLowerCase();
+    const isFnf =
+      nameLower.includes("funkin") ||
+      nameLower.includes("fnf") ||
+      dirLower.includes("fnf") ||
+      dirLower.includes("funkin");
+
+    // Explicit FNF/Mod normalization mapping
+    if (isFnf) {
+      if (nameLower.includes("redux") || nameLower.includes("heartbreak")) {
+        return "fnf_sky_redux";
       }
-      gnCoverList.push({ clean, urlSlug, cover: g.image });
+      if (nameLower.includes("sky")) {
+        return "fnf_sky";
+      }
+      if (
+        nameLower.includes("sarvente") ||
+        nameLower.includes("mid-fight masses") ||
+        nameLower.includes("midfight") ||
+        nameLower.includes("masses")
+      ) {
+        return "fnf_sarventes";
+      }
+      if (nameLower.includes("miku")) {
+        return "fnf_miku";
+      }
+      if (nameLower.includes("whitty")) {
+        return "fnf_whitty";
+      }
+      if (nameLower.includes("hex")) {
+        return "fnf_hex";
+      }
+      if (nameLower.includes("tricky")) {
+        return "fnf_tricky";
+      }
+      if (nameLower.includes("neo")) {
+        return "fnf_neo";
+      }
+      if (nameLower.includes("undertale")) {
+        return "fnf_undertale";
+      }
+      if (nameLower.includes("soft")) {
+        return "fnf_soft";
+      }
+      if (nameLower.includes("garcello")) {
+        return "fnf_garcello";
+      }
+      if (nameLower.includes("shaggy")) {
+        return "fnf_shaggy";
+      }
+      if (nameLower.includes("kapi")) {
+        return "fnf_kapi";
+      }
+      if (nameLower.includes("impostor") && nameLower.includes("alternated")) {
+        return "fnf_impostor_alternated";
+      }
+      if (nameLower.includes("impostor") && nameLower.includes("b-sides")) {
+        return "fnf_impostor_bsides";
+      }
+      if (nameLower.includes("impostor")) {
+        return "fnf_impostor_v4";
+      }
+      if (nameLower.includes("d-sides") || nameLower.includes("dsides")) {
+        return "fnf_dsides";
+      }
+      if (nameLower.includes("b-sides") || nameLower.includes("bsides")) {
+        return "fnf_bsides";
+      }
+      return `fnf_${game.id || game.name}`.toLowerCase().replace(/[^a-z0-9_]/g, "");
+    }
+
+    // Explicit Undertale normalization mapping
+    if (nameLower.includes("undertale")) {
+      if (nameLower.includes("yellow")) {
+        return "undertaleyellow";
+      }
+      if (nameLower.includes("last breath") || nameLower.includes("lastbreath")) {
+        if (nameLower.includes("phase three") || nameLower.includes("phase 3")) {
+          return "undertale_lastbreath_phase3";
+        }
+        return "undertale_lastbreath";
+      }
+      return "undertale";
+    }
+
+    let raw = "";
+    if (game.directory) {
+      const parts = String(game.directory).split("/");
+      const last = parts[parts.length - 1];
+      raw = last === "index.html" && parts.length > 1 ? parts[parts.length - 2] : last;
+    }
+    if (!raw || raw.endsWith(".html")) {
+      raw = game.name || String(game.id);
+    }
+
+    return raw
+      .toLowerCase()
+      .replace(/^sdk\//, "")
+      .replace(/^(selenite|truffled|quasar|builtin|games)\//, "")
+      .replace(/[-_.\s]/g, "")
+      .replace(/game$/g, "")
+      .replace(/unblocked$/g, "");
+  }
+
+  for (const g of allList) {
+    const key = getNormalizedKey(g);
+    if (!gameMap.has(key)) {
+      gameMap.set(key, g);
+    } else {
+      const existing = gameMap.get(key)!;
+      const bestImage =
+        (existing.image && existing.image.startsWith("http") ? existing.image : null) ||
+        (g.image && g.image.startsWith("http") ? g.image : null) ||
+        existing.image ||
+        g.image;
+
+      if ((existing as any).isSdkGame) {
+        // Lumin SDK game takes priority for SDK game directory/config, but use best available cover image
+        gameMap.set(key, {
+          ...g,
+          ...existing,
+          image: bestImage,
+          featured: existing.featured || g.featured,
+          rating: Math.max(existing.rating || 0, g.rating || 0),
+        });
+      } else if (!existing.featured && g.featured) {
+        gameMap.set(key, { ...existing, ...g, image: bestImage, featured: true });
+      } else {
+        gameMap.set(key, { ...existing, ...g, image: bestImage });
+      }
     }
   }
 
-  const allList = [customGame, ...gnMathGames];
-
-  return allList;
+  return Array.from(gameMap.values());
 }
