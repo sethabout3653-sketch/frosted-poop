@@ -556,6 +556,8 @@ router.get("/gn/*", async (req, res) => {
       return res.send(sanitizedHtml);
     }
 
+    const originalUrl = response.url;
+
     // JS/CSS/JSON Rewrites (can also be cached to save bandwidth and compute)
     if (cleanPathNoQuery.endsWith(".js") || cleanPathNoQuery.endsWith(".mjs")) {
       let jsText = await response.text();
@@ -563,7 +565,7 @@ router.get("/gn/*", async (req, res) => {
       jsText = jsText.replace(/https:\/\/raw\.githubusercontent\.com\//g, "/api/public/gn/gh/");
       const buffer = Buffer.from(jsText, "utf-8");
       setCachedAsset(cacheKey, buffer, "application/javascript");
-      return serveAsset(req, res, buffer, rawPath, "application/javascript");
+      return serveAsset(req, res, buffer, rawPath, "application/javascript", false, response.url);
     }
 
     if (cleanPathNoQuery.endsWith(".css")) {
@@ -572,7 +574,7 @@ router.get("/gn/*", async (req, res) => {
       cssText = cssText.replace(/https:\/\/raw\.githubusercontent\.com\//g, "/api/public/gn/gh/");
       const buffer = Buffer.from(cssText, "utf-8");
       setCachedAsset(cacheKey, buffer, "text/css");
-      return serveAsset(req, res, buffer, rawPath, "text/css");
+      return serveAsset(req, res, buffer, rawPath, "text/css", false, response.url);
     }
 
     if (cleanPathNoQuery.endsWith(".json")) {
@@ -581,7 +583,7 @@ router.get("/gn/*", async (req, res) => {
       jsonText = jsonText.replace(/https:\/\/raw\.githubusercontent\.com\//g, "/api/public/gn/gh/");
       const buffer = Buffer.from(jsonText, "utf-8");
       setCachedAsset(cacheKey, buffer, "application/json");
-      return serveAsset(req, res, buffer, rawPath, "application/json");
+      return serveAsset(req, res, buffer, rawPath, "application/json", false, originalUrl);
     }
 
     // Binary Assets
@@ -647,7 +649,7 @@ router.get("/seraph/*", async (req, res) => {
       );
       const buffer = Buffer.from(jsText, "utf-8");
       setCachedAsset(cacheKey, buffer, "application/javascript");
-      return serveAsset(req, res, buffer, rawPath, "application/javascript");
+      return serveAsset(req, res, buffer, rawPath, "application/javascript", false, response.url);
     }
 
     if (cleanPathNoQuery.endsWith(".css")) {
@@ -658,7 +660,7 @@ router.get("/seraph/*", async (req, res) => {
       );
       const buffer = Buffer.from(cssText, "utf-8");
       setCachedAsset(cacheKey, buffer, "text/css");
-      return serveAsset(req, res, buffer, rawPath, "text/css");
+      return serveAsset(req, res, buffer, rawPath, "text/css", false, response.url);
     }
 
     const mime = getMimeType(cleanPathNoQuery, response.headers.get("content-type"));
@@ -725,7 +727,7 @@ router.get("/3kh0/*", async (req, res) => {
       );
       const buffer = Buffer.from(jsText, "utf-8");
       setCachedAsset(cacheKey, buffer, "application/javascript");
-      return serveAsset(req, res, buffer, rawPath, "application/javascript");
+      return serveAsset(req, res, buffer, rawPath, "application/javascript", false, response.url);
     }
 
     const mime = getMimeType(cleanPathNoQuery, response.headers.get("content-type"));
