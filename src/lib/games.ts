@@ -1,6 +1,5 @@
 // Custom games list module
 // --- Existing code from your provided snippet ---
-import luminSdkGamesData from "../data/luminSdkGames.json";
 import { getCoverStyle } from "./frostedStore";
 
 export type GameCategory =
@@ -118,30 +117,12 @@ export function createStyledSvgCover(title: string, category: string = "game"): 
 }
 
 export function gameCover(game: Game) {
-  const style = getCoverStyle();
-
-  // If style is "sdk", use the actual Lumin SDK icon if available
-  if (style === "sdk" && (game as any).imageToken) {
-    return `https://a.luminsdk.com/api/v1/icon/${(game as any).imageToken}`;
-  }
-
-  // Fallback to actual Lumin SDK icon instead of generated SVG covers
-  if (game.image && game.image.startsWith("data:image/svg+xml") && (game as any).imageToken) {
-    return `https://a.luminsdk.com/api/v1/icon/${(game as any).imageToken}`;
-  }
-
-  // Otherwise, use resolved high-res images
   if (game.image) {
     return game.image;
   }
 
   if (typeof game.id === "number" || (typeof game.id === "string" && !isNaN(Number(game.id)))) {
     return `${GN_COVERS_CDN}/${game.id}.png`;
-  }
-
-  // If all else fails and there's an imageToken, use actual SDK icon
-  if ((game as any).imageToken) {
-    return `https://a.luminsdk.com/api/v1/icon/${(game as any).imageToken}`;
   }
 
   return createStyledSvgCover(game.name || "Game", game.category);
@@ -449,83 +430,7 @@ export async function fetchGames(): Promise<Game[]> {
     }
   }
 
-  function resolveCoverForSdkGame(g: Game): string {
-    // 1. Use already resolved high-res images from our JSON (Steam, Wiki)
-    if (g.image && !g.image.startsWith("data:image/svg+xml")) {
-      return g.image;
-    }
-
-    const nameClean = (g.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-
-    // 2. Exact clean name match in GN math list
-    if (gnCoverLookup.has(nameClean)) {
-      return gnCoverLookup.get(nameClean)!;
-    }
-
-    let dirSlug = "";
-    if (g.directory) {
-      const parts = g.directory.split("/");
-      dirSlug = (parts[parts.length - 1] || parts[parts.length - 2] || "")
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, "")
-        .replace(/\.html$/, "");
-    }
-
-    const sdkId = (g as any).sdkGameId || "";
-    const sdkIdSlug = sdkId
-      .replace(/^[^/]+\//, "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "");
-
-    // 3. Exact dir / sdkId slug match in GN math list
-    if (dirSlug) {
-      const hit = gnCoverList.find((x) => x.urlSlug === dirSlug || x.clean === dirSlug);
-      if (hit) return hit.cover;
-    }
-    if (sdkIdSlug) {
-      const hit = gnCoverList.find((x) => x.urlSlug === sdkIdSlug || x.clean === sdkIdSlug);
-      if (hit) return hit.cover;
-    }
-
-    // 4. Substring / Fuzzy match in GN math list
-    const hit = gnCoverList.find((x) => {
-      if (x.clean.length > 3 && (nameClean.includes(x.clean) || x.clean.includes(nameClean)))
-        return true;
-      if (
-        dirSlug &&
-        dirSlug.length > 3 &&
-        (x.urlSlug.includes(dirSlug) || dirSlug.includes(x.urlSlug))
-      )
-        return true;
-      return false;
-    });
-
-    if (hit) return hit.cover;
-
-    // 5. Fallback to actual Lumin SDK icon if available
-    if ((g as any).imageToken) {
-      return `https://a.luminsdk.com/api/v1/icon/${(g as any).imageToken}`;
-    }
-
-    // 6. Default high-res SVG cover
-    return createStyledSvgCover(g.name || "Game", g.category);
-  }
-
-  const sdkGames = (luminSdkGamesData as Game[]).map((g) => {
-    const sdkId =
-      (g as any).sdkGameId ||
-      (g.directory ? g.directory.replace(/^sdk\//, "") : String(g.id).replace(/^sdk-/, ""));
-
-    const resolvedImage = resolveCoverForSdkGame(g);
-
-    return {
-      ...g,
-      sdkGameId: sdkId,
-      image: resolvedImage,
-      isSdkGame: true,
-    };
-  });
-  const allList = [customGame, ...sdkGames, ...gnMathGames];
+  const allList = [customGame, ...gnMathGames];
 
   // Smart normalization & deduplication engine
   const gameMap = new Map<string, Game>();
@@ -592,7 +497,6 @@ export async function fetchGames(): Promise<Game[]> {
       raw = game.name || String(game.id);
     }
 
-    // Fallback directory-based normalization for other FNF mods / SDK games
     const rawClean = raw.toLowerCase().replace(/[-_.\s]/g, "");
     if (rawClean.includes("sarventes")) return "fnfsarventes";
     if (rawClean.includes("fnfmiku")) return "fnfmiku";
@@ -604,7 +508,6 @@ export async function fetchGames(): Promise<Game[]> {
 
     return raw
       .toLowerCase()
-      .replace(/^sdk\//, "")
       .replace(/^(selenite|truffled|quasar|builtin|games)\//, "")
       .replace(/[-_.\s]/g, "")
       .replace(/game$/g, "")
@@ -623,16 +526,7 @@ export async function fetchGames(): Promise<Game[]> {
         existing.image ||
         g.image;
 
-      if ((existing as any).isSdkGame) {
-        // Lumin SDK game takes priority for SDK game directory/config, but use best available cover image
-        gameMap.set(key, {
-          ...g,
-          ...existing,
-          image: bestImage,
-          featured: existing.featured || g.featured,
-          rating: Math.max(existing.rating || 0, g.rating || 0),
-        });
-      } else if (!existing.featured && g.featured) {
+      if (!existing.featured && g.featured) {
         gameMap.set(key, { ...existing, ...g, image: bestImage, featured: true });
       } else {
         gameMap.set(key, { ...existing, ...g, image: bestImage });

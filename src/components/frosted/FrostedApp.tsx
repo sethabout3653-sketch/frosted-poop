@@ -11,7 +11,6 @@ import { VerificationGate } from "./VerificationGate";
 import { DiscordChat } from "@/components/chat/DiscordChat";
 import { FrostedInAppNotification } from "@/components/chat/FrostedInAppNotification";
 import { applyAdScripts, triggerAdImpression } from "@/lib/adManager";
-import { LuminGames } from "./LuminGames";
 
 export function FrostedApp() {
   const [isVerified, setIsVerified] = useState<boolean>(() => {
@@ -29,7 +28,6 @@ export function FrostedApp() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isChatActive, setIsChatActive] = useState(false);
-  const [isLuminActive, setIsLuminActive] = useState(false);
 
   const {
     favorites,
@@ -48,7 +46,6 @@ export function FrostedApp() {
   useEffect(() => {
     const handleOpenChat = () => {
       setActiveGame(null);
-      setIsLuminActive(false);
       setIsChatActive(true);
     };
     window.addEventListener("frosted-open-chat", handleOpenChat);
@@ -86,7 +83,6 @@ export function FrostedApp() {
   const handleLaunchGameDirect = (game: Game) => {
     triggerAdImpression();
     setIsChatActive(false);
-    setIsLuminActive(false);
     setActiveGame(game);
     recordPlay({
       id: game.id,
@@ -105,14 +101,12 @@ export function FrostedApp() {
     if (gamesList.length === 0) return;
     triggerAdImpression();
     setIsChatActive(false);
-    setIsLuminActive(false);
     const randomIndex = Math.floor(Math.random() * gamesList.length);
     handleSelectGame(gamesList[randomIndex]);
   };
 
   const handleHome = () => {
     setIsChatActive(false);
-    setIsLuminActive(false);
     setActiveGame(null);
     setSearchQuery("");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -145,33 +139,21 @@ export function FrostedApp() {
           onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
           onOpenChat={() => {
             setActiveGame(null);
-            setIsLuminActive(false);
             setIsChatActive(!isChatActive);
-          }}
-          onOpenLumin={() => {
-            setActiveGame(null);
-            setIsChatActive(false);
-            setIsLuminActive(!isLuminActive);
           }}
           activeGame={activeGame}
           isChatActive={isChatActive}
-          isLuminActive={isLuminActive}
           isOffline={isOffline}
         />
       )}
 
       {/* Persistent Discord Chat Container */}
-      <div className={isChatActive && !isLuminActive ? "block" : "hidden"}>
+      <div className={isChatActive ? "block" : "hidden"}>
         <DiscordChat onReturnToGames={() => setIsChatActive(false)} />
       </div>
 
-      {/* Persistent Lumin Games Container */}
-      <div className={isLuminActive && !isChatActive ? "block" : "hidden"}>
-        <LuminGames />
-      </div>
-
-      {/* Main View: Game Player or Library Grid when Chat and Lumin views are inactive */}
-      {!isChatActive && !isLuminActive && (
+      {/* Main View: Game Player or Library Grid when Chat view is inactive */}
+      {!isChatActive && (
         <main>
           {activeGame ? (
             <GamePlayer

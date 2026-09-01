@@ -92,8 +92,8 @@ export function FrostedSettingsModal({
                     <Gamepad2 className="h-4 w-4" />
                   </div>
                   <div>
-                    <div className="text-xs font-semibold text-white">Classic SDK Icons</div>
-                    <div className="text-[10px] text-neutral-400">Actual Lumin SDK game icons</div>
+                    <div className="text-xs font-semibold text-white">Classic Icons</div>
+                    <div className="text-[10px] text-neutral-400">Classic icons and artwork</div>
                   </div>
                 </div>
                 {currentCoverStyle === "sdk" && (
