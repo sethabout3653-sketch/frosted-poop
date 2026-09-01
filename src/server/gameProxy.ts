@@ -225,6 +225,103 @@ function sanitizeAndCleanGameHtml(rawHtml: string): string {
       // 3. Prevent frame-busting redirects (forces game to remain inside iframe sandbox)
       Object.defineProperty(window, 'top', { get: function() { return window.self; } });
       Object.defineProperty(window, 'parent', { get: function() { return window.self; } });
+
+      // 4. Direct Touchscreen Interaction Engine (Touch, Pointer & Mouse Synthesizer)
+      function findTouchTarget(touch) {
+        if (!touch) return document.body;
+        var el = document.elementFromPoint(touch.clientX, touch.clientY);
+        if (el && (el.tagName === "CANVAS" || el.id === "gameContainer" || el.id === "unity-container")) {
+          return el;
+        }
+        var canvas = document.querySelector("canvas");
+        return el || canvas || document.body;
+      }
+
+      function dispatchSimulatedPointer(type, touch) {
+        if (!touch) return;
+        var target = findTouchTarget(touch);
+        var isUp = type === "mouseup";
+
+        // Auto-focus game canvas on touch
+        try {
+          if (target && target.focus && typeof target.focus === "function") {
+            target.focus();
+          }
+        } catch(_) {}
+
+        // 1. Mouse Event Synthesis
+        var mouseEvt = new MouseEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          view: window,
+          detail: isUp ? 0 : 1,
+          screenX: touch.screenX,
+          screenY: touch.screenY,
+          clientX: touch.clientX,
+          clientY: touch.clientY,
+          buttons: isUp ? 0 : 1,
+          button: 0
+        });
+        target.dispatchEvent(mouseEvt);
+
+        // 2. Pointer Event Synthesis (for Pixi, Phaser, Unity, Three.js)
+        if (window.PointerEvent) {
+          var pType = type === "mousedown" ? "pointerdown" : (isUp ? "pointerup" : "pointermove");
+          var pEvt = new PointerEvent(pType, {
+            bubbles: true,
+            cancelable: true,
+            view: window,
+            clientX: touch.clientX,
+            clientY: touch.clientY,
+            screenX: touch.screenX,
+            screenY: touch.screenY,
+            pointerId: touch.identifier || 1,
+            pointerType: "touch",
+            isPrimary: true,
+            pressure: isUp ? 0 : 0.5,
+            buttons: isUp ? 0 : 1,
+            button: 0
+          });
+          target.dispatchEvent(pEvt);
+        }
+      }
+
+      document.addEventListener("touchstart", function(e) {
+        if (e.touches && e.touches.length > 0) {
+          for (var i = 0; i < e.touches.length; i++) {
+            dispatchSimulatedPointer("mousedown", e.touches[i]);
+          }
+        }
+      }, { passive: true });
+
+      document.addEventListener("touchmove", function(e) {
+        if (e.touches && e.touches.length > 0) {
+          for (var i = 0; i < e.touches.length; i++) {
+            dispatchSimulatedPointer("mousemove", e.touches[i]);
+          }
+        }
+      }, { passive: true });
+
+      document.addEventListener("touchend", function(e) {
+        if (e.changedTouches && e.changedTouches.length > 0) {
+          for (var i = 0; i < e.changedTouches.length; i++) {
+            var touch = e.changedTouches[i];
+            dispatchSimulatedPointer("mouseup", touch);
+            var target = findTouchTarget(touch);
+            var clickEvt = new MouseEvent("click", {
+              bubbles: true,
+              cancelable: true,
+              view: window,
+              clientX: touch.clientX,
+              clientY: touch.clientY,
+              detail: 1,
+              button: 0,
+              buttons: 0
+            });
+            target.dispatchEvent(clickEvt);
+          }
+        }
+      }, { passive: true });
     } catch(e) {
       console.warn("[Shield] Failed to inject protection framework:", e);
     }

@@ -85,27 +85,137 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
     overflow: hidden !important;
     background-color: #000000 !important;
     color: #ffffff !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
   }
   #gameContainer, #unityContainer, #unity-container, #game-container, #unity-canvas-container, .webgl-content, #canvas, #unity-canvas, canvas, #MMFCanvas, #ruffle, .unity-desktop, embed, object {
     display: block !important;
-    margin: auto !important;
+    position: absolute !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
     max-width: 100vw !important;
     max-height: 100vh !important;
     width: 100% !important;
     height: 100% !important;
     object-fit: contain !important;
+    z-index: 99999 !important;
   }
-  .webgl-content .footer, #unity-footer, .unity-footer {
+  html, body, canvas, #gameContainer, #unityContainer, #unity-container, #game-container, #MMFCanvas, #ruffle, embed, object {
+    touch-action: none !important;
+    -webkit-touch-callout: none !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+  }
+  .webgl-content .footer, #unity-footer, .unity-footer,
+  #sidebarad, .ad-container, .floating-ad, #ad, .ad,
+  .navigation-bar, #top-bar, #nav-bar, .navbar {
     display: none !important;
   }
 </style>
 <script id="frosted-runtime-shield">
 (function() {
   window.__GAME_ASSET_MAP__ = window.__GAME_ASSET_MAP__ || new Map();
+
+  // 0. Direct Touchscreen Interaction Engine (Touch, Pointer & Mouse Synthesizer)
+  try {
+    function findTouchTarget(touch) {
+      if (!touch) return document.body;
+      var el = document.elementFromPoint(touch.clientX, touch.clientY);
+      if (el && (el.tagName === "CANVAS" || el.id === "gameContainer" || el.id === "unity-container")) {
+        return el;
+      }
+      var canvas = document.querySelector("canvas");
+      return el || canvas || document.body;
+    }
+
+    function dispatchSimulatedPointer(type, touch) {
+      if (!touch) return;
+      var target = findTouchTarget(touch);
+      var isUp = type === "mouseup";
+      
+      // Auto-focus game canvas on touch
+      try {
+        if (target && target.focus && typeof target.focus === "function") {
+          target.focus();
+        }
+      } catch(_) {}
+
+      // 1. Mouse Event Synthesis
+      var mouseEvt = new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        detail: isUp ? 0 : 1,
+        screenX: touch.screenX,
+        screenY: touch.screenY,
+        clientX: touch.clientX,
+        clientY: touch.clientY,
+        buttons: isUp ? 0 : 1,
+        button: 0
+      });
+      target.dispatchEvent(mouseEvt);
+
+      // 2. Pointer Event Synthesis (for Pixi, Phaser, Unity, Three.js)
+      if (window.PointerEvent) {
+        var pType = type === "mousedown" ? "pointerdown" : (isUp ? "pointerup" : "pointermove");
+        var pEvt = new PointerEvent(pType, {
+          bubbles: true,
+          cancelable: true,
+          view: window,
+          clientX: touch.clientX,
+          clientY: touch.clientY,
+          screenX: touch.screenX,
+          screenY: touch.screenY,
+          pointerId: touch.identifier || 1,
+          pointerType: "touch",
+          isPrimary: true,
+          pressure: isUp ? 0 : 0.5,
+          buttons: isUp ? 0 : 1,
+          button: 0
+        });
+        target.dispatchEvent(pEvt);
+      }
+    }
+
+    document.addEventListener("touchstart", function(e) {
+      if (e.touches && e.touches.length > 0) {
+        for (var i = 0; i < e.touches.length; i++) {
+          dispatchSimulatedPointer("mousedown", e.touches[i]);
+        }
+      }
+    }, { passive: true });
+
+    document.addEventListener("touchmove", function(e) {
+      if (e.touches && e.touches.length > 0) {
+        for (var i = 0; i < e.touches.length; i++) {
+          dispatchSimulatedPointer("mousemove", e.touches[i]);
+        }
+      }
+    }, { passive: true });
+
+    document.addEventListener("touchend", function(e) {
+      if (e.changedTouches && e.changedTouches.length > 0) {
+        for (var i = 0; i < e.changedTouches.length; i++) {
+          var touch = e.changedTouches[i];
+          dispatchSimulatedPointer("mouseup", touch);
+          var target = findTouchTarget(touch);
+          var clickEvt = new MouseEvent("click", {
+            bubbles: true,
+            cancelable: true,
+            view: window,
+            clientX: touch.clientX,
+            clientY: touch.clientY,
+            detail: 1,
+            button: 0,
+            buttons: 0
+          });
+          target.dispatchEvent(clickEvt);
+        }
+      }
+    }, { passive: true });
+  } catch(err) {
+    console.warn("Direct touchscreen engine error:", err);
+  }
 
   // 1. Responsive Canvas Auto-Fitter for Chromebooks
   function fitCanvases() {
