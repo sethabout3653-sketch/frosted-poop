@@ -1,5 +1,7 @@
 import { Buffer } from "node:buffer";
 import { Router } from "express";
+import fs from "node:fs";
+import path from "node:path";
 
 const router = Router();
 
@@ -155,7 +157,7 @@ function sanitizeAndCleanGameHtml(rawHtml: string): string {
 
   // 3. Remove malicious domain-lock and anti-leech scripts (e.g. scripts checking location.hostname)
   html = html.replace(
-    /<script\b[^>]*>(?:(?!<\/script>)[\s\S])*(?:IuySzzpOiISwZDDrwmF|sFfEkK\$fMziBAJZwZbkuvp|UravPbGESYjDUNqxKcf\$Vqza|_0x257e|_0xe8c3)[\s\S]*?<\/script>/gi,
+    /<script\b[^>]*>[\s\S]*?(?:IuySzzpOiISwZDDrwmF|sFfEkK\$fMziBAJZwZbkuvp|UravPbGESYjDUNqxKcf\$Vqza|_0x257e|_0xe8c3)[\s\S]*?<\/script>/gi,
     "",
   );
 
@@ -168,13 +170,29 @@ function sanitizeAndCleanGameHtml(rawHtml: string): string {
       window.alert = function() { console.log("[Shield] Blocked alert:", arguments); };
       window.confirm = function() { console.log("[Shield] Blocked confirm:", arguments); return true; };
       window.prompt = function() { console.log("[Shield] Blocked prompt:", arguments); return null; };
-      
+
       // 2. Disable window.open to stop redirect ads, popups, and popunders completely
       window.open = function() { console.log("[Shield] Blocked popup window.open:", arguments); return null; };
-      
+
       // 3. Prevent frame-busting redirects (forces game to remain inside iframe sandbox)
       Object.defineProperty(window, 'top', { get: function() { return window.self; } });
       Object.defineProperty(window, 'parent', { get: function() { return window.self; } });
+
+      // 4. Intercept Lumin SDK fetches to bypass CORS/CSP through our proxy
+      const originalFetch = window.fetch;
+      window.fetch = async function(...args) {
+        let [resource, config] = args;
+        if (typeof resource === "string") {
+          if (resource.includes("a.luminsdk.com/api/v1/")) {
+            const relPath = resource.split("a.luminsdk.com/api/v1/")[1];
+            resource = "/api/public/sdk/" + relPath;
+          } else if (resource.startsWith("/api/v1/")) {
+            const relPath = resource.split("/api/v1/")[1];
+            resource = "/api/public/sdk/" + relPath;
+          }
+        }
+        return originalFetch(resource, config);
+      };
     } catch(e) {
       console.warn("[Shield] Failed to inject protection framework:", e);
     }
@@ -261,6 +279,22 @@ function getMimeType(cleanPath: string, defaultContentType: string | null): stri
     return "application/octet-stream";
   }
   return defaultContentType || "application/octet-stream";
+}
+
+// Helper for reading raw request body as a buffer
+async function readRawBody(req: any): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    if (req.body && Buffer.isBuffer(req.body)) return resolve(req.body);
+    if (req.body && typeof req.body === "string") return resolve(Buffer.from(req.body));
+    if (req.body && typeof req.body === "object") {
+      return resolve(Buffer.from(JSON.stringify(req.body)));
+    }
+
+    const chunks: any[] = [];
+    req.on("data", (chunk: any) => chunks.push(chunk));
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", (err: any) => reject(err));
+  });
 }
 
 // Serve asset helper supporting standard features, Caching, and Range Requests (HTTP 206) for smooth audio/video playback
@@ -510,8 +544,25 @@ router.get("/gn/*", async (req, res) => {
     // Binary Assets
     const mime = getMimeType(cleanPathNoQuery, response.headers.get("content-type"));
     const encoding = response.headers.get("content-encoding") || undefined;
-    const buffer = Buffer.from(await response.arrayBuffer());
+    const contentLength = parseInt(response.headers.get("content-length") || "0", 10);
     const originalUrl = response.url;
+
+    // Direct redirect for large binary assets BEFORE buffering to save memory
+    if (contentLength > 4.5 * 1024 * 1024 && originalUrl) {
+      const binaryMimes = [
+        "application/octet-stream",
+        "application/wasm",
+        "image/",
+        "audio/",
+        "video/",
+        "font/",
+      ];
+      if (binaryMimes.some((m) => mime.startsWith(m))) {
+        return res.redirect(302, originalUrl);
+      }
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
 
     setCachedAsset(cacheKey, buffer, mime, encoding);
     return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip", originalUrl);
@@ -663,6 +714,20 @@ router.all("/sdk/*", async (req, res) => {
   try {
     const rawPath = (req.params as Record<string, string>)[0] || "";
     const method = req.method;
+
+    // Special case: serve local lumin.js if requested to avoid external fetch for the core script
+    if (rawPath === "lumin.js" && method === "GET") {
+      try {
+        const localPath = path.join(process.cwd(), "public", "lumin.js");
+        if (fs.existsSync(localPath)) {
+          const content = fs.readFileSync(localPath);
+          return serveAsset(req, res, content, "lumin.js", "application/javascript");
+        }
+      } catch (e) {
+        console.warn("Local lumin.js serve failed, falling back to proxy:", e);
+      }
+    }
+
     const cacheKey = `${method}:sdk:${rawPath}`;
 
     // Only cache GET requests
@@ -682,18 +747,29 @@ router.all("/sdk/*", async (req, res) => {
 
     let sdkUrl = `https://a.luminsdk.com/api/v1/${rawPath}`;
 
+    const headers: Record<string, string> = {
+      "User-Agent": req.headers["user-agent"] || "",
+      Referer: "https://a.luminsdk.com/",
+    };
+
+    // Only include Content-Type if we are sending a body
+    if (method !== "GET" && method !== "HEAD") {
+      if (req.headers["content-type"]) {
+        headers["Content-Type"] = req.headers["content-type"];
+      }
+    }
+
     const fetchOptions: any = {
       method,
       redirect: "follow",
-      headers: {
-        "User-Agent": req.headers["user-agent"] || "",
-        Referer: "https://a.luminsdk.com/",
-        "Content-Type": req.headers["content-type"] || "application/json",
-      },
+      headers,
     };
 
-    if (method !== "GET" && method !== "HEAD" && req.body) {
-      fetchOptions.body = JSON.stringify(req.body);
+    if (method !== "GET" && method !== "HEAD") {
+      const body = await readRawBody(req);
+      if (body && body.length > 0) {
+        fetchOptions.body = body;
+      }
     }
 
     const response = await fetch(sdkUrl, fetchOptions);
@@ -717,6 +793,13 @@ router.all("/sdk/*", async (req, res) => {
     }
 
     const contentType = response.headers.get("content-type");
+    const contentLength = parseInt(response.headers.get("content-length") || "0", 10);
+
+    // If it's a huge SDK asset, redirect to avoid crash
+    if (contentLength > 4.5 * 1024 * 1024 && method === "GET") {
+      return res.redirect(302, sdkUrl);
+    }
+
     const buffer = Buffer.from(await response.arrayBuffer());
 
     if (method === "GET") {

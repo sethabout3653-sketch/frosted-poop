@@ -59,22 +59,4 @@ export function handleFirestoreError(
   throw new Error(JSON.stringify(errInfo));
 }
 
-// Test Firestore connection as recommended by Firebase skill
-async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, "test", "connection"));
-    console.log("Firestore connection successful");
-  } catch (error) {
-    if (error instanceof Error && error.message.includes("the client is offline")) {
-      console.error("Firestore is offline. Please check your Firebase configuration.");
-    } else {
-      console.warn(
-        "Firestore connection test failed (expected if 'test/connection' doc doesn't exist):",
-        error,
-      );
-    }
-  }
-}
-testConnection();
-
 export default app;

@@ -32,6 +32,11 @@ app.use((req, res, next) => {
 
 // 2. Safe Body Parser that avoids stream consumption deadlocks on Vercel
 app.use((req, res, next) => {
+  // Skip body parsing for proxy routes to avoid stream issues and allow raw forwarding
+  if (req.url.startsWith("/api/public") || req.url.startsWith("/public")) {
+    return next();
+  }
+
   if (req.body !== undefined && req.body !== null) {
     if (typeof req.body === "string" && req.body.length > 0) {
       try {
