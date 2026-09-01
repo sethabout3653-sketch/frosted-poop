@@ -5,6 +5,54 @@ import path from "node:path";
 
 const router = Router();
 
+const VERCEL_PAYLOAD_LIMIT = 4.4 * 1024 * 1024;
+
+// Helper to safely download response bodies up to a maximum size.
+// Avoids Vercel OOM and Payload limit crashes by aborting large streams.
+async function safeDownload(response: Response, maxSize: number): Promise<Buffer | null> {
+  const contentLength = parseInt(response.headers.get("content-length") || "0", 10);
+  if (contentLength > maxSize) {
+    return null; // indicates too large
+  }
+
+  if (!response.body) {
+    return Buffer.alloc(0);
+  }
+
+  // Node.js native fetch provides a Web Stream with getReader
+  if (typeof (response.body as any).getReader === "function") {
+    const reader = (response.body as any).getReader();
+    const chunks: Uint8Array[] = [];
+    let totalSize = 0;
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          chunks.push(value);
+          totalSize += value.length;
+          if (totalSize > maxSize) {
+            reader.cancel();
+            return null;
+          }
+        }
+      }
+      return Buffer.concat(chunks);
+    } catch (err) {
+      reader.cancel();
+      throw err;
+    }
+  } else {
+    // Fallback if no getReader
+    const arrayBuffer = await response.arrayBuffer();
+    if (arrayBuffer.byteLength > maxSize) {
+      return null;
+    }
+    return Buffer.from(arrayBuffer);
+  }
+}
+
 // Cache Entry Interface
 interface CacheEntry {
   buffer: Buffer;
@@ -338,28 +386,14 @@ function serveAsset(
   originalUrl?: string,
 ) {
   const mime = getMimeType(rawPath, contentType);
-  const VERCEL_PAYLOAD_LIMIT = 4.4 * 1024 * 1024; // 4.4MB safety threshold
 
-  // If the asset is a binary asset and exceeds Vercel's payload limit, we MUST redirect
+  // If the asset exceeds Vercel's payload limit, we MUST redirect
   // to avoid a "Serverless Function Payload Too Large" error.
   if (buffer.length > VERCEL_PAYLOAD_LIMIT && originalUrl) {
-    const binaryMimes = [
-      "application/octet-stream",
-      "application/wasm",
-      "image/",
-      "audio/",
-      "video/",
-      "font/",
-    ];
-    const isBinary = binaryMimes.some((m) => mime.startsWith(m));
-    // We don't redirect for text types (HTML/JS/CSS) because they usually need sanitization/rewriting
-    // but if they are > 4.5MB we might have no choice.
-    if (isBinary || buffer.length > 8 * 1024 * 1024) {
-      console.log(
-        `[Proxy] Redirecting large asset (${(buffer.length / 1024 / 1024).toFixed(2)}MB) to: ${originalUrl}`,
-      );
-      return res.redirect(302, originalUrl);
-    }
+    console.log(
+      `[Proxy] Redirecting large asset (${(buffer.length / 1024 / 1024).toFixed(2)}MB) to: ${originalUrl}`,
+    );
+    return res.redirect(302, originalUrl);
   }
 
   // Detect GZIP magic bytes (0x1F 0x8B) or compressed extensions (.unityweb, .gz)
@@ -459,13 +493,10 @@ router.get("/g/*", async (req, res) => {
 
     const mime = getMimeType(rawPath, response.headers.get("content-type"));
     const encoding = response.headers.get("content-encoding") || undefined;
-    const contentLength = parseInt(response.headers.get("content-length") || "0", 10);
-
-    if (contentLength > 4.5 * 1024 * 1024) {
+    const buffer = await safeDownload(response, VERCEL_PAYLOAD_LIMIT);
+    if (!buffer) {
       return res.redirect(302, cdnUrl);
     }
-
-    const buffer = Buffer.from(await response.arrayBuffer());
 
     setCachedAsset(cacheKey, buffer, mime, encoding);
     return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip", cdnUrl);
@@ -587,25 +618,10 @@ router.get("/gn/*", async (req, res) => {
     // Binary Assets
     const mime = getMimeType(cleanPathNoQuery, response.headers.get("content-type"));
     const encoding = response.headers.get("content-encoding") || undefined;
-    const contentLength = parseInt(response.headers.get("content-length") || "0", 10);
-    const originalUrl = response.url;
-
-    // Direct redirect for large binary assets BEFORE buffering to save memory
-    if (contentLength > 4.5 * 1024 * 1024 && originalUrl) {
-      const binaryMimes = [
-        "application/octet-stream",
-        "application/wasm",
-        "image/",
-        "audio/",
-        "video/",
-        "font/",
-      ];
-      if (binaryMimes.some((m) => mime.startsWith(m))) {
-        return res.redirect(302, originalUrl);
-      }
+    const buffer = await safeDownload(response, VERCEL_PAYLOAD_LIMIT);
+    if (!buffer) {
+      return res.redirect(302, originalUrl);
     }
-
-    const buffer = Buffer.from(await response.arrayBuffer());
 
     setCachedAsset(cacheKey, buffer, mime, encoding);
     return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip", originalUrl);
@@ -678,14 +694,12 @@ router.get("/seraph/*", async (req, res) => {
 
     const mime = getMimeType(cleanPathNoQuery, response.headers.get("content-type"));
     const encoding = response.headers.get("content-encoding") || undefined;
-    const contentLength = parseInt(response.headers.get("content-length") || "0", 10);
     const originalUrl = response.url;
 
-    if (contentLength > 4.5 * 1024 * 1024 && originalUrl) {
+    const buffer = await safeDownload(response, VERCEL_PAYLOAD_LIMIT);
+    if (!buffer) {
       return res.redirect(302, originalUrl);
     }
-
-    const buffer = Buffer.from(await response.arrayBuffer());
 
     setCachedAsset(cacheKey, buffer, mime, encoding);
     return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip", originalUrl);
@@ -747,14 +761,12 @@ router.get("/3kh0/*", async (req, res) => {
 
     const mime = getMimeType(cleanPathNoQuery, response.headers.get("content-type"));
     const encoding = response.headers.get("content-encoding") || undefined;
-    const contentLength = parseInt(response.headers.get("content-length") || "0", 10);
     const originalUrl = response.url;
 
-    if (contentLength > 4.5 * 1024 * 1024 && originalUrl) {
+    const buffer = await safeDownload(response, VERCEL_PAYLOAD_LIMIT);
+    if (!buffer) {
       return res.redirect(302, originalUrl);
     }
-
-    const buffer = Buffer.from(await response.arrayBuffer());
 
     setCachedAsset(cacheKey, buffer, mime, encoding);
     return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip", originalUrl);
@@ -837,13 +849,12 @@ router.all("/sdk/*", async (req, res) => {
         const cleanPathNoQuery = rawPath.split("?")[0] || "";
         const mime = getMimeType(cleanPathNoQuery, secondResponse.headers.get("content-type"));
         const encoding = secondResponse.headers.get("content-encoding") || undefined;
-        const contentLength = parseInt(secondResponse.headers.get("content-length") || "0", 10);
 
-        if (contentLength > 4.5 * 1024 * 1024) {
+        const buffer = await safeDownload(secondResponse, VERCEL_PAYLOAD_LIMIT);
+        if (!buffer) {
           return res.redirect(302, sdkUrl);
         }
 
-        const buffer = Buffer.from(await secondResponse.arrayBuffer());
         setCachedAsset(cacheKey, buffer, mime, encoding);
         return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip", sdkUrl);
       }
@@ -854,14 +865,14 @@ router.all("/sdk/*", async (req, res) => {
     }
 
     const contentType = response.headers.get("content-type");
-    const contentLength = parseInt(response.headers.get("content-length") || "0", 10);
 
-    // If it's a huge SDK asset, redirect to avoid crash
-    if (contentLength > 4.5 * 1024 * 1024 && method === "GET") {
-      return res.redirect(302, sdkUrl);
+    const buffer = await safeDownload(response, VERCEL_PAYLOAD_LIMIT);
+    if (!buffer) {
+      if (method === "GET") {
+        return res.redirect(302, sdkUrl);
+      }
+      return res.status(413).send("Payload Too Large");
     }
-
-    const buffer = Buffer.from(await response.arrayBuffer());
 
     if (method === "GET") {
       const cleanPathNoQuery = rawPath.split("?")[0] || "";
