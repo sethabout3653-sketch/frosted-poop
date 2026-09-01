@@ -296,10 +296,7 @@ export function GamePlayer({
 
       {/* Main Game Screen Container */}
       <div className="w-full flex-1">
-        <div
-          ref={containerRef}
-          className="relative w-full h-[80vh] overflow-hidden bg-black"
-        >
+        <div ref={containerRef} className="relative w-full h-[80vh] overflow-hidden bg-black">
           {iframeLoading && (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/90 backdrop-blur-sm">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-neutral-600 border-t-white" />
