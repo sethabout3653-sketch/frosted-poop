@@ -631,4 +631,42 @@ router.get("/3kh0/*", async (req, res) => {
   }
 });
 
+// Route 5: Lumin SDK Proxy
+router.get("/sdk/*", async (req, res) => {
+  try {
+    const rawPath = (req.params as Record<string, string>)[0] || "";
+    const cacheKey = `sdk:${rawPath}`;
+
+    const cached = getCachedAsset(cacheKey);
+    if (cached) {
+      return serveAsset(req, res, cached.buffer, rawPath, cached.mime, cached.encoding === "gzip");
+    }
+
+    const sdkUrl = `https://a.luminsdk.com/api/v1/game/${rawPath}`;
+    const response = await fetch(sdkUrl, {
+      redirect: "follow",
+      headers: {
+        "User-Agent": req.headers["user-agent"] || "",
+        Referer: "https://a.luminsdk.com/",
+      },
+    });
+
+    if (!response.ok) {
+      return res.status(response.status).send("Lumin SDK asset not found");
+    }
+
+    const cleanPathNoQuery = rawPath.split("?")[0] || "";
+    const mime = getMimeType(cleanPathNoQuery, response.headers.get("content-type"));
+    const encoding = response.headers.get("content-encoding") || undefined;
+    const buffer = Buffer.from(await response.arrayBuffer());
+
+    // We don't sanitize SDK HTML yet unless needed, but let's cache it
+    setCachedAsset(cacheKey, buffer, mime, encoding);
+    return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip");
+  } catch (err) {
+    console.error("Lumin SDK proxy error:", err);
+    return res.status(500).send("Lumin SDK proxy error");
+  }
+});
+
 export default router;

@@ -478,7 +478,7 @@ export async function loadGameSource(directory: string): Promise<GameLoadResult>
         if (!(window as any).Lumin) {
           await new Promise<void>((resolve) => {
             const script = document.createElement("script");
-            script.src = "https://cdn.jsdelivr.net/gh/luminsdk/script@latest/lumin.min.js";
+            script.src = "/lumin.js";
             script.onload = () => resolve();
             script.onerror = () => resolve();
             document.body.appendChild(script);
@@ -502,7 +502,13 @@ export async function loadGameSource(directory: string): Promise<GameLoadResult>
           if (typeof l.getGameUrl === "function") {
             const gameData = await l.getGameUrl(sdkGameId);
             if (gameData && gameData.url) {
-              return { type: "url", src: gameData.url, cdnUsed: "Lumin Cloud" };
+              let finalUrl = gameData.url;
+              // Proxy Lumin Cloud URLs through our server to bypass CORS/CSP issues on Vercel
+              if (finalUrl.includes("a.luminsdk.com/api/v1/game/")) {
+                const relPath = finalUrl.split("a.luminsdk.com/api/v1/game/")[1];
+                finalUrl = `/api/public/sdk/${relPath}`;
+              }
+              return { type: "url", src: finalUrl, cdnUsed: "Lumin Cloud" };
             }
           }
         }
