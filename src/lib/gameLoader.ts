@@ -162,6 +162,10 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
     u = u.replace(new RegExp("https://raw\\.esm\\.sh/([^/@]+)/([^/@]+)/([^/]+)/", "g"), "https://cdn.jsdelivr.net/gh/$1/$2@$3/");
     u = u.replace(new RegExp("https://cdn\\.statically\\.io/gh/([^/@]+)/([^/@]+)/([^/]+)/", "g"), "https://cdn.jsdelivr.net/gh/$1/$2@$3/");
     u = u.replace(new RegExp("https://cdn\\.staticdelivr\\.com/gh/", "g"), "https://cdn.jsdelivr.net/gh/");
+    
+    // Proxy all jsDelivr and GitHub requests through our local API to bypass Vercel CORS/CSP restrictions
+    u = u.replace(new RegExp("https://cdn.jsdelivr.net/gh/", "g"), "/api/public/gn/cdn/");
+    u = u.replace(new RegExp("https://raw.githubusercontent.com/", "g"), "/api/public/gn/gh/");
 
     return u;
   }
@@ -475,6 +479,20 @@ export async function loadGameSource(directory: string): Promise<GameLoadResult>
     const sdkGameId = directory.replace(/^sdk\//, "");
     if (typeof window !== "undefined") {
       try {
+        // Ensure global fetch interceptor for Lumin to bypass CORS/CSP in all contexts
+        if (typeof window !== "undefined" && !(window as any)._luminProxyActive) {
+          (window as any)._luminProxyActive = true;
+          const originalFetch = window.fetch;
+          window.fetch = async (...args) => {
+            const [resource, config] = args;
+            if (typeof resource === "string" && resource.includes("a.luminsdk.com/api/v1/")) {
+              const relPath = resource.split("a.luminsdk.com/api/v1/")[1];
+              return originalFetch(`/api/public/sdk/${relPath}`, config);
+            }
+            return originalFetch(resource, config);
+          };
+        }
+
         if (!(window as any).Lumin) {
           await new Promise<void>((resolve) => {
             const script = document.createElement("script");

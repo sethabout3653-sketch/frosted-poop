@@ -271,8 +271,32 @@ function serveAsset(
   rawPath: string,
   contentType: string | null,
   isCompressedGzip = false,
+  originalUrl?: string,
 ) {
   const mime = getMimeType(rawPath, contentType);
+  const VERCEL_PAYLOAD_LIMIT = 4.4 * 1024 * 1024; // 4.4MB safety threshold
+
+  // If the asset is a binary asset and exceeds Vercel's payload limit, we MUST redirect
+  // to avoid a "Serverless Function Payload Too Large" error.
+  if (buffer.length > VERCEL_PAYLOAD_LIMIT && originalUrl) {
+    const binaryMimes = [
+      "application/octet-stream",
+      "application/wasm",
+      "image/",
+      "audio/",
+      "video/",
+      "font/",
+    ];
+    const isBinary = binaryMimes.some((m) => mime.startsWith(m));
+    // We don't redirect for text types (HTML/JS/CSS) because they usually need sanitization/rewriting
+    // but if they are > 4.5MB we might have no choice.
+    if (isBinary || buffer.length > 8 * 1024 * 1024) {
+      console.log(
+        `[Proxy] Redirecting large asset (${(buffer.length / 1024 / 1024).toFixed(2)}MB) to: ${originalUrl}`,
+      );
+      return res.redirect(302, originalUrl);
+    }
+  }
 
   // Detect GZIP magic bytes (0x1F 0x8B) or compressed extensions (.unityweb, .gz)
   const isGzip =
@@ -367,7 +391,7 @@ router.get("/g/*", async (req, res) => {
     const encoding = response.headers.get("content-encoding") || undefined;
 
     setCachedAsset(cacheKey, buffer, mime, encoding);
-    return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip");
+    return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip", cdnUrl);
   } catch (err) {
     console.error("Game proxy error:", err);
     return res.status(500).send("Game proxy error");
@@ -487,9 +511,10 @@ router.get("/gn/*", async (req, res) => {
     const mime = getMimeType(cleanPathNoQuery, response.headers.get("content-type"));
     const encoding = response.headers.get("content-encoding") || undefined;
     const buffer = Buffer.from(await response.arrayBuffer());
+    const originalUrl = response.url;
 
     setCachedAsset(cacheKey, buffer, mime, encoding);
-    return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip");
+    return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip", originalUrl);
   } catch (err) {
     console.error("GN Game proxy error:", err);
     return res.status(500).send("GN Game proxy error");
@@ -560,9 +585,10 @@ router.get("/seraph/*", async (req, res) => {
     const mime = getMimeType(cleanPathNoQuery, response.headers.get("content-type"));
     const encoding = response.headers.get("content-encoding") || undefined;
     const buffer = Buffer.from(await response.arrayBuffer());
+    const originalUrl = response.url;
 
     setCachedAsset(cacheKey, buffer, mime, encoding);
-    return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip");
+    return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip", originalUrl);
   } catch (err) {
     console.error("Seraph proxy error:", err);
     return res.status(500).send("Seraph proxy error");
@@ -622,9 +648,10 @@ router.get("/3kh0/*", async (req, res) => {
     const mime = getMimeType(cleanPathNoQuery, response.headers.get("content-type"));
     const encoding = response.headers.get("content-encoding") || undefined;
     const buffer = Buffer.from(await response.arrayBuffer());
+    const originalUrl = response.url;
 
     setCachedAsset(cacheKey, buffer, mime, encoding);
-    return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip");
+    return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip", originalUrl);
   } catch (err) {
     console.error("3kh0 proxy error:", err);
     return res.status(500).send("3kh0 proxy error");
@@ -632,37 +659,76 @@ router.get("/3kh0/*", async (req, res) => {
 });
 
 // Route 5: Lumin SDK Proxy
-router.get("/sdk/*", async (req, res) => {
+router.all("/sdk/*", async (req, res) => {
   try {
     const rawPath = (req.params as Record<string, string>)[0] || "";
-    const cacheKey = `sdk:${rawPath}`;
+    const method = req.method;
+    const cacheKey = `${method}:sdk:${rawPath}`;
 
-    const cached = getCachedAsset(cacheKey);
-    if (cached) {
-      return serveAsset(req, res, cached.buffer, rawPath, cached.mime, cached.encoding === "gzip");
+    // Only cache GET requests
+    if (method === "GET") {
+      const cached = getCachedAsset(cacheKey);
+      if (cached) {
+        return serveAsset(
+          req,
+          res,
+          cached.buffer,
+          rawPath,
+          cached.mime,
+          cached.encoding === "gzip",
+        );
+      }
     }
 
-    const sdkUrl = `https://a.luminsdk.com/api/v1/game/${rawPath}`;
-    const response = await fetch(sdkUrl, {
+    let sdkUrl = `https://a.luminsdk.com/api/v1/${rawPath}`;
+
+    const fetchOptions: any = {
+      method,
       redirect: "follow",
       headers: {
         "User-Agent": req.headers["user-agent"] || "",
         Referer: "https://a.luminsdk.com/",
+        "Content-Type": req.headers["content-type"] || "application/json",
       },
-    });
+    };
 
-    if (!response.ok) {
-      return res.status(response.status).send("Lumin SDK asset not found");
+    if (method !== "GET" && method !== "HEAD" && req.body) {
+      fetchOptions.body = JSON.stringify(req.body);
     }
 
-    const cleanPathNoQuery = rawPath.split("?")[0] || "";
-    const mime = getMimeType(cleanPathNoQuery, response.headers.get("content-type"));
-    const encoding = response.headers.get("content-encoding") || undefined;
+    const response = await fetch(sdkUrl, fetchOptions);
+
+    if (!response.ok && !rawPath.startsWith("game/") && method === "GET") {
+      // Fallback to game subpath for GET requests if direct v1 fetch fails
+      sdkUrl = `https://a.luminsdk.com/api/v1/game/${rawPath}`;
+      const secondResponse = await fetch(sdkUrl, fetchOptions);
+      if (secondResponse.ok) {
+        const cleanPathNoQuery = rawPath.split("?")[0] || "";
+        const mime = getMimeType(cleanPathNoQuery, secondResponse.headers.get("content-type"));
+        const encoding = secondResponse.headers.get("content-encoding") || undefined;
+        const buffer = Buffer.from(await secondResponse.arrayBuffer());
+        setCachedAsset(cacheKey, buffer, mime, encoding);
+        return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip", sdkUrl);
+      }
+    }
+
+    if (!response.ok) {
+      return res.status(response.status).send(`Lumin SDK ${method} failed`);
+    }
+
+    const contentType = response.headers.get("content-type");
     const buffer = Buffer.from(await response.arrayBuffer());
 
-    // We don't sanitize SDK HTML yet unless needed, but let's cache it
-    setCachedAsset(cacheKey, buffer, mime, encoding);
-    return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip");
+    if (method === "GET") {
+      const cleanPathNoQuery = rawPath.split("?")[0] || "";
+      const mime = getMimeType(cleanPathNoQuery, contentType);
+      const encoding = response.headers.get("content-encoding") || undefined;
+      setCachedAsset(cacheKey, buffer, mime, encoding);
+      return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip", sdkUrl);
+    }
+
+    res.setHeader("Content-Type", contentType || "application/json");
+    return res.send(buffer);
   } catch (err) {
     console.error("Lumin SDK proxy error:", err);
     return res.status(500).send("Lumin SDK proxy error");
