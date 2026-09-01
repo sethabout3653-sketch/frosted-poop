@@ -295,10 +295,13 @@ export function GamePlayer({
       </div>
 
       {/* Main Game Screen Container */}
-      <div className="w-full flex-1">
-        <div ref={containerRef} className="relative w-full h-[80vh] overflow-hidden bg-black">
+      <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 w-full max-w-[1280px] mx-auto">
+        <div
+          ref={containerRef}
+          className="relative w-full h-[70vh] min-h-[500px] overflow-hidden rounded-2xl border border-neutral-800 bg-black shadow-2xl flex items-center justify-center"
+        >
           {iframeLoading && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/90 backdrop-blur-sm">
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/90 backdrop-blur-sm pointer-events-none">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-neutral-600 border-t-white" />
               <p className="mt-3 text-xs text-neutral-400 font-mono">Loading full game...</p>
             </div>
