@@ -84,6 +84,7 @@ app.use((req, _res, next) => {
     string | undefined;
   if (
     matchedHeader &&
+    !matchedHeader.startsWith("/api/public") && // Avoid overwriting proxy paths with generic catch-all
     (matchedHeader.includes("/chat") ||
       matchedHeader.includes("/public") ||
       matchedHeader.includes("/health"))

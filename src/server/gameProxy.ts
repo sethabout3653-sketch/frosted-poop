@@ -193,6 +193,21 @@ function sanitizeAndCleanGameHtml(rawHtml: string): string {
         }
         return originalFetch(resource, config);
       };
+
+      // 5. Intercept XMLHttpRequest for same reasons
+      const originalOpen = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function(method, url) {
+        if (typeof url === "string") {
+          if (url.includes("a.luminsdk.com/api/v1/")) {
+            const relPath = url.split("a.luminsdk.com/api/v1/")[1];
+            url = "/api/public/sdk/" + relPath;
+          } else if (url.startsWith("/api/v1/")) {
+            const relPath = url.split("/api/v1/")[1];
+            url = "/api/public/sdk/" + relPath;
+          }
+        }
+        return originalOpen.apply(this, [method, url].concat(Array.prototype.slice.call(arguments, 2)));
+      };
     } catch(e) {
       console.warn("[Shield] Failed to inject protection framework:", e);
     }
@@ -281,19 +296,34 @@ function getMimeType(cleanPath: string, defaultContentType: string | null): stri
   return defaultContentType || "application/octet-stream";
 }
 
-// Helper for reading raw request body as a buffer
+// Helper for reading raw request body as a buffer with safety timeout
 async function readRawBody(req: any): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     if (req.body && Buffer.isBuffer(req.body)) return resolve(req.body);
     if (req.body && typeof req.body === "string") return resolve(Buffer.from(req.body));
     if (req.body && typeof req.body === "object") {
-      return resolve(Buffer.from(JSON.stringify(req.body)));
+      try {
+        return resolve(Buffer.from(JSON.stringify(req.body)));
+      } catch {
+        return resolve(Buffer.alloc(0));
+      }
     }
+
+    // Set a safety timeout to prevent hanging the serverless function
+    const timeout = setTimeout(() => {
+      resolve(Buffer.alloc(0));
+    }, 5000);
 
     const chunks: any[] = [];
     req.on("data", (chunk: any) => chunks.push(chunk));
-    req.on("end", () => resolve(Buffer.concat(chunks)));
-    req.on("error", (err: any) => reject(err));
+    req.on("end", () => {
+      clearTimeout(timeout);
+      resolve(Buffer.concat(chunks));
+    });
+    req.on("error", (err: any) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
   });
 }
 
@@ -370,19 +400,26 @@ function serveAsset(
 
   // Handle Range Requests (important for seamless HTML5 Audio streaming in Safari and Chrome)
   const rangeHeader = req.headers.range;
-  if (rangeHeader) {
-    const parts = rangeHeader.replace(/bytes=/, "").split("-");
-    const start = parseInt(parts[0], 10);
-    const end = parts[1] ? parseInt(parts[1], 10) : buffer.length - 1;
+  if (rangeHeader && buffer.length > 0) {
+    const rangeMatch = rangeHeader.match(/bytes=(\d+)-(\d+)?/);
+    if (rangeMatch) {
+      const start = parseInt(rangeMatch[1], 10);
+      const end = rangeMatch[2] ? parseInt(rangeMatch[2], 10) : buffer.length - 1;
 
-    if (start < buffer.length && end < buffer.length && start <= end) {
-      const chunk = buffer.subarray(start, end + 1);
-      res.status(206);
-      res.setHeader("Content-Range", `bytes ${start}-${end}/${buffer.length}`);
-      res.setHeader("Content-Length", chunk.length);
-      res.setHeader("Content-Type", mime);
-      res.setHeader("Cache-Control", "public, max-age=86400");
-      return res.send(chunk);
+      if (
+        !isNaN(start) &&
+        start < buffer.length &&
+        (isNaN(end) || (end < buffer.length && start <= end))
+      ) {
+        const finalEnd = isNaN(end) ? buffer.length - 1 : end;
+        const chunk = buffer.subarray(start, finalEnd + 1);
+        res.status(206);
+        res.setHeader("Content-Range", `bytes ${start}-${finalEnd}/${buffer.length}`);
+        res.setHeader("Content-Length", chunk.length);
+        res.setHeader("Content-Type", mime);
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        return res.send(chunk);
+      }
     }
   }
 
@@ -420,9 +457,15 @@ router.get("/g/*", async (req, res) => {
       return res.send(html);
     }
 
-    const buffer = Buffer.from(await response.arrayBuffer());
     const mime = getMimeType(rawPath, response.headers.get("content-type"));
     const encoding = response.headers.get("content-encoding") || undefined;
+    const contentLength = parseInt(response.headers.get("content-length") || "0", 10);
+
+    if (contentLength > 4.5 * 1024 * 1024) {
+      return res.redirect(302, cdnUrl);
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
 
     setCachedAsset(cacheKey, buffer, mime, encoding);
     return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip", cdnUrl);
@@ -635,8 +678,14 @@ router.get("/seraph/*", async (req, res) => {
 
     const mime = getMimeType(cleanPathNoQuery, response.headers.get("content-type"));
     const encoding = response.headers.get("content-encoding") || undefined;
-    const buffer = Buffer.from(await response.arrayBuffer());
+    const contentLength = parseInt(response.headers.get("content-length") || "0", 10);
     const originalUrl = response.url;
+
+    if (contentLength > 4.5 * 1024 * 1024 && originalUrl) {
+      return res.redirect(302, originalUrl);
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
 
     setCachedAsset(cacheKey, buffer, mime, encoding);
     return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip", originalUrl);
@@ -698,8 +747,14 @@ router.get("/3kh0/*", async (req, res) => {
 
     const mime = getMimeType(cleanPathNoQuery, response.headers.get("content-type"));
     const encoding = response.headers.get("content-encoding") || undefined;
-    const buffer = Buffer.from(await response.arrayBuffer());
+    const contentLength = parseInt(response.headers.get("content-length") || "0", 10);
     const originalUrl = response.url;
+
+    if (contentLength > 4.5 * 1024 * 1024 && originalUrl) {
+      return res.redirect(302, originalUrl);
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
 
     setCachedAsset(cacheKey, buffer, mime, encoding);
     return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip", originalUrl);
@@ -782,6 +837,12 @@ router.all("/sdk/*", async (req, res) => {
         const cleanPathNoQuery = rawPath.split("?")[0] || "";
         const mime = getMimeType(cleanPathNoQuery, secondResponse.headers.get("content-type"));
         const encoding = secondResponse.headers.get("content-encoding") || undefined;
+        const contentLength = parseInt(secondResponse.headers.get("content-length") || "0", 10);
+
+        if (contentLength > 4.5 * 1024 * 1024) {
+          return res.redirect(302, sdkUrl);
+        }
+
         const buffer = Buffer.from(await secondResponse.arrayBuffer());
         setCachedAsset(cacheKey, buffer, mime, encoding);
         return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip", sdkUrl);
