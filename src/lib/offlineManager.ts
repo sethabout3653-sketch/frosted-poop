@@ -45,11 +45,11 @@ export function getGameTargetUrls(game: Game): string[] {
   if (filename.startsWith("3kh0/")) {
     const rawF = filename.replace("3kh0/", "");
     urls.push(`/api/public/3kh0/${rawF}`);
-    urls.push(`https://cdn.jsdelivr.net/gh/3kh0/3kh0-Assets@main/${rawF}`);
+    urls.push(`https://raw.githack.com/3kh0/3kh0-Assets/main/${rawF}`);
     urls.push(`https://raw.githubusercontent.com/3kh0/3kh0-Assets/main/${rawF}`);
   } else {
     urls.push(`/api/public/gn/game/${filename}`);
-    urls.push(`https://cdn.jsdelivr.net/gh/freebuisness/html@main/${filename}`);
+    urls.push(`https://raw.githack.com/freebuisness/html/main/${filename}`);
     urls.push(`https://raw.githubusercontent.com/freebuisness/html/main/${filename}`);
   }
 

@@ -110,7 +110,7 @@ function setCachedAsset(key: string, buffer: Buffer, mime: string, encoding?: st
 // Helper for fetching CDN assets across multiple CDN networks with GitHub raw fallback
 async function fetchGNAsset(
   subPath: string,
-  preferredCdn: string = "jsdelivr",
+  preferredCdn: string = "githack",
 ): Promise<{ response: Response; urlUsed: string } | null> {
   const parts = subPath.split("/");
   let userRepo = "";
@@ -134,14 +134,14 @@ async function fetchGNAsset(
   // Build URLs for specific CDN
   const addCdnUrl = (cdn: string) => {
     if (cdn === "quantil") {
-      urlsToTry.push(`https://quantil.jsdelivr.net/gh/${subPath}`);
-      if (userRepo) urlsToTry.push(`https://quantil.jsdelivr.net/gh/${userRepo}@${branch}/${rest}`);
+      urlsToTry.push(`https://raw.githack.com/${subPath}`);
+      if (userRepo) urlsToTry.push(`https://raw.githack.com/${userRepo}/${branch}/${rest}`);
     } else if (cdn === "fastly") {
-      urlsToTry.push(`https://fastly.jsdelivr.net/gh/${subPath}`);
-      if (userRepo) urlsToTry.push(`https://fastly.jsdelivr.net/gh/${userRepo}@${branch}/${rest}`);
+      urlsToTry.push(`https://raw.githack.com/${subPath}`);
+      if (userRepo) urlsToTry.push(`https://raw.githack.com/${userRepo}/${branch}/${rest}`);
     } else if (cdn === "gcore") {
-      urlsToTry.push(`https://gcore.jsdelivr.net/gh/${subPath}`);
-      if (userRepo) urlsToTry.push(`https://gcore.jsdelivr.net/gh/${userRepo}@${branch}/${rest}`);
+      urlsToTry.push(`https://raw.githack.com/${subPath}`);
+      if (userRepo) urlsToTry.push(`https://raw.githack.com/${userRepo}/${branch}/${rest}`);
     } else if (cdn === "esm") {
       if (userRepo) urlsToTry.push(`https://raw.esm.sh/${userRepo}/${branch}/${rest}`);
     } else if (cdn === "statically") {
@@ -150,8 +150,8 @@ async function fetchGNAsset(
       urlsToTry.push(`https://cdn.staticdelivr.com/gh/${subPath}`);
       if (userRepo) urlsToTry.push(`https://cdn.staticdelivr.com/gh/${userRepo}@${branch}/${rest}`);
     } else {
-      urlsToTry.push(`https://cdn.jsdelivr.net/gh/${subPath}`);
-      if (userRepo) urlsToTry.push(`https://cdn.jsdelivr.net/gh/${userRepo}@${branch}/${rest}`);
+      urlsToTry.push(`https://raw.githack.com/${subPath}`);
+      if (userRepo) urlsToTry.push(`https://raw.githack.com/${userRepo}/${branch}/${rest}`);
     }
   };
 
@@ -159,7 +159,7 @@ async function fetchGNAsset(
   addCdnUrl(preferredCdn);
 
   // 2. Add all other CDN networks
-  const allCdns = ["jsdelivr", "quantil", "fastly", "gcore", "esm", "statically", "staticdelivr"];
+  const allCdns = ["githack", "quantil", "fastly", "gcore", "esm", "statically", "staticdelivr"];
   for (const cdn of allCdns) {
     if (cdn !== preferredCdn) {
       addCdnUrl(cdn);
@@ -284,7 +284,7 @@ function sanitizeAndCleanGameHtml(rawHtml: string): string {
   }
 
   // 5. Rewrite all CDN links to proxied local API endpoints
-  html = html.replace(/https:\/\/cdn\.jsdelivr\.net\/gh\//g, "/api/public/gn/cdn/");
+  html = html.replace(/https:\/\/raw\.githack\.com\//g, "/api/public/gn/cdn/");
   html = html.replace(/https:\/\/raw\.githubusercontent\.com\//g, "/api/public/gn/gh/");
 
   // 6. Rewrite or insert base href tag
@@ -303,7 +303,7 @@ function sanitizeAndCleanGameHtml(rawHtml: string): string {
   } else {
     // If a base tag was already present, rewrite it to proxy
     html = html.replace(
-      /<base([^>]*)\bhref=["\x27]https:\/\/cdn\.jsdelivr\.net\/gh\/([^"\x27]+)["\x27]/gi,
+      /<base([^>]*)\bhref=["\x27]https:\/\/raw\.githack\.com\/([^"\x27]+)["\x27]/gi,
       '<base$1href="/api/public/gn/cdn/$2"',
     );
     html = html.replace(
@@ -320,7 +320,7 @@ function sanitizeAndCleanGameHtml(rawHtml: string): string {
     const cleanUtyLoader = `
 <script id="undertale-yellow-clean-loader">
 (async function() {
-  const cdnBase = "https://cdn.jsdelivr.net/gh/giorgirick2-gif/game-webports-onawebsite@main/undertale-yellow/";
+  const cdnBase = "https://raw.githack.com/giorgirick2-gif/game-webports-onawebsite/main/undertale-yellow/";
   const totalParts = 12;
   const statusEl = document.getElementById("status");
   const progressEl = document.getElementById("progress");
@@ -654,7 +654,7 @@ router.get("/g/*", async (req, res) => {
       return serveAsset(req, res, cached.buffer, rawPath, cached.mime, cached.encoding === "gzip");
     }
 
-    const cdnUrl = `https://cdn.jsdelivr.net/gh/selenite-cc/selenite-old@main/${rawPath}`;
+    const cdnUrl = `https://raw.githack.com/selenite-cc/selenite-old/main/${rawPath}`;
     const response = await fetch(cdnUrl);
     if (!response.ok) {
       return res.status(response.status).send("Game asset not found");
@@ -703,7 +703,7 @@ router.get("/gn/*", async (req, res) => {
 
     if (rawPath.startsWith("cdn/")) {
       const cdnSubPath = rawPath.replace(/^cdn\//, "");
-      originalUrl = `https://cdn.jsdelivr.net/gh/${cdnSubPath}`;
+      originalUrl = `https://raw.githack.com/${cdnSubPath}`;
       const resData = await fetchGNAsset(cdnSubPath);
       if (resData) response = resData.response;
       cleanPathNoQuery = cdnSubPath.split("?")[0] || "";
@@ -771,7 +771,7 @@ router.get("/gn/*", async (req, res) => {
     // JS/CSS/JSON Rewrites (can also be cached to save bandwidth and compute)
     if (cleanPathNoQuery.endsWith(".js") || cleanPathNoQuery.endsWith(".mjs")) {
       let jsText = await response.text();
-      jsText = jsText.replace(/https:\/\/cdn\.jsdelivr\.net\/gh\//g, "/api/public/gn/cdn/");
+      jsText = jsText.replace(/https:\/\/raw\.githack\.com\//g, "/api/public/gn/cdn/");
       jsText = jsText.replace(/https:\/\/raw\.githubusercontent\.com\//g, "/api/public/gn/gh/");
       const buffer = Buffer.from(jsText, "utf-8");
       setCachedAsset(cacheKey, buffer, "application/javascript");
@@ -780,7 +780,7 @@ router.get("/gn/*", async (req, res) => {
 
     if (cleanPathNoQuery.endsWith(".css")) {
       let cssText = await response.text();
-      cssText = cssText.replace(/https:\/\/cdn\.jsdelivr\.net\/gh\//g, "/api/public/gn/cdn/");
+      cssText = cssText.replace(/https:\/\/raw\.githack\.com\//g, "/api/public/gn/cdn/");
       cssText = cssText.replace(/https:\/\/raw\.githubusercontent\.com\//g, "/api/public/gn/gh/");
       const buffer = Buffer.from(cssText, "utf-8");
       setCachedAsset(cacheKey, buffer, "text/css");
@@ -789,7 +789,7 @@ router.get("/gn/*", async (req, res) => {
 
     if (cleanPathNoQuery.endsWith(".json")) {
       let jsonText = await response.text();
-      jsonText = jsonText.replace(/https:\/\/cdn\.jsdelivr\.net\/gh\//g, "/api/public/gn/cdn/");
+      jsonText = jsonText.replace(/https:\/\/raw\.githack\.com\//g, "/api/public/gn/cdn/");
       jsonText = jsonText.replace(/https:\/\/raw\.githubusercontent\.com\//g, "/api/public/gn/gh/");
       const buffer = Buffer.from(jsonText, "utf-8");
       setCachedAsset(cacheKey, buffer, "application/json");
@@ -823,7 +823,7 @@ router.get("/seraph/*", async (req, res) => {
       return serveAsset(req, res, cached.buffer, rawPath, cached.mime, cached.encoding === "gzip");
     }
 
-    const seraphUrl = `https://cdn.jsdelivr.net/gh/a456pur/seraph@main/${rawPath}`;
+    const seraphUrl = `https://raw.githack.com/a456pur/seraph/main/${rawPath}`;
     let response = await fetch(seraphUrl, { redirect: "follow" });
     if (!response.ok) {
       const rawSeraphUrl = `https://raw.githubusercontent.com/a456pur/seraph/main/${rawPath}`;
@@ -845,7 +845,7 @@ router.get("/seraph/*", async (req, res) => {
       const rawText = await response.text();
       let sanitizedHtml = sanitizeAndCleanGameHtml(rawText);
       sanitizedHtml = sanitizedHtml.replace(
-        /https:\/\/cdn\.jsdelivr\.net\/gh\/a456pur\/seraph@main/g,
+        /https:\/\/raw\.githack\.com\/a456pur\/seraph\/main/g,
         "/api/public/seraph",
       );
       return res.send(sanitizedHtml);
@@ -854,7 +854,7 @@ router.get("/seraph/*", async (req, res) => {
     if (cleanPathNoQuery.endsWith(".js") || cleanPathNoQuery.endsWith(".mjs")) {
       let jsText = await response.text();
       jsText = jsText.replace(
-        /https:\/\/cdn\.jsdelivr\.net\/gh\/a456pur\/seraph@main/g,
+        /https:\/\/raw\.githack\.com\/a456pur\/seraph\/main/g,
         "/api/public/seraph",
       );
       const buffer = Buffer.from(jsText, "utf-8");
@@ -865,7 +865,7 @@ router.get("/seraph/*", async (req, res) => {
     if (cleanPathNoQuery.endsWith(".css")) {
       let cssText = await response.text();
       cssText = cssText.replace(
-        /https:\/\/cdn\.jsdelivr\.net\/gh\/a456pur\/seraph@main/g,
+        /https:\/\/raw\.githack\.com\/a456pur\/seraph\/main/g,
         "/api/public/seraph",
       );
       const buffer = Buffer.from(cssText, "utf-8");
@@ -901,7 +901,7 @@ router.get("/3kh0/*", async (req, res) => {
       return serveAsset(req, res, cached.buffer, rawPath, cached.mime, cached.encoding === "gzip");
     }
 
-    const primaryUrl = `https://cdn.jsdelivr.net/gh/3kh0/3kh0-Assets@main/${rawPath}`;
+    const primaryUrl = `https://raw.githack.com/3kh0/3kh0-Assets/main/${rawPath}`;
     let response = await fetch(primaryUrl, { redirect: "follow" });
     if (!response.ok) {
       const fallbackUrl = `https://raw.githubusercontent.com/3kh0/3kh0-Assets/main/${rawPath}`;
@@ -923,7 +923,7 @@ router.get("/3kh0/*", async (req, res) => {
       const rawText = await response.text();
       let sanitizedHtml = sanitizeAndCleanGameHtml(rawText);
       sanitizedHtml = sanitizedHtml.replace(
-        /https:\/\/cdn\.jsdelivr\.net\/gh\/3kh0\/3kh0-Assets@main/g,
+        /https:\/\/raw\.githack\.com\/3kh0\/3kh0-Assets\/main/g,
         "/api/public/3kh0",
       );
       return res.send(sanitizedHtml);
@@ -932,7 +932,7 @@ router.get("/3kh0/*", async (req, res) => {
     if (cleanPathNoQuery.endsWith(".js") || cleanPathNoQuery.endsWith(".mjs")) {
       let jsText = await response.text();
       jsText = jsText.replace(
-        /https:\/\/cdn\.jsdelivr\.net\/gh\/3kh0\/3kh0-Assets@main/g,
+        /https:\/\/raw\.githack\.com\/3kh0\/3kh0-Assets\/main/g,
         "/api/public/3kh0",
       );
       const buffer = Buffer.from(jsText, "utf-8");
@@ -961,7 +961,7 @@ let gnZoneSlugMapCache: Record<string, string> | null = null;
 async function getGnZoneSlugMap(): Promise<Record<string, string>> {
   if (gnZoneSlugMapCache) return gnZoneSlugMapCache;
   try {
-    const res = await fetch("https://cdn.jsdelivr.net/gh/freebuisness/assets@latest/zones.json");
+    const res = await fetch("https://raw.githack.com/freebuisness/assets/main/zones.json");
     if (res.ok) {
       const zones = (await res.json()) as Array<{ name?: string; url?: string }>;
       const map: Record<string, string> = {};
@@ -998,14 +998,14 @@ async function fetchAuthenticGameFallback(rawPath: string): Promise<string | nul
   if (cleanNormSlug === "soniccd") {
     candidates.push({
       url: "https://raw.githubusercontent.com/freebuisness/html/main/589-f.html",
-      baseHref: "https://cdn.jsdelivr.net/gh/freebuisness/html@main/",
+      baseHref: "https://raw.githack.com/freebuisness/html/main/",
     });
   }
 
   if (cleanNormSlug === "ddlc" || cleanNormSlug === "dokidokiliteratureclub") {
     candidates.push({
       url: "https://raw.githubusercontent.com/EmeraldGreenR/EmeraldGreenR.github.io/main/index.html",
-      baseHref: "https://cdn.jsdelivr.net/gh/EmeraldGreenR/EmeraldGreenR.github.io@main/",
+      baseHref: "https://raw.githack.com/EmeraldGreenR/EmeraldGreenR.github.io/main/",
     });
   }
 
@@ -1015,11 +1015,11 @@ async function fetchAuthenticGameFallback(rawPath: string): Promise<string | nul
     const gnFile = gnMap[cleanNormSlug];
     candidates.push({
       url: `https://raw.githubusercontent.com/freebuisness/html/main/${gnFile}`,
-      baseHref: "https://cdn.jsdelivr.net/gh/freebuisness/html@main/",
+      baseHref: "https://raw.githack.com/freebuisness/html/main/",
     });
     candidates.push({
-      url: `https://cdn.jsdelivr.net/gh/freebuisness/html@main/${gnFile}`,
-      baseHref: "https://cdn.jsdelivr.net/gh/freebuisness/html@main/",
+      url: `https://raw.githack.com/freebuisness/html/main/${gnFile}`,
+      baseHref: "https://raw.githack.com/freebuisness/html/main/",
     });
   }
 
@@ -1027,40 +1027,40 @@ async function fetchAuthenticGameFallback(rawPath: string): Promise<string | nul
   if (/^\d+/.test(baseSlug) || cleanSlug.endsWith(".html")) {
     const targetFile = cleanSlug.endsWith(".html") ? cleanSlug : `${baseSlug}.html`;
     candidates.push({
-      url: `https://cdn.jsdelivr.net/gh/freebuisness/html@main/${targetFile}`,
-      baseHref: "https://cdn.jsdelivr.net/gh/freebuisness/html@main/",
+      url: `https://raw.githack.com/freebuisness/html/main/${targetFile}`,
+      baseHref: "https://raw.githack.com/freebuisness/html/main/",
     });
     candidates.push({
       url: `https://raw.githubusercontent.com/freebuisness/html/main/${targetFile}`,
-      baseHref: "https://cdn.jsdelivr.net/gh/freebuisness/html@main/",
+      baseHref: "https://raw.githack.com/freebuisness/html/main/",
     });
   }
 
   // Open-source repos
   candidates.push(
     {
-      url: `https://cdn.jsdelivr.net/gh/freebuisness/html@main/${baseSlug}.html`,
-      baseHref: "https://cdn.jsdelivr.net/gh/freebuisness/html@main/",
+      url: `https://raw.githack.com/freebuisness/html/main/${baseSlug}.html`,
+      baseHref: "https://raw.githack.com/freebuisness/html/main/",
     },
     {
-      url: `https://cdn.jsdelivr.net/gh/a456pur/seraph@main/games/${baseSlug}/index.html`,
-      baseHref: `https://cdn.jsdelivr.net/gh/a456pur/seraph@main/games/${baseSlug}/`,
+      url: `https://raw.githack.com/a456pur/seraph/main/games/${baseSlug}/index.html`,
+      baseHref: `https://raw.githack.com/a456pur/seraph/main/games/${baseSlug}/`,
     },
     {
-      url: `https://cdn.jsdelivr.net/gh/Selenite-CC/Selenite@main/public/games/${baseSlug}/index.html`,
-      baseHref: `https://cdn.jsdelivr.net/gh/Selenite-CC/Selenite@main/public/games/${baseSlug}/`,
+      url: `https://raw.githack.com/Selenite-CC/Selenite/main/public/games/${baseSlug}/index.html`,
+      baseHref: `https://raw.githack.com/Selenite-CC/Selenite/main/public/games/${baseSlug}/`,
     },
     {
-      url: `https://cdn.jsdelivr.net/gh/3kh0/3kh0-Assets@main/${baseSlug}/index.html`,
-      baseHref: `https://cdn.jsdelivr.net/gh/3kh0/3kh0-Assets@main/${baseSlug}/`,
+      url: `https://raw.githack.com/3kh0/3kh0-Assets/main/${baseSlug}/index.html`,
+      baseHref: `https://raw.githack.com/3kh0/3kh0-Assets/main/${baseSlug}/`,
     },
     {
-      url: `https://cdn.jsdelivr.net/gh/classroom-google-com/classroom-google-com.github.io@main/${baseSlug}/index.html`,
-      baseHref: `https://cdn.jsdelivr.net/gh/classroom-google-com/classroom-google-com.github.io@main/${baseSlug}/`,
+      url: `https://raw.githack.com/classroom-google-com/classroom-google-com.github.io/main/${baseSlug}/index.html`,
+      baseHref: `https://raw.githack.com/classroom-google-com/classroom-google-com.github.io/main/${baseSlug}/`,
     },
     {
       url: `https://raw.githubusercontent.com/freebuisness/html/main/${baseSlug}.html`,
-      baseHref: "https://cdn.jsdelivr.net/gh/freebuisness/html@main/",
+      baseHref: "https://raw.githack.com/freebuisness/html/main/",
     },
   );
 

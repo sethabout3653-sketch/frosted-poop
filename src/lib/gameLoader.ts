@@ -53,14 +53,14 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
 
   // 5. Ensure correct <base href="...">
   if (!html.includes("<base ")) {
-    let detectedBase = baseUrl || "https://cdn.jsdelivr.net/gh/freebuisness/html@main/";
+    let detectedBase = baseUrl || "https://raw.githack.com/freebuisness/html/main/";
 
     if (!baseUrl) {
-      const cdnMatch = html.match(/https:\/\/cdn\.jsdelivr\.net\/gh\/[^\x27" \t\n\r>]+/i);
+      const cdnMatch = html.match(/https:\/\/raw\.githack\.com\/[^\x27" \t\n\r>]+/i);
       if (cdnMatch) {
         const fullMatch = cdnMatch[0];
         const matchRepo = fullMatch.match(
-          /(https:\/\/cdn\.jsdelivr\.net\/gh\/[^/]+\/[^/]+(?:@[^/]+)?\/?)/i,
+          /(https:\/\/raw\.githack\.com\/[^/]+\/[^/]+(?:@[^/]+)?\/?)/i,
         );
         if (matchRepo && matchRepo[1]) {
           detectedBase = matchRepo[1];
@@ -185,26 +185,26 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
       "https?:\\/\\/(?:rawcdn\\.githack\\.com|raw\\.githack\\.com|cdn\\.staticaly\\.com\\/gh|gitcdn\\.link\\/repo)\\/([^/\\s]+)\\/([^/\\s]+)\\/([^/\\s]+)\\/([^\\s]+)",
       "gi",
     );
-    u = u.replace(r1, "https://cdn.jsdelivr.net/gh/$1/$2@$3/$4");
+    u = u.replace(r1, "https://raw.githack.com/$1/$2/$3/$4");
     const r2 = new RegExp(
       "https?:\\/\\/(?:rawcdn\\.githack\\.com|raw\\.githack\\.com)\\/([^/\\s]+)\\/([^/\\s]+)\\/([^\\s]+)",
       "gi",
     );
-    u = u.replace(r2, "https://cdn.jsdelivr.net/gh/$1/$2@main/$3");
+    u = u.replace(r2, "https://raw.githack.com/$1/$2/main/$3");
     const r3 = new RegExp(
       "https?:\\/\\/raw\\.githubusercontent\\.com\\/([^/\\s]+)\\/([^/\\s]+)\\/([^/\\s]+)\\/([^\\s]+)",
       "gi",
     );
-    u = u.replace(r3, "https://cdn.jsdelivr.net/gh/$1/$2@$3/$4");
+    u = u.replace(r3, "https://raw.githack.com/$1/$2/$3/$4");
 
     // Standardize all mirror variants to default jsDelivr
-    u = u.replace(new RegExp("https://(?:quantil|fastly|gcore)\\.jsdelivr\\.net/gh/", "g"), "https://cdn.jsdelivr.net/gh/");
-    u = u.replace(new RegExp("https://raw\\.esm\\.sh/([^/@]+)/([^/@]+)/([^/]+)/", "g"), "https://cdn.jsdelivr.net/gh/$1/$2@$3/");
-    u = u.replace(new RegExp("https://cdn\\.statically\\.io/gh/([^/@]+)/([^/@]+)/([^/]+)/", "g"), "https://cdn.jsdelivr.net/gh/$1/$2@$3/");
-    u = u.replace(new RegExp("https://cdn\\.staticdelivr\\.com/gh/", "g"), "https://cdn.jsdelivr.net/gh/");
+    u = u.replace(new RegExp("https://(?:quantil|fastly|gcore)\\.githack\\.net/gh/", "g"), "https://raw.githack.com/");
+    u = u.replace(new RegExp("https://raw\\.esm\\.sh/([^/@]+)/([^/@]+)/([^/]+)/", "g"), "https://raw.githack.com/$1/$2/$3/");
+    u = u.replace(new RegExp("https://cdn\\.statically\\.io/gh/([^/@]+)/([^/@]+)/([^/]+)/", "g"), "https://raw.githack.com/$1/$2/$3/");
+    u = u.replace(new RegExp("https://cdn\\.staticdelivr\\.com/gh/", "g"), "https://raw.githack.com/");
     
     // Proxy all jsDelivr and GitHub requests through our local API to bypass Vercel CORS/CSP restrictions
-    u = u.replace(new RegExp("https://cdn.jsdelivr.net/gh/", "g"), "/api/public/gn/cdn/");
+    u = u.replace(new RegExp("https://raw.githack.com/", "g"), "/api/public/gn/cdn/");
     u = u.replace(new RegExp("https://raw.githubusercontent.com/", "g"), "/api/public/gn/gh/");
 
     return u;
@@ -512,7 +512,7 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
     const cleanUtyLoader = `
 <script id="undertale-yellow-clean-loader">
 (async function() {
-  const cdnBase = "https://cdn.jsdelivr.net/gh/giorgirick2-gif/game-webports-onawebsite@main/undertale-yellow/";
+  const cdnBase = "https://raw.githack.com/giorgirick2-gif/game-webports-onawebsite/main/undertale-yellow/";
   const totalParts = 12;
   const statusEl = document.getElementById("status");
   const progressEl = document.getElementById("progress");
