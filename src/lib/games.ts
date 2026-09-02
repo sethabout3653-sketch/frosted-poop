@@ -254,12 +254,12 @@ function assignCategory(name: string, catRaw?: string): GameCategory {
 }
 
 export const FEATURED_GAME_IDS = [
-  "soundboard",
+  "retrobowl",
+  "retrobowlcollege",
   "sm64",
   "holeio",
   "slope",
   "1v1lol",
-  "retrobowl",
   "subwaysurfers",
   "motox3m",
   "cookieclicker",
@@ -371,18 +371,6 @@ function formatGameName(folderName: string): string {
 }
 
 export async function fetchGames(): Promise<Game[]> {
-  const customGame: Game = {
-    id: "soundboard",
-    name: "Soundboard",
-    directory: "https://soundboardguys.com",
-    image:
-      "https://play-lh.googleusercontent.com/QbPwdx7u46tJLd6SBJ6cCPajEKgiA620fYNSZb1VsdlKIBPs4m6itZRDmu9SWPo8vbV77H1H42cNefPDtoYM",
-    category: "popular",
-    featured: true,
-    plays: 99999,
-    rating: 5.0,
-  };
-
   let gnMathGames: Game[] = [];
   const gnCoverLookup = new Map<string, string>();
   const gnCoverList: Array<{ clean: string; urlSlug: string; cover: string }> = [];
@@ -413,27 +401,23 @@ export async function fetchGames(): Promise<Game[]> {
           }
         }
 
-        // Keep ONLY Friday Night Funkin' (FNF) games from the gn-math games library
+        // Include all valid games from the GN catalog
         gnMathGames = rawData
           .filter((item: Record<string, unknown>) => {
             if (
               !item ||
               typeof item["id"] !== "number" ||
-              item["id"] < 0 ||
+              item["id"] <= 0 ||
               !item["url"] ||
               !item["name"]
             ) {
               return false;
             }
-            const name = String(item["name"]).toLowerCase();
-            const url = String(item["url"]).toLowerCase();
-            return (
-              name.includes("fnf") ||
-              name.includes("friday night") ||
-              name.includes("funkin") ||
-              url.includes("fnf") ||
-              url.includes("funkin")
-            );
+            const name = String(item["name"]);
+            if (name.includes("SUGGEST GAMES") || name.includes("JOIN DISCORD")) {
+              return false;
+            }
+            return true;
           })
           .map((item: Record<string, unknown>) => {
             const rawUrl = String(item["url"] || "");
@@ -441,17 +425,16 @@ export async function fetchGames(): Promise<Game[]> {
             const coverUrl = String(item["cover"] || "").replace("{COVER_URL}", GN_COVERS_CDN);
             const name = String(item["name"]);
             const category = assignCategory(name);
-            const featured = true;
 
             return {
-              id: item["id"] as number,
+              id: `gn-${item["id"]}`,
               name,
               directory: filename,
               image: coverUrl,
               author: item["author"] ? String(item["author"]) : undefined,
               authorLink: item["authorLink"] ? String(item["authorLink"]) : undefined,
               category,
-              featured,
+              featured: false,
               plays: Math.floor(Math.random() * 50000) + 12000,
               rating: Number((4.5 + Math.random() * 0.4).toFixed(1)),
               isGnGame: true,
@@ -525,28 +508,13 @@ export async function fetchGames(): Promise<Game[]> {
     return createStyledSvgCover(g.name || "Game", g.category);
   }
 
-  const sdkGames = (luminSdkGamesData as Game[]).map((g) => {
-    const sdkId =
-      (g as any).sdkGameId ||
-      (g.directory ? g.directory.replace(/^sdk\//, "") : String(g.id).replace(/^sdk-/, ""));
-
-    const resolvedImage = resolveCoverForSdkGame(g);
-
-    return {
-      ...g,
-      sdkGameId: sdkId,
-      image: resolvedImage,
-      isSdkGame: true,
-    };
-  });
-  const allList = [customGame, ...sdkGames, ...gnMathGames];
+  const sdkGames: Game[] = [];
+  const allList = [...sdkGames, ...gnMathGames];
 
   // Smart normalization & deduplication engine
   const gameMap = new Map<string, Game>();
 
   function getNormalizedKey(game: Game): string {
-    if (game.id === "soundboard" || game.id === "custom-soundboard") return "soundboard";
-
     const nameLower = (game.name || "").toLowerCase();
     const dirLower = String(game.directory || "").toLowerCase();
     const isFnf =
@@ -616,6 +584,12 @@ export async function fetchGames(): Promise<Game[]> {
       if (nameLower.includes("b-sides") || nameLower.includes("bsides")) {
         return "fnf_bsides";
       }
+
+      const nameWithoutSpecial = nameLower.replace(/[^a-z0-9]/g, "");
+      if (nameWithoutSpecial === "fridaynightfunkin" || nameWithoutSpecial === "fnf") {
+        return "fnf_base";
+      }
+
       return `fnf_${game.id || game.name}`.toLowerCase().replace(/[^a-z0-9_]/g, "");
     }
 
@@ -633,23 +607,59 @@ export async function fetchGames(): Promise<Game[]> {
       return "undertale";
     }
 
-    let raw = "";
-    if (game.directory) {
-      const parts = String(game.directory).split("/");
-      const last = parts[parts.length - 1];
-      raw = last === "index.html" && parts.length > 1 ? parts[parts.length - 2] : last;
-    }
-    if (!raw || raw.endsWith(".html")) {
-      raw = game.name || String(game.id);
+    // Explicit Baldi normalization mapping
+    if (
+      nameLower.includes("baldi") ||
+      dirLower.includes("baldi") ||
+      dirLower.includes("bfs") ||
+      dirLower.includes("bbcr") ||
+      game.id === 65 ||
+      game.id === 466 ||
+      game.id === 467 ||
+      game.id === 815
+    ) {
+      if (
+        nameLower.includes("fun new school") ||
+        nameLower.includes("ultimate") ||
+        dirLower.includes("bfs") ||
+        nameLower.includes("bfns")
+      ) {
+        return "baldis_fun_new_school_plus_ultimate";
+      }
+      if (nameLower.includes("remastered") || dirLower.includes("bbcr") || game.id === 466) {
+        return "baldis_basics_remastered";
+      }
+      if (nameLower.includes("plus") || dirLower.includes("baldi-plus") || game.id === 467) {
+        return "baldis_basics_plus";
+      }
+      if (nameLower.includes("ultra decompile") || game.id === 815) {
+        return "baldis_basics_ultra_decompile";
+      }
+      return "baldis_basics_classic";
     }
 
-    return raw
-      .toLowerCase()
-      .replace(/^sdk\//, "")
-      .replace(/^(selenite|truffled|quasar|builtin|games)\//, "")
-      .replace(/[-_.\s]/g, "")
-      .replace(/game$/g, "")
-      .replace(/unblocked$/g, "");
+    // Explicit Retro Bowl normalization mapping
+    if (
+      nameLower === "retro bowl" ||
+      (dirLower.includes("retrobowl") &&
+        !dirLower.includes("college") &&
+        !nameLower.includes("college")) ||
+      game.id === 33
+    ) {
+      return "retrobowl";
+    }
+    if (
+      nameLower.includes("retro bowl college") ||
+      dirLower.includes("retrobowlcollege") ||
+      game.id === 34 ||
+      game.id === "sdk-selenite-retrobowlcollege"
+    ) {
+      return "retrobowlcollege";
+    }
+
+    const cleanName = (game.name || String(game.id)).toLowerCase().replace(/[^a-z0-9]/g, "");
+
+    return cleanName || String(game.id);
   }
 
   for (const g of allList) {
@@ -664,7 +674,19 @@ export async function fetchGames(): Promise<Game[]> {
         existing.image ||
         g.image;
 
-      if ((existing as any).isSdkGame) {
+      if (key === "slope") {
+        // User explicitly requested embedding https://storage.y8.com/y8-studio/unity_webgl/Gani/slope-game_2025_v3/ for Slope
+        const gnVersion = (g as any).isGnGame ? g : existing;
+        const sdkVersion = (g as any).isSdkGame ? g : existing;
+        gameMap.set(key, {
+          ...sdkVersion,
+          ...gnVersion,
+          directory: "https://storage.y8.com/y8-studio/unity_webgl/Gani/slope-game_2025_v3/",
+          image: bestImage,
+          featured: existing.featured || g.featured,
+          rating: Math.max(existing.rating || 0, g.rating || 0),
+        });
+      } else if ((existing as any).isSdkGame) {
         // Lumin SDK game takes priority for SDK game directory/config, but use best available cover image
         gameMap.set(key, {
           ...g,
@@ -681,5 +703,18 @@ export async function fetchGames(): Promise<Game[]> {
     }
   }
 
-  return Array.from(gameMap.values());
+  const resultList = Array.from(gameMap.values());
+
+  const getPriorityScore = (g: Game) => {
+    const nameLower = (g.name || "").toLowerCase();
+    if (nameLower === "retro bowl") return 100;
+    if (nameLower === "retro bowl college") return 99;
+    if (nameLower === "slope") return 97;
+    if (nameLower.includes("1v1")) return 96;
+    if (nameLower.includes("subway surfers")) return 95;
+    if (g.featured) return 50;
+    return 0;
+  };
+
+  return resultList.sort((a, b) => getPriorityScore(b) - getPriorityScore(a));
 }

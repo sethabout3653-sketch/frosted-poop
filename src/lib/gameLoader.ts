@@ -486,11 +486,193 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
     );
   }
 
+  // 9. Handle Undertale Yellow Multi-part WebAssembly engine specifically
+  const isUndertaleYellow =
+    filename.startsWith("456-f") ||
+    filename.includes("undertale-yellow") ||
+    html.includes("UNDERTALE YELLOW") ||
+    (html.includes("game.unx") && html.includes("mergeFiles"));
+
+  if (isUndertaleYellow) {
+    const cleanUtyLoader = `
+<script id="undertale-yellow-clean-loader">
+(async function() {
+  const cdnBase = "https://cdn.jsdelivr.net/gh/giorgirick2-gif/game-webports-onawebsite@main/undertale-yellow/";
+  const totalParts = 12;
+  const statusEl = document.getElementById("status");
+  const progressEl = document.getElementById("progress");
+  const spinnerEl = document.getElementById("spinner");
+  const canvasEl = document.getElementById("canvas");
+  const loadingContainer = document.querySelector(".loading");
+
+  if (progressEl) {
+    progressEl.removeAttribute("hidden");
+    progressEl.value = 0;
+    progressEl.max = 100;
+  }
+
+  function setStatus(text, pct) {
+    if (statusEl) statusEl.textContent = text;
+    if (progressEl && typeof pct === "number") {
+      progressEl.value = pct;
+    }
+  }
+
+  setStatus("Downloading Undertale Yellow game assets (0%)...", 0);
+
+  // Helper with automatic retry for reliable chunk downloading
+  async function fetchWithRetry(url, maxRetries = 3) {
+    let lastErr;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return await res.arrayBuffer();
+      } catch (err) {
+        lastErr = err;
+        console.warn("[Undertale Yellow] Retrying " + url + " (attempt " + attempt + "):", err);
+        await new Promise(r => setTimeout(r, 600 * attempt));
+      }
+    }
+    throw lastErr;
+  }
+
+  try {
+    const buffers = new Array(totalParts);
+    let loadedCount = 0;
+
+    // Download chunks in parallel streams with real-time progress
+    const concurrency = 4;
+    const partIndices = Array.from({ length: totalParts }, (_, i) => i);
+    
+    async function worker() {
+      while (partIndices.length > 0) {
+        const idx = partIndices.shift();
+        if (typeof idx !== "number") break;
+        const partNum = idx + 1;
+        const url = cdnBase + "game.unx.part" + partNum;
+        const buf = await fetchWithRetry(url);
+        buffers[idx] = buf;
+        loadedCount++;
+        const pct = Math.floor((loadedCount / totalParts) * 90);
+        setStatus("Downloading Undertale Yellow: " + loadedCount + "/" + totalParts + " parts (" + pct + "%)...", pct);
+      }
+    }
+
+    await Promise.all(Array.from({ length: concurrency }, () => worker()));
+
+    setStatus("Assembling game files (95%)...", 95);
+    const mergedBlob = new Blob(buffers, { type: "application/octet-stream" });
+    const mergedUrl = URL.createObjectURL(mergedBlob);
+    window.gameUnxUrl = mergedUrl;
+
+    // Robust fetch and XMLHttpRequest interceptors for game.unx
+    const originalFetch = window.fetch;
+    window.fetch = async function(resource, ...rest) {
+      let targetUrl = "";
+      if (typeof resource === "string") targetUrl = resource;
+      else if (resource && typeof resource.url === "string") targetUrl = resource.url;
+      else if (resource && typeof resource.href === "string") targetUrl = resource.href;
+      else if (resource) targetUrl = String(resource);
+
+      if (targetUrl.includes("game.unx")) {
+        if (resource instanceof Request) {
+          return originalFetch.call(this, new Request(window.gameUnxUrl, resource), ...rest);
+        }
+        return originalFetch.call(this, window.gameUnxUrl, ...rest);
+      }
+      return originalFetch.call(this, resource, ...rest);
+    };
+
+    const originalOpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+      let urlStr = "";
+      if (typeof url === "string") urlStr = url;
+      else if (url && typeof url.href === "string") urlStr = url.href;
+      else if (url) urlStr = String(url);
+
+      if (urlStr.includes("game.unx")) {
+        return originalOpen.call(this, method, window.gameUnxUrl, ...rest);
+      }
+      return originalOpen.call(this, method, url, ...rest);
+    };
+
+    setStatus("Starting game engine (100%)...", 100);
+
+    // Make canvas visible and active
+    if (canvasEl) {
+      canvasEl.style.display = "block";
+      canvasEl.style.opacity = "1";
+      canvasEl.classList.add("active");
+    }
+
+    // Load index.js first, then runner.js sequentially
+    await new Promise((resolve, reject) => {
+      const indexScript = document.createElement("script");
+      indexScript.src = cdnBase + "index.js";
+      indexScript.onload = () => resolve();
+      indexScript.onerror = (e) => reject(new Error("Failed to load index.js"));
+      document.body.appendChild(indexScript);
+    });
+
+    // Ensure Module locateFile redirects game.unx and handles wasm
+    if (window.Module) {
+      const origLocate = window.Module.locateFile;
+      window.Module.locateFile = function(path, prefix) {
+        if (path && path.includes("game.unx")) return window.gameUnxUrl;
+        if (origLocate) return origLocate(path, prefix);
+        return cdnBase + path;
+      };
+    }
+
+    await new Promise((resolve, reject) => {
+      const runnerScript = document.createElement("script");
+      runnerScript.src = cdnBase + "runner.js";
+      runnerScript.onload = () => {
+        resolve();
+        setTimeout(() => {
+          if (loadingContainer) loadingContainer.style.display = "none";
+          if (canvasEl) {
+            canvasEl.style.opacity = "1";
+            canvasEl.focus();
+          }
+        }, 1200);
+      };
+      runnerScript.onerror = (e) => reject(new Error("Failed to load runner.js"));
+      document.body.appendChild(runnerScript);
+    });
+
+  } catch (err) {
+    console.error("[Undertale Yellow] Loader Error:", err);
+    setStatus("Error loading Undertale Yellow. Please refresh to retry.", 0);
+  }
+})();
+</script>
+`;
+    // Replace the old mergeFiles script with the optimized clean loader
+    if (html.includes("mergeFiles")) {
+      html = html.replace(/<script\b[^>]*>[\s\S]*?mergeFiles[\s\S]*?<\/script>/gi, cleanUtyLoader);
+    } else {
+      html += cleanUtyLoader;
+    }
+  }
+
   return html;
 }
 
 // Loads a game source asynchronously using default jsDelivr CDN and server proxy fallback
 export async function loadGameSource(directory: string): Promise<GameLoadResult> {
+  if (
+    directory === "sdk/selenite/slope" ||
+    directory === "198.html" ||
+    directory.includes("slope-game_2025_v3")
+  ) {
+    return {
+      type: "url",
+      src: "https://storage.y8.com/y8-studio/unity_webgl/Gani/slope-game_2025_v3/",
+    };
+  }
+
   if (
     directory.startsWith("http://") ||
     directory.startsWith("https://") ||
@@ -499,81 +681,22 @@ export async function loadGameSource(directory: string): Promise<GameLoadResult>
     return { type: "url", src: directory };
   }
 
-  // Handle games from Lumin SDK
-  if (directory.startsWith("sdk/")) {
-    const sdkGameId = directory.replace(/^sdk\//, "");
-    if (typeof window !== "undefined") {
-      try {
-        // Ensure global fetch interceptor for Lumin to bypass CORS/CSP in all contexts
-        if (typeof window !== "undefined" && !(window as any)._luminProxyActive) {
-          (window as any)._luminProxyActive = true;
-          const originalFetch = window.fetch;
-          window.fetch = async (...args) => {
-            const [resource, config] = args;
-            if (typeof resource === "string" && resource.includes("a.luminsdk.com/api/v1/")) {
-              const relPath = resource.split("a.luminsdk.com/api/v1/")[1];
-              return originalFetch(`/api/public/sdk/${relPath}`, config);
-            }
-            return originalFetch(resource, config);
-          };
-        }
-
-        if (!(window as any).Lumin) {
-          await new Promise<void>((resolve) => {
-            const script = document.createElement("script");
-            script.src = "/lumin.js";
-            script.onload = () => resolve();
-            script.onerror = () => resolve();
-            document.body.appendChild(script);
-          });
-        }
-
-        if ((window as any).Lumin) {
-          const l = (window as any).Lumin;
-          if (!l._initPromise) {
-            let div = document.getElementById("lumin-sdk-hidden");
-            if (!div) {
-              div = document.createElement("div");
-              div.id = "lumin-sdk-hidden";
-              div.style.display = "none";
-              document.body.appendChild(div);
-            }
-            l._initPromise = l.init({ container: "#lumin-sdk-hidden", theme: "dark" });
-          }
-          await l._initPromise;
-
-          if (typeof l.getGameUrl === "function") {
-            const gameData = await l.getGameUrl(sdkGameId);
-            if (gameData && gameData.url) {
-              let finalUrl = gameData.url;
-              // Proxy Lumin Cloud URLs through our server to bypass CORS/CSP issues on Vercel
-              if (finalUrl.includes("a.luminsdk.com/api/v1/game/")) {
-                const relPath = finalUrl.split("a.luminsdk.com/api/v1/game/")[1];
-                finalUrl = `/api/public/sdk/${relPath}`;
-              }
-              return { type: "url", src: finalUrl, cdnUsed: "Lumin Cloud" };
-            }
-          }
-        }
-      } catch (err) {
-        console.warn("Failed to load via Lumin SDK launcher:", err);
-      }
-    }
-
-    // Fallback for SDK games to Seraph repository
-    const slug = sdkGameId.replace(/^(selenite|truffled|quasar|builtin)\//, "");
-    return loadGameSource(`games/${slug}/index.html`);
-  }
-
   const filename = directory.replace(/^\/+/, "");
   const candidates = getGameCandidateUrls(filename);
 
+  // Try direct client-side fetching from open-source game repositories first
   for (const { url, baseUrl, cdnName } of candidates) {
     try {
       const res = await fetch(url);
       if (res.ok) {
         const text = await res.text();
-        if (text && text.length > 50 && !text.includes("Couldn't find the requested file")) {
+        if (
+          text &&
+          text.length > 50 &&
+          !text.includes("Couldn't find the requested file") &&
+          !text.includes("WhittierSchool") &&
+          !text.includes("Whittier School")
+        ) {
           const html = prepareGameHtml(text, filename, baseUrl);
           const blob = new Blob([html], { type: "text/html; charset=utf-8" });
           const blobUrl = URL.createObjectURL(blob);
@@ -581,8 +704,16 @@ export async function loadGameSource(directory: string): Promise<GameLoadResult>
         }
       }
     } catch {
-      // Continue to origin fallback
+      // Continue to next fallback
     }
+  }
+
+  // Handle games from Lumin SDK proxy if client direct fetches miss
+  if (directory.startsWith("sdk/")) {
+    const sdkGameId = directory.replace(/^sdk\//, "");
+    const token = "1788211172-El2IJ3-0d2qA8GNweoYW_Ln0tuGcYY85UjOrol418vU";
+    const directSdkUrl = `/api/public/sdk/game/${token}/${sdkGameId}`;
+    return { type: "url", src: directSdkUrl, cdnUsed: "Lumin SDK Direct Proxy" };
   }
 
   // Final fallback to the proxy if client-side direct fetches fail

@@ -5,7 +5,7 @@ import path from "node:path";
 
 const router = Router();
 
-const VERCEL_PAYLOAD_LIMIT = 4.4 * 1024 * 1024;
+const VERCEL_PAYLOAD_LIMIT = 100 * 1024 * 1024; // 100MB limit for rich WebGL game assets
 
 // Helper to safely download response bodies up to a maximum size.
 // Avoids Vercel OOM and Payload limit crashes by aborting large streams.
@@ -312,6 +312,173 @@ function sanitizeAndCleanGameHtml(rawHtml: string): string {
     );
   }
 
+  // 7. Undertale Yellow Multi-part WebAssembly engine handler
+  if (
+    html.includes("UNDERTALE YELLOW") ||
+    (html.includes("game.unx") && html.includes("mergeFiles"))
+  ) {
+    const cleanUtyLoader = `
+<script id="undertale-yellow-clean-loader">
+(async function() {
+  const cdnBase = "https://cdn.jsdelivr.net/gh/giorgirick2-gif/game-webports-onawebsite@main/undertale-yellow/";
+  const totalParts = 12;
+  const statusEl = document.getElementById("status");
+  const progressEl = document.getElementById("progress");
+  const spinnerEl = document.getElementById("spinner");
+  const canvasEl = document.getElementById("canvas");
+  const loadingContainer = document.querySelector(".loading");
+
+  if (progressEl) {
+    progressEl.removeAttribute("hidden");
+    progressEl.value = 0;
+    progressEl.max = 100;
+  }
+
+  function setStatus(text, pct) {
+    if (statusEl) statusEl.textContent = text;
+    if (progressEl && typeof pct === "number") {
+      progressEl.value = pct;
+    }
+  }
+
+  setStatus("Downloading Undertale Yellow game assets (0%)...", 0);
+
+  // Helper with automatic retry for reliable chunk downloading
+  async function fetchWithRetry(url, maxRetries = 3) {
+    let lastErr;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return await res.arrayBuffer();
+      } catch (err) {
+        lastErr = err;
+        console.warn("[Undertale Yellow] Retrying " + url + " (attempt " + attempt + "):", err);
+        await new Promise(r => setTimeout(r, 600 * attempt));
+      }
+    }
+    throw lastErr;
+  }
+
+  try {
+    const buffers = new Array(totalParts);
+    let loadedCount = 0;
+
+    // Download chunks in parallel streams with real-time progress
+    const concurrency = 4;
+    const partIndices = Array.from({ length: totalParts }, (_, i) => i);
+    
+    async function worker() {
+      while (partIndices.length > 0) {
+        const idx = partIndices.shift();
+        if (typeof idx !== "number") break;
+        const partNum = idx + 1;
+        const url = cdnBase + "game.unx.part" + partNum;
+        const buf = await fetchWithRetry(url);
+        buffers[idx] = buf;
+        loadedCount++;
+        const pct = Math.floor((loadedCount / totalParts) * 90);
+        setStatus("Downloading Undertale Yellow: " + loadedCount + "/" + totalParts + " parts (" + pct + "%)...", pct);
+      }
+    }
+
+    await Promise.all(Array.from({ length: concurrency }, () => worker()));
+
+    setStatus("Assembling game files (95%)...", 95);
+    const mergedBlob = new Blob(buffers, { type: "application/octet-stream" });
+    const mergedUrl = URL.createObjectURL(mergedBlob);
+    window.gameUnxUrl = mergedUrl;
+
+    // Robust fetch and XMLHttpRequest interceptors for game.unx
+    const originalFetch = window.fetch;
+    window.fetch = async function(resource, ...rest) {
+      let targetUrl = "";
+      if (typeof resource === "string") targetUrl = resource;
+      else if (resource && typeof resource.url === "string") targetUrl = resource.url;
+      else if (resource && typeof resource.href === "string") targetUrl = resource.href;
+      else if (resource) targetUrl = String(resource);
+
+      if (targetUrl.includes("game.unx")) {
+        if (resource instanceof Request) {
+          return originalFetch.call(this, new Request(window.gameUnxUrl, resource), ...rest);
+        }
+        return originalFetch.call(this, window.gameUnxUrl, ...rest);
+      }
+      return originalFetch.call(this, resource, ...rest);
+    };
+
+    const originalOpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+      let urlStr = "";
+      if (typeof url === "string") urlStr = url;
+      else if (url && typeof url.href === "string") urlStr = url.href;
+      else if (url) urlStr = String(url);
+
+      if (urlStr.includes("game.unx")) {
+        return originalOpen.call(this, method, window.gameUnxUrl, ...rest);
+      }
+      return originalOpen.call(this, method, url, ...rest);
+    };
+
+    setStatus("Starting game engine (100%)...", 100);
+
+    // Make canvas visible and active
+    if (canvasEl) {
+      canvasEl.style.display = "block";
+      canvasEl.style.opacity = "1";
+      canvasEl.classList.add("active");
+    }
+
+    // Load index.js first, then runner.js sequentially
+    await new Promise((resolve, reject) => {
+      const indexScript = document.createElement("script");
+      indexScript.src = cdnBase + "index.js";
+      indexScript.onload = () => resolve();
+      indexScript.onerror = (e) => reject(new Error("Failed to load index.js"));
+      document.body.appendChild(indexScript);
+    });
+
+    // Ensure Module locateFile redirects game.unx and handles wasm
+    if (window.Module) {
+      const origLocate = window.Module.locateFile;
+      window.Module.locateFile = function(path, prefix) {
+        if (path && path.includes("game.unx")) return window.gameUnxUrl;
+        if (origLocate) return origLocate(path, prefix);
+        return cdnBase + path;
+      };
+    }
+
+    await new Promise((resolve, reject) => {
+      const runnerScript = document.createElement("script");
+      runnerScript.src = cdnBase + "runner.js";
+      runnerScript.onload = () => {
+        resolve();
+        setTimeout(() => {
+          if (loadingContainer) loadingContainer.style.display = "none";
+          if (canvasEl) {
+            canvasEl.style.opacity = "1";
+            canvasEl.focus();
+          }
+        }, 1200);
+      };
+      runnerScript.onerror = (e) => reject(new Error("Failed to load runner.js"));
+      document.body.appendChild(runnerScript);
+    });
+
+  } catch (err) {
+    console.error("[Undertale Yellow] Loader Error:", err);
+    setStatus("Error loading Undertale Yellow. Please refresh to retry.", 0);
+  }
+})();
+</script>
+`;
+    if (html.includes("mergeFiles")) {
+      html = html.replace(/<script\b[^>]*>[\s\S]*?mergeFiles[\s\S]*?<\/script>/gi, cleanUtyLoader);
+    } else {
+      html += cleanUtyLoader;
+    }
+  }
+
   return html;
 }
 
@@ -532,34 +699,36 @@ router.get("/gn/*", async (req, res) => {
 
     let response: Response | null = null;
     let cleanPathNoQuery = rawPath.split("?")[0] || "";
-    const isHtmlType = false;
+    let originalUrl = "";
 
     if (rawPath.startsWith("cdn/")) {
       const cdnSubPath = rawPath.replace(/^cdn\//, "");
+      originalUrl = `https://cdn.jsdelivr.net/gh/${cdnSubPath}`;
       const resData = await fetchGNAsset(cdnSubPath);
       if (resData) response = resData.response;
       cleanPathNoQuery = cdnSubPath.split("?")[0] || "";
     } else if (rawPath.startsWith("gh/")) {
       const ghSubPath = rawPath.replace(/^gh\//, "");
-      const ghUrl = `https://raw.githubusercontent.com/${ghSubPath}`;
+      originalUrl = `https://raw.githubusercontent.com/${ghSubPath}`;
       try {
-        const r = await fetch(ghUrl, { redirect: "follow" });
+        const r = await fetch(originalUrl, { redirect: "follow" });
         if (r.ok) response = r;
       } catch (err) {
         console.warn("Proxy gh fallback error:", err);
       }
       cleanPathNoQuery = ghSubPath.split("?")[0] || "";
     } else if (rawPath.startsWith("http:/") || rawPath.startsWith("https:/")) {
-      const fullUrl = rawPath.replace(/^(https?:)\/*/, "$1//");
+      originalUrl = rawPath.replace(/^(https?:)\/*/, "$1//");
       try {
-        const r = await fetch(fullUrl, { redirect: "follow" });
+        const r = await fetch(originalUrl, { redirect: "follow" });
         if (r.ok) response = r;
       } catch (err) {
         console.warn("Proxy fullUrl error:", err);
       }
     } else if (rawPath.startsWith("http://") || rawPath.startsWith("https://")) {
+      originalUrl = rawPath;
       try {
-        const r = await fetch(rawPath, { redirect: "follow" });
+        const r = await fetch(originalUrl, { redirect: "follow" });
         if (r.ok) response = r;
       } catch (err) {
         console.warn("Proxy rawPath error:", err);
@@ -567,9 +736,9 @@ router.get("/gn/*", async (req, res) => {
     } else {
       const cleanGamePath = rawPath.replace(/^game\//, "");
       cleanPathNoQuery = cleanGamePath.split("?")[0] || "";
-      const primaryUrl = `https://raw.githubusercontent.com/freebuisness/html/main/${cleanGamePath}`;
+      originalUrl = `https://raw.githubusercontent.com/freebuisness/html/main/${cleanGamePath}`;
       try {
-        const r = await fetch(primaryUrl, { redirect: "follow" });
+        const r = await fetch(originalUrl, { redirect: "follow" });
         if (r.ok) {
           response = r;
         } else {
@@ -788,6 +957,242 @@ router.get("/3kh0/*", async (req, res) => {
   }
 });
 
+let gnZoneSlugMapCache: Record<string, string> | null = null;
+async function getGnZoneSlugMap(): Promise<Record<string, string>> {
+  if (gnZoneSlugMapCache) return gnZoneSlugMapCache;
+  try {
+    const res = await fetch("https://cdn.jsdelivr.net/gh/freebuisness/assets@latest/zones.json");
+    if (res.ok) {
+      const zones = (await res.json()) as Array<{ name?: string; url?: string }>;
+      const map: Record<string, string> = {};
+      for (const z of zones) {
+        if (!z.url || !z.name) continue;
+        const filename = String(z.url).replace("{HTML_URL}/", "");
+        const cleanName = String(z.name)
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "");
+        map[cleanName] = filename;
+      }
+      gnZoneSlugMapCache = map;
+      return map;
+    }
+  } catch {}
+  return {};
+}
+
+// Helper to fetch authentic game fallback from open-source GitHub repositories
+async function fetchAuthenticGameFallback(rawPath: string): Promise<string | null> {
+  const cleanSlug = rawPath
+    .replace(/^game\//, "")
+    .replace(/^1788211172[^/]+\//, "")
+    .replace(/^(selenite|truffled|quasar|builtin)\//, "")
+    .split("?")[0];
+
+  if (!cleanSlug) return null;
+
+  const baseSlug = cleanSlug.replace(/\.html$/i, "");
+  const cleanNormSlug = baseSlug.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  const candidates: { url: string; baseHref: string }[] = [];
+
+  if (cleanNormSlug === "soniccd") {
+    candidates.push({
+      url: "https://raw.githubusercontent.com/freebuisness/html/main/589-f.html",
+      baseHref: "https://cdn.jsdelivr.net/gh/freebuisness/html@main/",
+    });
+  }
+
+  if (cleanNormSlug === "ddlc" || cleanNormSlug === "dokidokiliteratureclub") {
+    candidates.push({
+      url: "https://raw.githubusercontent.com/EmeraldGreenR/EmeraldGreenR.github.io/main/index.html",
+      baseHref: "https://cdn.jsdelivr.net/gh/EmeraldGreenR/EmeraldGreenR.github.io@main/",
+    });
+  }
+
+  // Check mapped GN zone game filename
+  const gnMap = await getGnZoneSlugMap();
+  if (gnMap[cleanNormSlug]) {
+    const gnFile = gnMap[cleanNormSlug];
+    candidates.push({
+      url: `https://raw.githubusercontent.com/freebuisness/html/main/${gnFile}`,
+      baseHref: "https://cdn.jsdelivr.net/gh/freebuisness/html@main/",
+    });
+    candidates.push({
+      url: `https://cdn.jsdelivr.net/gh/freebuisness/html@main/${gnFile}`,
+      baseHref: "https://cdn.jsdelivr.net/gh/freebuisness/html@main/",
+    });
+  }
+
+  // Direct file matches
+  if (/^\d+/.test(baseSlug) || cleanSlug.endsWith(".html")) {
+    const targetFile = cleanSlug.endsWith(".html") ? cleanSlug : `${baseSlug}.html`;
+    candidates.push({
+      url: `https://cdn.jsdelivr.net/gh/freebuisness/html@main/${targetFile}`,
+      baseHref: "https://cdn.jsdelivr.net/gh/freebuisness/html@main/",
+    });
+    candidates.push({
+      url: `https://raw.githubusercontent.com/freebuisness/html/main/${targetFile}`,
+      baseHref: "https://cdn.jsdelivr.net/gh/freebuisness/html@main/",
+    });
+  }
+
+  // Open-source repos
+  candidates.push(
+    {
+      url: `https://cdn.jsdelivr.net/gh/freebuisness/html@main/${baseSlug}.html`,
+      baseHref: "https://cdn.jsdelivr.net/gh/freebuisness/html@main/",
+    },
+    {
+      url: `https://cdn.jsdelivr.net/gh/a456pur/seraph@main/games/${baseSlug}/index.html`,
+      baseHref: `https://cdn.jsdelivr.net/gh/a456pur/seraph@main/games/${baseSlug}/`,
+    },
+    {
+      url: `https://cdn.jsdelivr.net/gh/Selenite-CC/Selenite@main/public/games/${baseSlug}/index.html`,
+      baseHref: `https://cdn.jsdelivr.net/gh/Selenite-CC/Selenite@main/public/games/${baseSlug}/`,
+    },
+    {
+      url: `https://cdn.jsdelivr.net/gh/3kh0/3kh0-Assets@main/${baseSlug}/index.html`,
+      baseHref: `https://cdn.jsdelivr.net/gh/3kh0/3kh0-Assets@main/${baseSlug}/`,
+    },
+    {
+      url: `https://cdn.jsdelivr.net/gh/classroom-google-com/classroom-google-com.github.io@main/${baseSlug}/index.html`,
+      baseHref: `https://cdn.jsdelivr.net/gh/classroom-google-com/classroom-google-com.github.io@main/${baseSlug}/`,
+    },
+    {
+      url: `https://raw.githubusercontent.com/freebuisness/html/main/${baseSlug}.html`,
+      baseHref: "https://cdn.jsdelivr.net/gh/freebuisness/html@main/",
+    },
+  );
+
+  for (const c of candidates) {
+    try {
+      const res = await fetch(c.url);
+      if (res.ok) {
+        let html = await res.text();
+        if (
+          !html.includes("WhittierSchool") &&
+          !html.includes("Whittier School") &&
+          html.length > 100
+        ) {
+          if (html.includes("<base href=")) {
+            html = html.replace(/<base href="[^"]*">/, `<base href="${c.baseHref}">`);
+          } else {
+            html = html.replace("<head>", `<head><base href="${c.baseHref}">`);
+          }
+          return sanitizeAndCleanGameHtml(html);
+        }
+      }
+    } catch {}
+  }
+
+  return null;
+}
+
+function renderInteractiveErrorHtml(rawPath: string): string {
+  const cleanName = rawPath.replace(/^.*[/\\]/, "").replace(/\.html$/i, "");
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Source Connection - Frosted Arcade</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #000000;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .card {
+      background: rgba(18, 18, 18, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 20px;
+      padding: 32px;
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(12px);
+    }
+    .icon {
+      width: 52px;
+      height: 52px;
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+      color: #f59e0b;
+    }
+    h2 { font-size: 20px; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.02em; }
+    p { font-size: 13px; color: #a3a3a3; line-height: 1.5; margin-bottom: 24px; }
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      background: #1e1e1e;
+      border: 1px solid #333;
+      border-radius: 100px;
+      font-size: 11px;
+      color: #38bdf8;
+      font-mono: monospace;
+      margin-bottom: 16px;
+    }
+    .btn-group { display: flex; flex-direction: column; gap: 10px; }
+    .btn {
+      padding: 12px 18px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      text-decoration: none;
+    }
+    .btn-primary { background: #ffffff; color: #000000; }
+    .btn-primary:hover { background: #e5e5e5; }
+    .btn-secondary { background: #1a1a1a; color: #ffffff; border: 1px solid #333; }
+    .btn-secondary:hover { background: #262626; border-color: #555; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">
+      <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+    </div>
+    <span class="badge">Target: ${cleanName}</span>
+    <h2>Connecting to Backup Server</h2>
+    <p>The primary server for this game source is taking longer than expected. Click below to refresh or switch to an alternate mirror.</p>
+    <div class="btn-group">
+      <button class="btn btn-primary" onclick="window.location.reload()">
+        <span>Auto-Retry Game Load</span>
+      </button>
+      <button class="btn btn-secondary" onclick="tryAlternativeMirror()">
+        <span>Try Secondary CDN Mirror</span>
+      </button>
+    </div>
+  </div>
+  <script>
+    function tryAlternativeMirror() {
+      const url = new URL(window.location.href);
+      url.searchParams.set('mirror', 'alt_' + Date.now());
+      window.location.href = url.toString();
+    }
+  </script>
+</body>
+</html>`;
+}
+
 // Route 5: Lumin SDK Proxy
 router.all("/sdk/*", async (req, res) => {
   try {
@@ -804,6 +1209,16 @@ router.all("/sdk/*", async (req, res) => {
         }
       } catch (e) {
         console.warn("Local lumin.js serve failed, falling back to proxy:", e);
+      }
+    }
+
+    // Direct authentic game interceptor for Baldi and known game slugs
+    if (method === "GET" && rawPath.includes("baldi-plus")) {
+      const authenticHtml = await fetchAuthenticGameFallback(rawPath);
+      if (authenticHtml) {
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        return res.send(authenticHtml);
       }
     }
 
@@ -824,78 +1239,100 @@ router.all("/sdk/*", async (req, res) => {
       }
     }
 
-    let sdkUrl = `https://a.luminsdk.com/api/v1/${rawPath}`;
+    const sdkDomains = ["a.luminsdk.com", "a.truffled.lol", "a.selenite.cc"];
 
-    const headers: Record<string, string> = {
-      "User-Agent": req.headers["user-agent"] || "",
-      Referer: "https://a.luminsdk.com/",
-    };
+    let response: any = null;
+    let selectedDomain = "a.luminsdk.com";
+    let sdkUrl = "";
+    let finalBuffer: Buffer | null = null;
+    let finalContentType: string | null = null;
 
-    // Only include Content-Type if we are sending a body
+    let reqBody: Buffer | null = null;
     if (method !== "GET" && method !== "HEAD") {
-      if (req.headers["content-type"]) {
-        headers["Content-Type"] = req.headers["content-type"];
-      }
+      reqBody = await readRawBody(req);
     }
 
-    const fetchOptions: any = {
-      method,
-      redirect: "follow",
-      headers,
-    };
+    for (const domain of sdkDomains) {
+      try {
+        sdkUrl = `https://${domain}/api/v1/${rawPath}`;
+        const headers: Record<string, string> = {
+          "User-Agent": req.headers["user-agent"] || "",
+          Referer: `https://${domain}/`,
+        };
 
-    if (method !== "GET" && method !== "HEAD") {
-      const body = await readRawBody(req);
-      if (body && body.length > 0) {
-        fetchOptions.body = body;
-      }
-    }
-
-    const response = await fetch(sdkUrl, fetchOptions);
-
-    if (!response.ok && !rawPath.startsWith("game/") && method === "GET") {
-      // Fallback to game subpath for GET requests if direct v1 fetch fails
-      sdkUrl = `https://a.luminsdk.com/api/v1/game/${rawPath}`;
-      const secondResponse = await fetch(sdkUrl, fetchOptions);
-      if (secondResponse.ok) {
-        const cleanPathNoQuery = rawPath.split("?")[0] || "";
-        const mime = getMimeType(cleanPathNoQuery, secondResponse.headers.get("content-type"));
-        const encoding = secondResponse.headers.get("content-encoding") || undefined;
-
-        const buffer = await safeDownload(secondResponse, VERCEL_PAYLOAD_LIMIT);
-        if (!buffer) {
-          return res.redirect(302, sdkUrl);
+        if (method !== "GET" && method !== "HEAD") {
+          if (req.headers["content-type"]) {
+            headers["Content-Type"] = req.headers["content-type"];
+          }
         }
 
-        setCachedAsset(cacheKey, buffer, mime, encoding);
-        return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip", sdkUrl);
+        const fetchOptions: any = {
+          method,
+          redirect: "follow",
+          headers,
+        };
+
+        if (reqBody && reqBody.length > 0) {
+          fetchOptions.body = reqBody;
+        }
+
+        let resObj = await fetch(sdkUrl, fetchOptions);
+
+        if (!resObj.ok && !rawPath.startsWith("game/") && method === "GET") {
+          const gameUrl = `https://${domain}/api/v1/game/${rawPath}`;
+          const secondResponse = await fetch(gameUrl, fetchOptions);
+          if (secondResponse.ok) {
+            resObj = secondResponse;
+            sdkUrl = gameUrl;
+          }
+        }
+
+        if (resObj.ok) {
+          const buffer = await safeDownload(resObj, VERCEL_PAYLOAD_LIMIT);
+          if (buffer) {
+            const bufferStr = buffer.toString("utf8");
+            if (
+              bufferStr.includes("WhittierSchool") ||
+              bufferStr.includes("Whittier School") ||
+              bufferStr.includes("Empowering K-12 Students")
+            ) {
+              console.warn(`[Proxy] School block on ${domain} for ${rawPath}`);
+              continue;
+            }
+            response = resObj;
+            finalBuffer = buffer;
+            selectedDomain = domain;
+            finalContentType = resObj.headers.get("content-type");
+            break;
+          }
+        }
+      } catch (err) {
+        console.warn(`[Proxy] Mirror ${domain} failed for path ${rawPath}:`, err);
       }
     }
 
-    if (!response.ok) {
-      return res.status(response.status).send(`Lumin SDK ${method} failed`);
-    }
-
-    const contentType = response.headers.get("content-type");
-
-    const buffer = await safeDownload(response, VERCEL_PAYLOAD_LIMIT);
-    if (!buffer) {
+    if (response && finalBuffer) {
       if (method === "GET") {
-        return res.redirect(302, sdkUrl);
+        const cleanPathNoQuery = rawPath.split("?")[0] || "";
+        const mime = getMimeType(cleanPathNoQuery, finalContentType);
+        const encoding = response.headers.get("content-encoding") || undefined;
+        setCachedAsset(cacheKey, finalBuffer, mime, encoding);
+        return serveAsset(req, res, finalBuffer, rawPath, mime, encoding === "gzip", sdkUrl);
       }
-      return res.status(413).send("Payload Too Large");
+
+      res.setHeader("Content-Type", finalContentType || "application/json");
+      return res.send(finalBuffer);
     }
 
     if (method === "GET") {
-      const cleanPathNoQuery = rawPath.split("?")[0] || "";
-      const mime = getMimeType(cleanPathNoQuery, contentType);
-      const encoding = response.headers.get("content-encoding") || undefined;
-      setCachedAsset(cacheKey, buffer, mime, encoding);
-      return serveAsset(req, res, buffer, rawPath, mime, encoding === "gzip", sdkUrl);
+      const authenticHtml = await fetchAuthenticGameFallback(rawPath);
+      if (authenticHtml) {
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        return res.send(authenticHtml);
+      }
     }
 
-    res.setHeader("Content-Type", contentType || "application/json");
-    return res.send(buffer);
+    return res.status(200).send(renderInteractiveErrorHtml(rawPath));
   } catch (err) {
     console.error("Lumin SDK proxy error:", err);
     return res.status(500).send("Lumin SDK proxy error");

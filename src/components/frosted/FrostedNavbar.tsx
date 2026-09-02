@@ -1,13 +1,4 @@
-import {
-  Search,
-  Shuffle,
-  SlidersHorizontal,
-  Gamepad2,
-  X,
-  MessageSquare,
-  Wifi,
-  WifiOff,
-} from "lucide-react";
+import { Search, Shuffle, Gamepad2, X, MessageSquare, Wifi, WifiOff, Settings } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { Game } from "@/lib/games";
 
@@ -16,12 +7,10 @@ interface Props {
   onSearchChange: (q: string) => void;
   onHome: () => void;
   onRandomGame: () => void;
-  onOpenSettingsModal: () => void;
   onOpenChat: () => void;
-  onOpenLumin: () => void;
+  onOpenSettings: () => void;
   activeGame: Game | null;
   isChatActive: boolean;
-  isLuminActive: boolean;
   isOffline?: boolean;
 }
 
@@ -30,12 +19,10 @@ export function FrostedNavbar({
   onSearchChange,
   onHome,
   onRandomGame,
-  onOpenSettingsModal,
   onOpenChat,
-  onOpenLumin,
+  onOpenSettings,
   activeGame,
   isChatActive,
-  isLuminActive,
   isOffline = false,
 }: Props) {
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -134,18 +121,6 @@ export function FrostedNavbar({
           )}
 
           <button
-            onClick={onOpenLumin}
-            title="Lumin"
-            className={`smooth-btn relative flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium cursor-pointer transition-all ${
-              isLuminActive
-                ? "border-white bg-white text-black shadow-[0_0_15px_rgba(255,255,255,0.2)]"
-                : "border-neutral-800 bg-[#0d0d0d] text-neutral-300 hover:border-white hover:text-white"
-            }`}
-          >
-            <span className="hidden sm:inline font-bold">Lumin</span>
-          </button>
-
-          <button
             onClick={onOpenChat}
             title="Frosted Real-Time Text & Voice Chat"
             className={`smooth-btn relative flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium cursor-pointer transition-all ${
@@ -174,11 +149,11 @@ export function FrostedNavbar({
           </button>
 
           <button
-            onClick={onOpenSettingsModal}
-            title="Tab Disguise & Cloaking"
-            className="smooth-btn rounded-xl border border-neutral-800 bg-[#0d0d0d] p-2 text-neutral-400 hover:border-neutral-600 hover:text-white cursor-pointer"
+            onClick={onOpenSettings}
+            title="Open Settings & Tab Cloak"
+            className="smooth-btn flex items-center justify-center h-9 w-9 rounded-xl border border-neutral-800 bg-[#0d0d0d] text-neutral-300 hover:border-neutral-600 hover:text-white cursor-pointer"
           >
-            <SlidersHorizontal className="h-4 w-4" />
+            <Settings className="h-3.5 w-3.5 text-neutral-400" />
           </button>
         </div>
       </div>

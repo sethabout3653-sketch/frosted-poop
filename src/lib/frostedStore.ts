@@ -1,104 +1,7 @@
 import { useState, useEffect } from "react";
-import {
-  IXL_FAVICON,
-  CLASSROOM_FAVICON,
-  DRIVE_FAVICON,
-  DOCS_FAVICON,
-  SLIDES_FAVICON,
-  CANVAS_FAVICON,
-  SCHOOLOGY_FAVICON,
-  CLEVER_FAVICON,
-  DESMOS_FAVICON,
-  KHAN_FAVICON,
-  WIKIPEDIA_FAVICON,
-  QUIZLET_FAVICON,
-  GEOGEBRA_FAVICON,
-  FROSTED_ICON_SVG,
-} from "./favicons";
-
-export type CloakPreset =
-  | "none"
-  | "ixl"
-  | "classroom"
-  | "docs"
-  | "canvas"
-  | "drive"
-  | "slides"
-  | "desmos"
-  | "wikipedia"
-  | "khan"
-  | "quizlet"
-  | "schoology"
-  | "clever"
-  | "geogebra";
-
-export interface CloakConfig {
-  title: string;
-  icon: string;
-}
-
-export const CLOAK_PRESETS: Record<CloakPreset, CloakConfig> = {
-  none: {
-    title: "Frosted Games",
-    icon: FROSTED_ICON_SVG,
-  },
-  ixl: {
-    title: "IXL | Dashboard",
-    icon: IXL_FAVICON,
-  },
-  classroom: {
-    title: "Classes - Google Classroom",
-    icon: CLASSROOM_FAVICON,
-  },
-  docs: {
-    title: "Google Docs",
-    icon: DOCS_FAVICON,
-  },
-  canvas: {
-    title: "Dashboard - Canvas LMS",
-    icon: CANVAS_FAVICON,
-  },
-  drive: {
-    title: "My Drive - Google Drive",
-    icon: DRIVE_FAVICON,
-  },
-  slides: {
-    title: "Google Slides",
-    icon: SLIDES_FAVICON,
-  },
-  desmos: {
-    title: "Desmos | Graphing Calculator",
-    icon: DESMOS_FAVICON,
-  },
-  wikipedia: {
-    title: "Wikipedia, the free encyclopedia",
-    icon: WIKIPEDIA_FAVICON,
-  },
-  khan: {
-    title: "Khan Academy | Free Online Courses, Lessons & Practice",
-    icon: KHAN_FAVICON,
-  },
-  quizlet: {
-    title: "Flashcards & learning tools | Quizlet",
-    icon: QUIZLET_FAVICON,
-  },
-  schoology: {
-    title: "Home | Schoology",
-    icon: SCHOOLOGY_FAVICON,
-  },
-  clever: {
-    title: "Clever | Portal",
-    icon: CLEVER_FAVICON,
-  },
-  geogebra: {
-    title: "GeoGebra | Classic Graphing",
-    icon: GEOGEBRA_FAVICON,
-  },
-};
 
 const FAVORITES_KEY = "frosted_favorites_v1";
 const RECENT_KEY = "frosted_recent_v1";
-const CLOAK_KEY = "frosted_cloak_v1";
 const COVER_STYLE_KEY = "frosted_cover_style_v1";
 
 export type CoverStyle = "fanart" | "sdk";
@@ -177,59 +80,10 @@ export function addRecentlyPlayed(game: {
   }
 }
 
-export function getCloakPreset(): CloakPreset {
-  try {
-    return (localStorage.getItem(CLOAK_KEY) as CloakPreset) || "none";
-  } catch {
-    return "none";
-  }
-}
-
-export function setCloakPreset(preset: CloakPreset) {
-  try {
-    localStorage.setItem(CLOAK_KEY, preset);
-    applyCloak(preset);
-  } catch {
-    /* silent */
-  }
-}
-
-export function applyCloak(preset: CloakPreset) {
-  const cfg = CLOAK_PRESETS[preset] || CLOAK_PRESETS.none;
-  document.title = cfg.title;
-
-  // Remove existing icon elements to force the browser to update immediately
-  const existingIcons = document.querySelectorAll("link[rel*='icon']");
-  existingIcons.forEach((el) => el.remove());
-
-  const isSvg = cfg.icon.startsWith("data:image/svg+xml");
-  const isPng = cfg.icon.includes("s2/favicons") || cfg.icon.endsWith(".png");
-
-  const link = document.createElement("link");
-  link.rel = "icon";
-  if (isSvg) {
-    link.type = "image/svg+xml";
-  } else if (isPng) {
-    link.type = "image/png";
-  }
-  link.href = cfg.icon;
-  document.head.appendChild(link);
-
-  const shortcutLink = document.createElement("link");
-  shortcutLink.rel = "shortcut icon";
-  shortcutLink.href = cfg.icon;
-  document.head.appendChild(shortcutLink);
-}
-
 export function useFrostedStore() {
   const [favorites, setFavorites] = useState<(number | string)[]>(getFavorites());
   const [recentlyPlayed, setRecentlyPlayed] = useState<RecentItem[]>(getRecentlyPlayed());
-  const [cloak, setCloakState] = useState<CloakPreset>(getCloakPreset());
   const [coverStyle, setCoverStyleState] = useState<CoverStyle>(getCoverStyle());
-
-  useEffect(() => {
-    applyCloak(cloak);
-  }, [cloak]);
 
   useEffect(() => {
     const handleUpdate = () => {
@@ -256,11 +110,6 @@ export function useFrostedStore() {
     setRecentlyPlayed(getRecentlyPlayed());
   };
 
-  const updateCloak = (preset: CloakPreset) => {
-    setCloakPreset(preset);
-    setCloakState(preset);
-  };
-
   const updateCoverStyle = (style: CoverStyle) => {
     setCoverStyle(style);
     setCoverStyleState(style);
@@ -271,8 +120,6 @@ export function useFrostedStore() {
     toggleFavorite,
     recentlyPlayed,
     recordPlay,
-    cloak,
-    updateCloak,
     coverStyle,
     updateCoverStyle,
   };

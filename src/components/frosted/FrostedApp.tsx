@@ -6,41 +6,29 @@ import { useOfflineStatus } from "@/lib/offlineManager";
 import { FrostedNavbar } from "./FrostedNavbar";
 import { GamesGrid } from "./GamesGrid";
 import { GamePlayer } from "./GamePlayer";
-import { FrostedSettingsModal } from "./FrostedSettingsModal";
-import { VerificationGate } from "./VerificationGate";
 import { DiscordChat } from "@/components/chat/DiscordChat";
 import { FrostedInAppNotification } from "@/components/chat/FrostedInAppNotification";
 import { applyAdScripts, triggerAdImpression } from "@/lib/adManager";
-import { LuminGames } from "./LuminGames";
+import { useAppSettings, applyTabCloak } from "@/lib/settingsStore";
+import { SettingsDialog } from "./SettingsDialog";
 
 export function FrostedApp() {
-  const [isVerified, setIsVerified] = useState<boolean>(() => {
-    try {
-      return (
-        localStorage.getItem("frosted_verified_permanent") === "true" ||
-        sessionStorage.getItem("frosted_verified") === "true"
-      );
-    } catch {
-      return false;
-    }
-  });
-
   const [activeGame, setActiveGame] = useState<Game | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isChatActive, setIsChatActive] = useState(false);
-  const [isLuminActive, setIsLuminActive] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  const {
-    favorites,
-    toggleFavorite,
-    recentlyPlayed,
-    recordPlay,
-    cloak,
-    updateCloak,
-    coverStyle,
-    updateCoverStyle,
-  } = useFrostedStore();
+  const { settings } = useAppSettings();
+
+  // Periodic tab cloak enforcement to prevent any game iframe or other scripts from altering title/favicon
+  useEffect(() => {
+    const interval = setInterval(() => {
+      applyTabCloak(settings);
+    }, 1500);
+    return () => clearInterval(interval);
+  }, [settings]);
+
+  const { favorites, toggleFavorite, recentlyPlayed, recordPlay } = useFrostedStore();
 
   const { isOffline, cachedUrls, downloadGameForOffline, clearGameCache } = useOfflineStatus();
 
@@ -48,7 +36,6 @@ export function FrostedApp() {
   useEffect(() => {
     const handleOpenChat = () => {
       setActiveGame(null);
-      setIsLuminActive(false);
       setIsChatActive(true);
     };
     window.addEventListener("frosted-open-chat", handleOpenChat);
@@ -67,16 +54,6 @@ export function FrostedApp() {
     };
   }, []);
 
-  const handleVerify = () => {
-    try {
-      localStorage.setItem("frosted_verified_permanent", "true");
-      sessionStorage.setItem("frosted_verified", "true");
-    } catch {
-      /* silent */
-    }
-    setIsVerified(true);
-  };
-
   const { data: gamesList = [], isLoading } = useQuery({
     queryKey: ["frosted-games"],
     queryFn: fetchGames,
@@ -86,7 +63,6 @@ export function FrostedApp() {
   const handleLaunchGameDirect = (game: Game) => {
     triggerAdImpression();
     setIsChatActive(false);
-    setIsLuminActive(false);
     setActiveGame(game);
     recordPlay({
       id: game.id,
@@ -105,22 +81,16 @@ export function FrostedApp() {
     if (gamesList.length === 0) return;
     triggerAdImpression();
     setIsChatActive(false);
-    setIsLuminActive(false);
     const randomIndex = Math.floor(Math.random() * gamesList.length);
     handleSelectGame(gamesList[randomIndex]);
   };
 
   const handleHome = () => {
     setIsChatActive(false);
-    setIsLuminActive(false);
     setActiveGame(null);
     setSearchQuery("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
-
-  if (!isVerified) {
-    return <VerificationGate onVerified={handleVerify} />;
-  }
 
   return (
     <div className="min-h-screen bg-[#050505] text-neutral-200 font-sans selection:bg-white selection:text-black overflow-x-hidden relative">
@@ -142,36 +112,24 @@ export function FrostedApp() {
           onSearchChange={setSearchQuery}
           onHome={handleHome}
           onRandomGame={handleRandomGame}
-          onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
           onOpenChat={() => {
             setActiveGame(null);
-            setIsLuminActive(false);
             setIsChatActive(!isChatActive);
           }}
-          onOpenLumin={() => {
-            setActiveGame(null);
-            setIsChatActive(false);
-            setIsLuminActive(!isLuminActive);
-          }}
+          onOpenSettings={() => setIsSettingsOpen(true)}
           activeGame={activeGame}
           isChatActive={isChatActive}
-          isLuminActive={isLuminActive}
           isOffline={isOffline}
         />
       )}
 
       {/* Persistent Discord Chat Container */}
-      <div className={isChatActive && !isLuminActive ? "block" : "hidden"}>
+      <div className={isChatActive ? "block" : "hidden"}>
         <DiscordChat onReturnToGames={() => setIsChatActive(false)} />
       </div>
 
-      {/* Persistent Lumin Games Container */}
-      <div className={isLuminActive && !isChatActive ? "block" : "hidden"}>
-        <LuminGames />
-      </div>
-
-      {/* Main View: Game Player or Library Grid when Chat and Lumin views are inactive */}
-      {!isChatActive && !isLuminActive && (
+      {/* Main View: Game Player or Library Grid when Chat view is inactive */}
+      {!isChatActive && (
         <main>
           {activeGame ? (
             <GamePlayer
@@ -201,16 +159,8 @@ export function FrostedApp() {
         </main>
       )}
 
-      <FrostedSettingsModal
-        isOpen={isSettingsModalOpen}
-        onClose={() => setIsSettingsModalOpen(false)}
-        currentCloak={cloak}
-        onSelectCloak={updateCloak}
-        currentCoverStyle={coverStyle}
-        onSelectCoverStyle={updateCoverStyle}
-        cachedCount={cachedUrls.length}
-        onClearCache={clearGameCache}
-      />
+      {/* Global Settings & Tab Cloak Panel */}
+      <SettingsDialog isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </div>
   );
 }
