@@ -73,7 +73,8 @@ export function applyTabCloak(settings: AppSettings): void {
   if (typeof document === "undefined") return;
 
   let title = "Frosted";
-  let favicon = "/favicon.ico"; // Fallback to default index icon
+  let favicon =
+    "https://play-lh.googleusercontent.com/QbPwdx7u46tJLd6SBJ6cCPajEKgiA620fYNSZb1VsdlKIBPs4m6itZRDmu9SWPo8vbV77H1H42cNefPDtoYM"; // Default Frosted favicon
 
   if (settings.tabCloak === "custom") {
     title = settings.customTitle || "Frosted";

@@ -139,10 +139,25 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
       const vh = window.innerHeight || document.documentElement.clientHeight;
       if (!vw || !vh) return;
 
-      const elements = document.querySelectorAll('canvas, #gameContainer, #unityContainer, #unity-container, #game-container, #MMFCanvas, #ruffle');
+      const elements = document.querySelectorAll('canvas, #gameContainer, #unityContainer, #unity-container, #game-container, #MMFCanvas, #ruffle, embed, object');
       elements.forEach(function(el) {
         el.style.maxWidth = '100vw';
         el.style.maxHeight = '100vh';
+        el.style.boxSizing = 'border-box';
+
+        // Intelligently fit canvases with explicit pixel styling that exceed viewport under high zoom
+        if (el.style.width && el.style.width.indexOf('px') !== -1) {
+          const wVal = parseFloat(el.style.width);
+          if (wVal > vw) {
+            el.style.width = '100%';
+          }
+        }
+        if (el.style.height && el.style.height.indexOf('px') !== -1) {
+          const hVal = parseFloat(el.style.height);
+          if (hVal > vh) {
+            el.style.height = '100%';
+          }
+        }
       });
     } catch(e) {}
   }

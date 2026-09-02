@@ -287,3 +287,32 @@ iframe {
   border: 0;
   outline: none;
 }
+
+/* Perfect Fullscreen & Zoom Scaling Override Rules */
+:fullscreen,
+::backdrop {
+  background-color: #000000 !important;
+}
+
+div:fullscreen,
+div:-webkit-full-screen {
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  max-height: none !important;
+  min-height: 0 !important;
+  border-radius: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+div:fullscreen iframe,
+div:-webkit-full-screen iframe {
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  max-height: none !important;
+  border-radius: 0 !important;
+}

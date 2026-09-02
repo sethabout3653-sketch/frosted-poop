@@ -298,7 +298,7 @@ export function GamePlayer({
       <div className="flex-1 flex flex-col items-center justify-center p-2 sm:p-4">
         <div
           ref={containerRef}
-          className="relative w-full max-w-6xl h-[65vh] min-h-[440px] max-h-[820px] overflow-hidden rounded-2xl border border-neutral-800 bg-black shadow-2xl flex items-center justify-center"
+          className="relative w-full max-w-6xl h-[65vh] min-h-[280px] sm:min-h-[440px] max-h-[80vh] sm:max-h-[820px] overflow-hidden rounded-2xl border border-neutral-800 bg-black shadow-2xl flex items-center justify-center"
         >
           {iframeLoading && (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/90 backdrop-blur-sm">
