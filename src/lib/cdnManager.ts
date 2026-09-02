@@ -1,15 +1,15 @@
 // Default jsDelivr CDN configuration & game URL builders
-export type CdnNetwork = "githack";
+export type CdnNetwork = "jsdelivr";
 
-export const CDN_DOMAIN = "raw.githack.com";
-export const CDN_BASE_URL = "https://raw.githack.com";
+export const CDN_DOMAIN = "cdn.jsdelivr.net";
+export const CDN_BASE_URL = "https://cdn.jsdelivr.net/gh";
 
 /**
  * Builds a direct jsDelivr CDN URL for a GitHub file
  */
 export function buildGhUrl(owner: string, repo: string, ref = "main", path = ""): string {
   const cleanPath = path.replace(/^\/+/, "");
-  return `https://raw.githack.com/${owner}/${repo}/${ref}/${cleanPath}`;
+  return `https://cdn.jsdelivr.net/gh/${owner}/${repo}@${ref}/${cleanPath}`;
 }
 
 /**
@@ -36,7 +36,7 @@ export function getGameCandidateUrls(
   // 1. Primary GN-math / freebuisness html repo
   if (filename.endsWith(".html")) {
     addCandidate(
-      `https://raw.githack.com/freebuisness/html/main/${filename}`,
+      `https://cdn.jsdelivr.net/gh/freebuisness/html@main/${filename}`,
       "jsDelivr GN-Math",
     );
     addCandidate(
@@ -45,7 +45,7 @@ export function getGameCandidateUrls(
     );
   } else {
     addCandidate(
-      `https://raw.githack.com/freebuisness/html/main/${baseSlug}.html`,
+      `https://cdn.jsdelivr.net/gh/freebuisness/html@main/${baseSlug}.html`,
       "jsDelivr GN-Math",
     );
     addCandidate(
@@ -56,7 +56,7 @@ export function getGameCandidateUrls(
 
   // 2. Seraph Games repo
   addCandidate(
-    `https://raw.githack.com/a456pur/seraph/main/games/${baseSlug}/index.html`,
+    `https://cdn.jsdelivr.net/gh/a456pur/seraph@main/games/${baseSlug}/index.html`,
     "jsDelivr Seraph",
   );
   addCandidate(
@@ -66,19 +66,19 @@ export function getGameCandidateUrls(
 
   // 3. Selenite Repo
   addCandidate(
-    `https://raw.githack.com/Selenite-CC/Selenite/main/public/games/${baseSlug}/index.html`,
+    `https://cdn.jsdelivr.net/gh/Selenite-CC/Selenite@main/public/games/${baseSlug}/index.html`,
     "jsDelivr Selenite",
   );
 
   // 4. 3kh0 Assets Repo
   addCandidate(
-    `https://raw.githack.com/3kh0/3kh0-Assets/main/${baseSlug}/index.html`,
+    `https://cdn.jsdelivr.net/gh/3kh0/3kh0-Assets@main/${baseSlug}/index.html`,
     "jsDelivr 3kh0",
   );
 
   // 5. Classroom Repo
   addCandidate(
-    `https://raw.githack.com/classroom-google-com/classroom-google-com.github.io/main/${baseSlug}/index.html`,
+    `https://cdn.jsdelivr.net/gh/classroom-google-com/classroom-google-com.github.io@main/${baseSlug}/index.html`,
     "jsDelivr Classroom",
   );
 
