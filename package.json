@@ -1,12 +1,12 @@
 {
-  "name": "vite-react-express",
+  "name": "frosted-react-express",
   "private": true,
   "sideEffects": false,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
-    "start": "node dist/server.cjs",
+    "dev": "pnpm build && tsx watch server.ts",
+    "build": "esbuild src/main.tsx --bundle --minify --sourcemap --platform=browser --format=esm --outfile=dist/app.js --loader:.tsx=tsx --loader:.ts=ts --loader:.css=css && node -e \"const fs=require('fs'); fs.cpSync('index.html','dist/index.html'); fs.cpSync('src/styles.css','dist/styles.css'); fs.cpSync('public','dist/public',{recursive:true})\" && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "start": "NODE_ENV=production node dist/server.cjs",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
@@ -41,7 +41,6 @@
     "@radix-ui/react-toggle": "^1.1.10",
     "@radix-ui/react-toggle-group": "^1.1.11",
     "@radix-ui/react-tooltip": "^1.2.8",
-    "@tailwindcss/vite": "^4.2.1",
     "@tanstack/react-query": "^5.101.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -77,7 +76,6 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@types/ws": "^8.18.1",
-    "@vitejs/plugin-react": "^5.2.0",
     "esbuild": "^0.28.0",
     "eslint": "^9.32.0",
     "eslint-config-prettier": "^10.1.1",
@@ -88,8 +86,6 @@
     "prettier": "^3.7.3",
     "tsx": "^4.19.1",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.56.1",
-    "vite": "^8.2.0",
-    "vite-plugin-static-copy": "^4.1.1"
+    "typescript-eslint": "^8.56.1"
   }
 }

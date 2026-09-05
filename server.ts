@@ -1,7 +1,6 @@
 import express from "express";
 import path from "path";
 import http from "http";
-import { createServer as createViteServer } from "vite";
 import gameProxy from "./src/server/gameProxy.js";
 import { chatRouter } from "./src/server/chatServer.js";
 
@@ -27,20 +26,13 @@ async function startServer() {
   app.use("/api/public", gameProxy);
   app.use("/api/chat", chatRouter);
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
-  }
+  // Serve the bundled React app in every environment. The build step creates
+  // dist/app.js and dist/index.html without a dev-server runtime or HMR socket.
+  const distPath = path.join(process.cwd(), "dist");
+  app.use(express.static(distPath));
+  app.get("*", (_req, res) => {
+    res.sendFile(path.join(distPath, "index.html"));
+  });
 
   // Global Express Error Handler
   app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

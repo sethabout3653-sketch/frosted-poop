@@ -28,8 +28,7 @@ function isIgnoredError(error: unknown): boolean {
     lower.includes("closure invoked") ||
     lower.includes("caught error") ||
     lower.includes("resizeobserver") ||
-    lower.includes("cross-origin") ||
-    lower.includes("vite")
+    lower.includes("cross-origin")
   );
 }
 
