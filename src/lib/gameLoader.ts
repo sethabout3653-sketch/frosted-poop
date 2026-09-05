@@ -189,10 +189,8 @@ export function prepareGameHtml(rawHtml: string, filename: string, baseUrl?: str
     u = u.replace(new RegExp("https://raw\\.esm\\.sh/([^/@]+)/([^/@]+)/([^/]+)/", "g"), "https://raw.githack.com/$1/$2/$3/");
     u = u.replace(new RegExp("https://cdn\\.statically\\.io/gh/([^/@]+)/([^/@]+)/([^/]+)/", "g"), "https://raw.githack.com/$1/$2/$3/");
     
-    // Proxy all Raw Git Hack and GitHub requests through our local API to bypass CORS/CSP restrictions
-    u = u.replace(new RegExp("https://(?:raw|rawcdn)\\.githack\\.com/", "g"), "/api/public/gn/cdn/");
-    u = u.replace(new RegExp("https://raw\\.githubusercontent\\.com/", "g"), "/api/public/gn/gh/");
-
+    // Keep game assets on Raw Git Hack. Static deployments must not depend on
+    // an application server or a local proxy route.
     return u;
   }
 

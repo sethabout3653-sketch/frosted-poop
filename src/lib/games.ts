@@ -239,9 +239,9 @@ export const AUTHORITATIVE_COVERS: Record<string, string> = {
   fnfvssonicexe3040: `${GN_COVERS_CDN}/601.png`,
 };
 export const GN_ZONES_URL = "https://rawcdn.githack.com/freebuisness/assets/main/zones.json";
-export const GN_GAME_PROXY = "/api/public/gn/game";
-export const SERAPH_GAME_PROXY = "/api/public/seraph";
-export const THREE_KH0_GAME_PROXY = "/api/public/3kh0";
+export const GN_GAME_PROXY = "https://rawcdn.githack.com/gn-math/html/main";
+export const SERAPH_GAME_PROXY = "https://rawcdn.githack.com/a456pur/seraph/main";
+export const THREE_KH0_GAME_PROXY = "https://rawcdn.githack.com/3kh0/3kh0-Assets/main";
 
 export const SERAPH_GAMES: Game[] = [];
 const DEPRECATED_SERAPH_LIST: Game[] = [];
@@ -362,18 +362,13 @@ export function getGameSources(game: Game): GameSource[] {
         game.name.toLowerCase() === "slope 3" ||
         game.name.toLowerCase() === "slope3"))
   ) {
-    return [
-      {
-        id: "gn-proxy",
-        name: "GN Fast Proxy (Shielded)",
-        url: "/api/public/gn/game/198.html",
-      },
-      {
-        id: "gn-cdn",
-        name: "GN-Math CDN",
-        url: "https://rawcdn.githack.com/gn-math/html/main/198.html",
-        isCdn: true,
-      },
+  return [
+    {
+      id: "gn-cdn",
+      name: "GN-Math Raw Git Hack",
+      url: "https://rawcdn.githack.com/gn-math/html/main/198.html",
+      isCdn: true,
+    },
       {
         id: "y8-slope",
         name: "Official Y8 WebGL",
@@ -414,9 +409,10 @@ export function getGameSources(game: Game): GameSource[] {
   // If we found a verified GN file, add shielded proxy and CDN sources as FIRST PRIORITY
   if (exactGnFile) {
     sources.push({
-      id: "gn-proxy",
-      name: "Shielded Proxy (Fast)",
-      url: `/api/public/gn/game/${exactGnFile}`,
+      id: "gn-cdn",
+      name: "GN-Math Raw Git Hack",
+      url: `https://rawcdn.githack.com/gn-math/html/main/${exactGnFile}`,
+      isCdn: true,
     });
     sources.push({
       id: "gn-cdn",
@@ -431,26 +427,29 @@ export function getGameSources(game: Game): GameSource[] {
     });
   }
 
-  // Also add Seraph & Selenite authentic mirrors if slug is known
+  // Also add direct Raw Git Hack mirrors when the catalog has a slug.
   if (baseSlug) {
     sources.push({
-      id: "seraph-proxy",
-      name: "Seraph Library Mirror",
-      url: `/api/public/seraph/games/${baseSlug}/index.html`,
+      id: "seraph-cdn",
+      name: "Seraph Raw Git Hack",
+      url: `https://rawcdn.githack.com/a456pur/seraph/main/games/${baseSlug}/index.html`,
+      isCdn: true,
     });
     sources.push({
-      id: "selenite-proxy",
-      name: "Selenite Mirror",
-      url: `/api/public/g/${baseSlug}/index.html`,
+      id: "three-kh0-cdn",
+      name: "3kh0 Raw Git Hack",
+      url: `https://rawcdn.githack.com/3kh0/3kh0-Assets/main/${baseSlug}/index.html`,
+      isCdn: true,
     });
   }
 
-  // If still no sources, fallback to GN proxy with directory
+  // Use the catalog path directly as a final static fallback.
   if (sources.length === 0) {
     sources.push({
-      id: "gn-proxy",
-      name: "Shielded Proxy",
-      url: `/api/public/gn/game/${dir}`,
+      id: "gn-cdn",
+      name: "Raw Git Hack",
+      url: `https://rawcdn.githack.com/gn-math/html/main/${dir.replace(/^\/+/, "")}`,
+      isCdn: true,
     });
   }
 
