@@ -9,13 +9,11 @@ import { GamePlayer } from "./GamePlayer";
 import { applyAdScripts, triggerAdImpression } from "@/lib/adManager";
 import { useAppSettings, applyTabCloak } from "@/lib/settingsStore";
 import { SettingsDialog } from "./SettingsDialog";
-import { LocalChatPanel } from "@/components/chat/LocalChatPanel";
 
 export function FrostedApp() {
   const [activeGame, setActiveGame] = useState<Game | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isChatOpen, setIsChatOpen] = useState(false);
 
   const { settings } = useAppSettings();
 
@@ -88,7 +86,6 @@ export function FrostedApp() {
           onOpenSettings={() => setIsSettingsOpen(true)}
           activeGame={activeGame}
           isOffline={isOffline}
-          onOpenChat={() => setIsChatOpen(true)}
         />
       )}
 
@@ -123,7 +120,6 @@ export function FrostedApp() {
 
       {/* Global Settings & Tab Cloak Panel */}
       <SettingsDialog isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
-      {isChatOpen && <LocalChatPanel onClose={() => setIsChatOpen(false)} />}
     </div>
   );
 }

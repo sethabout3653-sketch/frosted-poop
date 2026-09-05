@@ -1,5 +1,4 @@
 import { Search, Shuffle, Gamepad2, X, Wifi, WifiOff, Settings } from "lucide-react";
-import { LocalChatButton } from "@/components/chat/LocalChatPanel";
 import { useEffect, useRef } from "react";
 import type { Game } from "@/lib/games";
 
@@ -9,7 +8,6 @@ interface Props {
   onHome: () => void;
   onRandomGame: () => void;
   onOpenSettings: () => void;
-  onOpenChat: () => void;
   activeGame: Game | null;
   isOffline?: boolean;
 }
@@ -20,7 +18,6 @@ export function FrostedNavbar({
   onHome,
   onRandomGame,
   onOpenSettings,
-  onOpenChat,
   activeGame,
   isOffline = false,
 }: Props) {
@@ -109,8 +106,6 @@ export function FrostedNavbar({
               <span className="text-[11px] text-neutral-300">Offline Ready</span>
             </div>
           )}
-
-          <LocalChatButton onClick={onOpenChat} />
 
           {activeGame && (
             <button
