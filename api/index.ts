@@ -30,11 +30,9 @@ app.use((req, res, next) => {
   return next();
 });
 
-// 2. Use Express's parsers directly. Vercel has already populated the request
-// body in some runtimes, so inspecting or manually consuming the stream here
-// can throw "stream is not readable" and crash the function.
-app.use(express.json({ limit: "25mb", strict: false }));
-app.use(express.urlencoded({ extended: true, limit: "25mb" }));
+// 2. Do not attach Express body parsers globally. Vercel may provide a
+// pre-parsed body with a non-readable request stream; parsing it here crashes
+// the whole invocation before a route can respond.
 
 // 3. Normalize Vercel serverless request URLs across routing patterns
 app.use((req, _res, next) => {
@@ -108,6 +106,11 @@ app.post(["/api/create-checkout-session", "/create-checkout-session"], async (re
 // 6. Mount Chat Router at all possible sub-paths
 app.use("/api/chat", chatRouter);
 app.use("/chat", chatRouter);
+
+// Keep the root API endpoint independent from optional chat dependencies.
+app.get(["/api", "/"], (_req, res) => {
+  res.json({ status: "ok", timestamp: Date.now(), runtime: "vercel-serverless" });
+});
 
 // 7. Mount Game Proxy at all possible sub-paths
 app.use("/api/public", gameProxy);

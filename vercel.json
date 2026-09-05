@@ -8,6 +8,10 @@
       "destination": "/api/health"
     },
     {
+      "source": "/api",
+      "destination": "/api/health"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/api/index"
     },
