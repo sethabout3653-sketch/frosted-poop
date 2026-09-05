@@ -1,4 +1,4 @@
-import { Search, Shuffle, Gamepad2, X, Wifi, WifiOff, Settings } from "lucide-react";
+import { Search, Shuffle, Gamepad2, X, MessageSquare, Wifi, WifiOff, Settings } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { Game } from "@/lib/games";
 
@@ -7,8 +7,10 @@ interface Props {
   onSearchChange: (q: string) => void;
   onHome: () => void;
   onRandomGame: () => void;
+  onOpenChat: () => void;
   onOpenSettings: () => void;
   activeGame: Game | null;
+  isChatActive: boolean;
   isOffline?: boolean;
 }
 
@@ -17,8 +19,10 @@ export function FrostedNavbar({
   onSearchChange,
   onHome,
   onRandomGame,
+  onOpenChat,
   onOpenSettings,
   activeGame,
+  isChatActive,
   isOffline = false,
 }: Props) {
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -115,6 +119,25 @@ export function FrostedNavbar({
               <span>Library</span>
             </button>
           )}
+
+          <button
+            onClick={onOpenChat}
+            title="Frosted Real-Time Text & Voice Chat"
+            className={`smooth-btn relative flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium cursor-pointer transition-all ${
+              isChatActive
+                ? "border-white bg-white text-black shadow-[0_0_15px_rgba(255,255,255,0.2)]"
+                : "border-neutral-800 bg-[#0d0d0d] text-neutral-300 hover:border-white hover:text-white"
+            }`}
+          >
+            <MessageSquare
+              className={`h-3.5 w-3.5 ${isChatActive ? "text-black" : "text-white"}`}
+            />
+            <span className="hidden sm:inline font-bold">Frosted Chat</span>
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+          </button>
 
           <button
             onClick={onRandomGame}
