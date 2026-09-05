@@ -79,4 +79,3 @@ export function LocalChatPanel({ onClose }: { onClose: () => void }) {
 export function LocalChatButton({ onClick }: { onClick: () => void }) {
   return <button onClick={onClick} title="Open Frosted Chat" className="smooth-btn flex items-center gap-1.5 rounded-xl border border-neutral-800 bg-[#0d0d0d] px-3 py-2 text-xs font-medium text-neutral-300 hover:border-white hover:text-white"><MessageCircle className="h-3.5 w-3.5" /><span className="hidden sm:inline">Chat</span></button>;
 }
-EOF
