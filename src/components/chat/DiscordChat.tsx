@@ -7,6 +7,7 @@ import { DiscordChannelSidebar } from "./DiscordChannelSidebar";
 import { DiscordMessageArea } from "./DiscordMessageArea";
 import { DiscordUserList } from "./DiscordUserList";
 import { ShieldAlert } from "lucide-react";
+import { VoiceStage } from "./VoiceStage";
 
 export interface VoiceStateInfo {
   currentVoiceChannelId: string | null;
@@ -210,26 +211,41 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
         onLogout={handleLogout}
       />
 
-      {/* 3. Main Message Area */}
+      {/* 3. Main Conversation Area */}
       <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
-        <DiscordMessageArea
-          activeChannel={activeChannel}
-          messages={messages}
-          currentUser={currentUser}
-          typingUsers={typingUsers}
-          onSendMessage={sendMessage}
-          onDeleteMessage={deleteMessage}
-          onToggleReaction={toggleReaction}
-          onSendTyping={sendTyping}
-          onToggleUserList={() => setShowUserList(!showUserList)}
-          showUserList={showUserList}
-          notificationPermission={notificationPermission}
-          onRequestNotificationPermission={requestNotificationPermission}
-        />
+        {activeChannel?.type === "voice" && currentVoiceChannelId ? (
+          <VoiceStage
+            channelName={activeChannel.name}
+            currentUser={currentUser}
+            occupants={voiceStates[currentVoiceChannelId] || []}
+            cameraStream={cameraStream}
+            isCameraOn={isCameraOn}
+            isMuted={isMuted}
+            isSelfSpeaking={voiceStates[currentVoiceChannelId]?.some((user) => user.userId === currentUser.id && user.isSpeaking) || false}
+            onToggleCamera={toggleCamera}
+            onToggleMute={toggleMute}
+            onLeave={leaveVoiceChannel}
+          />
+        ) : (
+          <DiscordMessageArea
+            activeChannel={activeChannel}
+            messages={messages}
+            currentUser={currentUser}
+            typingUsers={typingUsers}
+            onSendMessage={sendMessage}
+            onDeleteMessage={deleteMessage}
+            onToggleReaction={toggleReaction}
+            onSendTyping={sendTyping}
+            onToggleUserList={() => setShowUserList(!showUserList)}
+            showUserList={showUserList}
+            notificationPermission={notificationPermission}
+            onRequestNotificationPermission={requestNotificationPermission}
+          />
+        )}
       </div>
 
       {/* 4. Right Online Members List */}
-      {showUserList && <DiscordUserList users={onlineUsers} currentUserId={currentUser.id} />}
+      {showUserList && activeChannel?.type !== "voice" && <DiscordUserList users={onlineUsers} currentUserId={currentUser.id} />}
     </div>
   );
 }
