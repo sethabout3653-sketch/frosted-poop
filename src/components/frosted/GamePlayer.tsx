@@ -12,9 +12,14 @@ import {
   CheckCircle2,
   WifiOff,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { gameCover, createStyledSvgCover, type Game } from "@/lib/games";
-import { loadGameSource } from "@/lib/gameLoader";
+import { useEffect, useRef, useState, useCallback } from "react";
+import {
+  gameCover,
+  createStyledSvgCover,
+  getGameSources,
+  type Game,
+  type GameSource,
+} from "@/lib/games";
 import { isGameCached } from "@/lib/offlineManager";
 
 interface Props {
@@ -47,46 +52,35 @@ export function GamePlayer({
   const [isReloading, setIsReloading] = useState(false);
   const [showKeybinds, setShowKeybinds] = useState(false);
   const [iframeLoading, setIframeLoading] = useState(true);
+  const [currentSourceIndex, setCurrentSourceIndex] = useState(0);
   const [activeSrc, setActiveSrc] = useState<string>("");
   const [isSavingOffline, setIsSavingOffline] = useState(false);
-  const currentBlobUrlRef = useRef<string | null>(null);
 
   const isFav = favorites.includes(game.id);
   const isCached = isGameCached(game, cachedUrls);
+  const sources: GameSource[] = getGameSources(game);
 
-  // Load and sanitize game HTML with universal framing
-  useEffect(() => {
-    let cancelled = false;
+  // Automatically search and resolve the best working source
+  const resolveAutoSource = useCallback(async (candidateSources: GameSource[]) => {
+    if (!candidateSources || candidateSources.length === 0) return;
     setIframeLoading(true);
 
-    // Clean up previous blob URL to prevent memory leaks
-    if (currentBlobUrlRef.current) {
-      URL.revokeObjectURL(currentBlobUrlRef.current);
-      currentBlobUrlRef.current = null;
+    // If only one source (e.g. direct link or Slope WebGL), use it directly
+    if (candidateSources.length === 1) {
+      setCurrentSourceIndex(0);
+      setActiveSrc(candidateSources[0].url);
+      return;
     }
 
-    async function initAndLoad() {
-      if (cancelled) return;
-      const result = await loadGameSource(game.directory);
-      if (cancelled) {
-        if (result.blobUrl) URL.revokeObjectURL(result.blobUrl);
-        return;
-      }
-      if (result.blobUrl) {
-        currentBlobUrlRef.current = result.blobUrl;
-      }
-      setActiveSrc(result.src);
-    }
-    initAndLoad();
+    // Set the first priority source immediately (rawcdn.githack.com)
+    setCurrentSourceIndex(0);
+    setActiveSrc(candidateSources[0].url);
+  }, []);
 
-    return () => {
-      cancelled = true;
-      if (currentBlobUrlRef.current) {
-        URL.revokeObjectURL(currentBlobUrlRef.current);
-        currentBlobUrlRef.current = null;
-      }
-    };
-  }, [game.id, game.directory]);
+  useEffect(() => {
+    const gameSources = getGameSources(game);
+    resolveAutoSource(gameSources);
+  }, [game, resolveAutoSource]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -96,7 +90,7 @@ export function GamePlayer({
     return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
 
-  // Auto-focus iframe on mount/change so Chromebook keyboard controls (WASD/Arrows) work instantly without clicking
+  // Auto-focus iframe on mount/change so keyboard controls work instantly
   useEffect(() => {
     const timer = setTimeout(() => {
       iframeRef.current?.focus();
@@ -104,7 +98,7 @@ export function GamePlayer({
     return () => clearTimeout(timer);
   }, [game, activeSrc]);
 
-  // Clean up iframe memory on unmount to free Chromebook WebGL/CPU resources
+  // Clean up iframe memory on unmount
   useEffect(() => {
     const currentIframe = iframeRef.current;
     return () => {
@@ -129,22 +123,19 @@ export function GamePlayer({
   const handleReload = () => {
     setIsReloading(true);
     setIframeLoading(true);
-    if (currentBlobUrlRef.current) {
-      URL.revokeObjectURL(currentBlobUrlRef.current);
-      currentBlobUrlRef.current = null;
+
+    const gameSources = getGameSources(game);
+    // Cycle to next source if available or reload current
+    const nextIdx = (currentSourceIndex + 1) % (gameSources.length || 1);
+    const nextSrc = gameSources[nextIdx]?.url || activeSrc;
+
+    setCurrentSourceIndex(nextIdx);
+    setActiveSrc(nextSrc);
+
+    if (iframeRef.current) {
+      iframeRef.current.src = nextSrc;
     }
-    async function reloadProxyAndGame() {
-      const result = await loadGameSource(game.directory);
-      if (result.blobUrl) {
-        currentBlobUrlRef.current = result.blobUrl;
-      }
-      setActiveSrc(result.src);
-      if (iframeRef.current) {
-        iframeRef.current.src = result.src;
-      }
-      setTimeout(() => setIsReloading(false), 500);
-    }
-    reloadProxyAndGame();
+    setTimeout(() => setIsReloading(false), 500);
   };
 
   const handleShare = () => {
@@ -258,7 +249,7 @@ export function GamePlayer({
 
             <button
               onClick={handleReload}
-              title="Reload Game (R)"
+              title="Reload / Switch Source (R)"
               className="smooth-btn rounded-xl border border-neutral-800 bg-[#0d0d0d] p-2 text-neutral-300 hover:border-neutral-600 hover:text-white cursor-pointer"
             >
               <RotateCw
@@ -294,16 +285,16 @@ export function GamePlayer({
         </div>
       </div>
 
-      {/* Main Game Screen Container - Perfectly framed for Chromebooks & Desktop */}
-      <div className="flex-1 flex flex-col items-center justify-center p-2 sm:p-4">
+      {/* Main Game Screen Container */}
+      <div className="flex-1 flex flex-col items-center justify-center p-2 sm:p-4 max-w-6xl mx-auto w-full">
         <div
           ref={containerRef}
-          className="relative w-full max-w-6xl h-[65vh] min-h-[280px] sm:min-h-[440px] max-h-[80vh] sm:max-h-[820px] overflow-hidden rounded-2xl border border-neutral-800 bg-black shadow-2xl flex items-center justify-center"
+          className="relative w-full h-[70vh] min-h-[360px] sm:min-h-[520px] max-h-[85vh] sm:max-h-[860px] overflow-hidden rounded-2xl border border-neutral-800 bg-black shadow-2xl flex items-center justify-center"
         >
           {iframeLoading && (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/90 backdrop-blur-sm">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-neutral-600 border-t-white" />
-              <p className="mt-3 text-xs text-neutral-400 font-mono">Loading full game...</p>
+              <p className="mt-3 text-xs text-neutral-400 font-mono">Loading game...</p>
             </div>
           )}
           <iframe
@@ -311,9 +302,11 @@ export function GamePlayer({
             src={activeSrc || undefined}
             title={game.name}
             onLoad={() => setIframeLoading(false)}
-            className="h-full w-full border-0 bg-black block"
-            allow="fullscreen; autoplay; gamepad; pointer-lock; clipboard-write; encrypted-media"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
+            className="w-full h-full border-0 block overflow-hidden"
+            scrolling="no"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock"
+            allow="autoplay; fullscreen; gamepad; focus-without-user-activation; clipboard-read; clipboard-write; cross-origin-isolated"
+            allowFullScreen
           />
         </div>
       </div>

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import type { Game } from "./games";
+import { getGameSources, type Game } from "./games";
 
 export const CACHE_SHELL_NAME = "frosted-shell-v1";
 export const CACHE_GAMES_NAME = "frosted-games-v1";
@@ -34,26 +34,8 @@ export function registerServiceWorker() {
 
 // Get helper list of probable target URLs for a given game
 export function getGameTargetUrls(game: Game): string[] {
-  const dir = game.directory || "";
-  if (dir.startsWith("http://") || dir.startsWith("https://")) {
-    return [dir];
-  }
-
-  const filename = dir.replace(/^\/+/, "");
-  const urls: string[] = [];
-
-  if (filename.startsWith("3kh0/")) {
-    const rawF = filename.replace("3kh0/", "");
-    urls.push(`/api/public/3kh0/${rawF}`);
-    urls.push(`https://cdn.jsdelivr.net/gh/3kh0/3kh0-Assets@main/${rawF}`);
-    urls.push(`https://raw.githubusercontent.com/3kh0/3kh0-Assets/main/${rawF}`);
-  } else {
-    urls.push(`/api/public/gn/game/${filename}`);
-    urls.push(`https://cdn.jsdelivr.net/gh/freebuisness/html@main/${filename}`);
-    urls.push(`https://raw.githubusercontent.com/freebuisness/html/main/${filename}`);
-  }
-
-  return urls;
+  const sources = getGameSources(game);
+  return sources.map((s) => s.url);
 }
 
 // Check if a game is stored in offline cache

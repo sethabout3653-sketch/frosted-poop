@@ -2,8 +2,50 @@ import { Buffer } from "node:buffer";
 import { Router } from "express";
 import fs from "node:fs";
 import path from "node:path";
+import gnZonesData from "../data/gnZones.json";
 
 const router = Router();
+
+// Build fast static lookup maps from gnZones
+const zoneMapById: Record<string, string> = {};
+const zoneMapByName: Record<string, string> = {};
+
+for (const z of gnZonesData as Array<{ id?: number; name?: string; url?: string }>) {
+  if (z.url) {
+    const fn = z.url.replace("{HTML_URL}/", "").replace(/^https?:\/\/[^/]+\//, "");
+    if (z.id !== undefined && z.id !== null) {
+      zoneMapById[String(z.id)] = fn;
+    }
+    if (z.name) {
+      const cleanN = z.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+      zoneMapByName[cleanN] = fn;
+    }
+  }
+}
+
+/**
+ * Resolves exact GN-math HTML filename from any identifier (e.g. "467" -> "467-updateef.html", "soniccd" -> "589-f.html")
+ */
+function resolveExactGnFile(identifier: string): string | null {
+  if (!identifier) return null;
+  const clean = identifier.replace(/^\/+/, "").replace(/\.html$/i, "");
+
+  if (zoneMapById[clean]) {
+    return zoneMapById[clean];
+  }
+
+  const normName = clean.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (zoneMapByName[normName]) {
+    return zoneMapByName[normName];
+  }
+
+  const numMatch = clean.match(/^(\d+)/);
+  if (numMatch && zoneMapById[numMatch[1]]) {
+    return zoneMapById[numMatch[1]];
+  }
+
+  return null;
+}
 
 const VERCEL_PAYLOAD_LIMIT = 100 * 1024 * 1024; // 100MB limit for rich WebGL game assets
 
@@ -110,7 +152,7 @@ function setCachedAsset(key: string, buffer: Buffer, mime: string, encoding?: st
 // Helper for fetching CDN assets across multiple CDN networks with GitHub raw fallback
 async function fetchGNAsset(
   subPath: string,
-  preferredCdn: string = "jsdelivr",
+  preferredCdn: string = "rawgithack",
 ): Promise<{ response: Response; urlUsed: string } | null> {
   const parts = subPath.split("/");
   let userRepo = "";
@@ -133,15 +175,14 @@ async function fetchGNAsset(
 
   // Build URLs for specific CDN
   const addCdnUrl = (cdn: string) => {
-    if (cdn === "quantil") {
-      urlsToTry.push(`https://quantil.jsdelivr.net/gh/${subPath}`);
-      if (userRepo) urlsToTry.push(`https://quantil.jsdelivr.net/gh/${userRepo}@${branch}/${rest}`);
-    } else if (cdn === "fastly") {
-      urlsToTry.push(`https://fastly.jsdelivr.net/gh/${subPath}`);
-      if (userRepo) urlsToTry.push(`https://fastly.jsdelivr.net/gh/${userRepo}@${branch}/${rest}`);
-    } else if (cdn === "gcore") {
-      urlsToTry.push(`https://gcore.jsdelivr.net/gh/${subPath}`);
-      if (userRepo) urlsToTry.push(`https://gcore.jsdelivr.net/gh/${userRepo}@${branch}/${rest}`);
+    if (cdn === "rawgithack" || cdn === "githack") {
+      if (userRepo) {
+        urlsToTry.push(`https://raw.githack.com/${userRepo}/${branch}/${rest}`);
+        urlsToTry.push(`https://rawcdn.githack.com/${userRepo}/${branch}/${rest}`);
+      } else {
+        urlsToTry.push(`https://raw.githack.com/${subPath.replace("@", "/")}`);
+        urlsToTry.push(`https://rawcdn.githack.com/${subPath.replace("@", "/")}`);
+      }
     } else if (cdn === "esm") {
       if (userRepo) urlsToTry.push(`https://raw.esm.sh/${userRepo}/${branch}/${rest}`);
     } else if (cdn === "statically") {
@@ -149,9 +190,6 @@ async function fetchGNAsset(
     } else if (cdn === "staticdelivr") {
       urlsToTry.push(`https://cdn.staticdelivr.com/gh/${subPath}`);
       if (userRepo) urlsToTry.push(`https://cdn.staticdelivr.com/gh/${userRepo}@${branch}/${rest}`);
-    } else {
-      urlsToTry.push(`https://cdn.jsdelivr.net/gh/${subPath}`);
-      if (userRepo) urlsToTry.push(`https://cdn.jsdelivr.net/gh/${userRepo}@${branch}/${rest}`);
     }
   };
 
@@ -159,7 +197,7 @@ async function fetchGNAsset(
   addCdnUrl(preferredCdn);
 
   // 2. Add all other CDN networks
-  const allCdns = ["jsdelivr", "quantil", "fastly", "gcore", "esm", "statically", "staticdelivr"];
+  const allCdns = ["rawgithack", "esm", "statically", "staticdelivr"];
   for (const cdn of allCdns) {
     if (cdn !== preferredCdn) {
       addCdnUrl(cdn);
@@ -221,8 +259,56 @@ function sanitizeAndCleanGameHtml(rawHtml: string): string {
   html = html.replace(/<style[^>]*>[\s\S]*?#sidebarad[\s\S]*?<\/style>/gi, "");
   html = html.replace(/<div\b[^>]*class=["\x27]sidebar-close["\x27][\s\S]*?<\/div>/gi, "");
 
-  // 4. Inject anti-popunder, anti-alert and frame-locking shield script to block third-party annoyances
+  // 4. Inject anti-popunder, anti-alert, frame-locking shield script and responsive viewport auto-fit styles
   const shieldScript = `
+<style id="frosted-viewport-fit">
+  html, body {
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    background-color: #000000 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+  #unity-container, #gameContainer, #canvas-container, .unity-desktop, .webgl-content, #unity-canvas-container, div#gameContainer, div#unity-container {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    margin: auto !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+  canvas, #unity-canvas, #canvas, .game-canvas, canvas#canvas, div#gameContainer canvas {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    display: block !important;
+    object-fit: contain !important;
+    margin: 0 auto !important;
+    position: relative !important;
+    top: 0 !important;
+    left: 0 !important;
+  }
+  .webgl-content .footer, #unity-footer, .unity-footer, [id^="sidebarad"], .sidebarad, .sidebar-close {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    width: 0 !important;
+  }
+</style>
 <script id="frosted-anti-annoyance">
   (function() {
     try {
@@ -233,6 +319,13 @@ function sanitizeAndCleanGameHtml(rawHtml: string): string {
 
       // 2. Disable window.open to stop redirect ads, popups, and popunders completely
       window.open = function() { console.log("[Shield] Blocked popup window.open:", arguments); return null; };
+      document.addEventListener("click", function(e) {
+        const targetLink = e.target && e.target.closest ? e.target.closest("a") : null;
+        if (targetLink && targetLink.getAttribute("target") === "_blank") {
+          targetLink.removeAttribute("target");
+          e.preventDefault();
+        }
+      }, true);
 
       // 3. Prevent frame-busting redirects (forces game to remain inside iframe sandbox)
       Object.defineProperty(window, 'top', { get: function() { return window.self; } });
@@ -283,8 +376,14 @@ function sanitizeAndCleanGameHtml(rawHtml: string): string {
     html = `${shieldScript}${html}`;
   }
 
-  // 5. Rewrite all CDN links to proxied local API endpoints
-  html = html.replace(/https:\/\/cdn\.jsdelivr\.net\/gh\//g, "/api/public/gn/cdn/");
+  // 5. Rewrite all CDN links to Raw Git Hack / proxied local API endpoints
+  html = html.replace(
+    /https:\/\/cdn\.jsdelivr\.net\/gh\/([^/]+)\/([^/@]+)(?:@[^/]+)?\//g,
+    "https://raw.githack.com/$1/$2/main/",
+  );
+  html = html.replace(/https:\/\/cdn\.jsdelivr\.net\/gh\//g, "https://raw.githack.com/");
+  html = html.replace(/https:\/\/cdn\.jsdelivr\.net\//g, "https://raw.githack.com/");
+  html = html.replace(/https:\/\/(?:raw|rawcdn)\.githack\.com\//g, "/api/public/gn/cdn/");
   html = html.replace(/https:\/\/raw\.githubusercontent\.com\//g, "/api/public/gn/gh/");
 
   // 6. Rewrite or insert base href tag
@@ -303,6 +402,10 @@ function sanitizeAndCleanGameHtml(rawHtml: string): string {
   } else {
     // If a base tag was already present, rewrite it to proxy
     html = html.replace(
+      /<base([^>]*)\bhref=["\x27]https:\/\/(?:raw|rawcdn)\.githack\.com\/([^"\x27]+)["\x27]/gi,
+      '<base$1href="/api/public/gn/cdn/$2"',
+    );
+    html = html.replace(
       /<base([^>]*)\bhref=["\x27]https:\/\/cdn\.jsdelivr\.net\/gh\/([^"\x27]+)["\x27]/gi,
       '<base$1href="/api/public/gn/cdn/$2"',
     );
@@ -320,7 +423,7 @@ function sanitizeAndCleanGameHtml(rawHtml: string): string {
     const cleanUtyLoader = `
 <script id="undertale-yellow-clean-loader">
 (async function() {
-  const cdnBase = "https://cdn.jsdelivr.net/gh/giorgirick2-gif/game-webports-onawebsite@main/undertale-yellow/";
+  const cdnBase = "https://raw.githack.com/giorgirick2-gif/game-webports-onawebsite/main/undertale-yellow/";
   const totalParts = 12;
   const statusEl = document.getElementById("status");
   const progressEl = document.getElementById("progress");
@@ -654,7 +757,7 @@ router.get("/g/*", async (req, res) => {
       return serveAsset(req, res, cached.buffer, rawPath, cached.mime, cached.encoding === "gzip");
     }
 
-    const cdnUrl = `https://cdn.jsdelivr.net/gh/selenite-cc/selenite-old@main/${rawPath}`;
+    const cdnUrl = `https://raw.githack.com/selenite-cc/selenite-old/main/${rawPath}`;
     const response = await fetch(cdnUrl);
     if (!response.ok) {
       return res.status(response.status).send("Game asset not found");
@@ -703,7 +806,7 @@ router.get("/gn/*", async (req, res) => {
 
     if (rawPath.startsWith("cdn/")) {
       const cdnSubPath = rawPath.replace(/^cdn\//, "");
-      originalUrl = `https://cdn.jsdelivr.net/gh/${cdnSubPath}`;
+      originalUrl = `https://raw.githack.com/${cdnSubPath.replace("@", "/")}`;
       const resData = await fetchGNAsset(cdnSubPath);
       if (resData) response = resData.response;
       cleanPathNoQuery = cdnSubPath.split("?")[0] || "";
@@ -736,22 +839,33 @@ router.get("/gn/*", async (req, res) => {
     } else {
       const cleanGamePath = rawPath.replace(/^game\//, "");
       cleanPathNoQuery = cleanGamePath.split("?")[0] || "";
-      originalUrl = `https://raw.githubusercontent.com/freebuisness/html/main/${cleanGamePath}`;
+
+      // Resolve exact filename in gn-math catalog (e.g. 467 -> 467-updateef.html, 65 -> 65-fixed.html)
+      const mappedGnFile =
+        resolveExactGnFile(cleanGamePath) || resolveExactGnFile(cleanPathNoQuery);
+      const targetPath = mappedGnFile || cleanGamePath;
+
+      originalUrl = `https://raw.githubusercontent.com/gn-math/html/main/${targetPath}`;
       try {
         const r = await fetch(originalUrl, { redirect: "follow" });
         if (r.ok) {
           response = r;
         } else {
-          const resData = await fetchGNAsset(`freebuisness/html@main/${cleanGamePath}`);
+          const resData = await fetchGNAsset(`gn-math/html@main/${targetPath}`);
           if (resData) response = resData.response;
         }
       } catch {
-        const resData = await fetchGNAsset(`freebuisness/html@main/${cleanGamePath}`);
+        const resData = await fetchGNAsset(`gn-math/html@main/${targetPath}`);
         if (resData) response = resData.response;
       }
     }
 
     if (!response || !response.ok) {
+      const authenticHtml = await fetchAuthenticGameFallback(rawPath);
+      if (authenticHtml) {
+        res.setHeader("content-type", "text/html; charset=utf-8");
+        return res.send(authenticHtml);
+      }
       return res.status(404).send("GN Game asset not found");
     }
 
@@ -771,7 +885,13 @@ router.get("/gn/*", async (req, res) => {
     // JS/CSS/JSON Rewrites (can also be cached to save bandwidth and compute)
     if (cleanPathNoQuery.endsWith(".js") || cleanPathNoQuery.endsWith(".mjs")) {
       let jsText = await response.text();
-      jsText = jsText.replace(/https:\/\/cdn\.jsdelivr\.net\/gh\//g, "/api/public/gn/cdn/");
+      jsText = jsText.replace(
+        /https:\/\/cdn\.jsdelivr\.net\/gh\/([^/]+)\/([^/@]+)(?:@[^/]+)?\//g,
+        "https://raw.githack.com/$1/$2/main/",
+      );
+      jsText = jsText.replace(/https:\/\/cdn\.jsdelivr\.net\/gh\//g, "https://raw.githack.com/");
+      jsText = jsText.replace(/https:\/\/cdn\.jsdelivr\.net\//g, "https://raw.githack.com/");
+      jsText = jsText.replace(/https:\/\/(?:raw|rawcdn)\.githack\.com\//g, "/api/public/gn/cdn/");
       jsText = jsText.replace(/https:\/\/raw\.githubusercontent\.com\//g, "/api/public/gn/gh/");
       const buffer = Buffer.from(jsText, "utf-8");
       setCachedAsset(cacheKey, buffer, "application/javascript");
@@ -780,7 +900,13 @@ router.get("/gn/*", async (req, res) => {
 
     if (cleanPathNoQuery.endsWith(".css")) {
       let cssText = await response.text();
-      cssText = cssText.replace(/https:\/\/cdn\.jsdelivr\.net\/gh\//g, "/api/public/gn/cdn/");
+      cssText = cssText.replace(
+        /https:\/\/cdn\.jsdelivr\.net\/gh\/([^/]+)\/([^/@]+)(?:@[^/]+)?\//g,
+        "https://raw.githack.com/$1/$2/main/",
+      );
+      cssText = cssText.replace(/https:\/\/cdn\.jsdelivr\.net\/gh\//g, "https://raw.githack.com/");
+      cssText = cssText.replace(/https:\/\/cdn\.jsdelivr\.net\//g, "https://raw.githack.com/");
+      cssText = cssText.replace(/https:\/\/(?:raw|rawcdn)\.githack\.com\//g, "/api/public/gn/cdn/");
       cssText = cssText.replace(/https:\/\/raw\.githubusercontent\.com\//g, "/api/public/gn/gh/");
       const buffer = Buffer.from(cssText, "utf-8");
       setCachedAsset(cacheKey, buffer, "text/css");
@@ -789,7 +915,19 @@ router.get("/gn/*", async (req, res) => {
 
     if (cleanPathNoQuery.endsWith(".json")) {
       let jsonText = await response.text();
-      jsonText = jsonText.replace(/https:\/\/cdn\.jsdelivr\.net\/gh\//g, "/api/public/gn/cdn/");
+      jsonText = jsonText.replace(
+        /https:\/\/cdn\.jsdelivr\.net\/gh\/([^/]+)\/([^/@]+)(?:@[^/]+)?\//g,
+        "https://raw.githack.com/$1/$2/main/",
+      );
+      jsonText = jsonText.replace(
+        /https:\/\/cdn\.jsdelivr\.net\/gh\//g,
+        "https://raw.githack.com/",
+      );
+      jsonText = jsonText.replace(/https:\/\/cdn\.jsdelivr\.net\//g, "https://raw.githack.com/");
+      jsonText = jsonText.replace(
+        /https:\/\/(?:raw|rawcdn)\.githack\.com\//g,
+        "/api/public/gn/cdn/",
+      );
       jsonText = jsonText.replace(/https:\/\/raw\.githubusercontent\.com\//g, "/api/public/gn/gh/");
       const buffer = Buffer.from(jsonText, "utf-8");
       setCachedAsset(cacheKey, buffer, "application/json");
@@ -823,15 +961,21 @@ router.get("/seraph/*", async (req, res) => {
       return serveAsset(req, res, cached.buffer, rawPath, cached.mime, cached.encoding === "gzip");
     }
 
-    const seraphUrl = `https://cdn.jsdelivr.net/gh/a456pur/seraph@main/${rawPath}`;
+    const seraphUrl = `https://raw.githack.com/a456pur/seraph/main/${rawPath}`;
     let response = await fetch(seraphUrl, { redirect: "follow" });
     if (!response.ok) {
-      const rawSeraphUrl = `https://raw.githubusercontent.com/a456pur/seraph/main/${rawPath}`;
-      const r2 = await fetch(rawSeraphUrl, { redirect: "follow" });
-      if (!r2.ok) {
-        return res.status(404).send("Seraph game asset not found");
+      const cdnFallback = `https://rawcdn.githack.com/a456pur/seraph/main/${rawPath}`;
+      const rFallback = await fetch(cdnFallback, { redirect: "follow" });
+      if (rFallback.ok) {
+        response = rFallback;
+      } else {
+        const rawSeraphUrl = `https://raw.githubusercontent.com/a456pur/seraph/main/${rawPath}`;
+        const r2 = await fetch(rawSeraphUrl, { redirect: "follow" });
+        if (!r2.ok) {
+          return res.status(404).send("Seraph game asset not found");
+        }
+        response = r2;
       }
-      response = r2;
     }
 
     const cleanPathNoQuery = rawPath.split("?")[0] || "";
@@ -845,7 +989,11 @@ router.get("/seraph/*", async (req, res) => {
       const rawText = await response.text();
       let sanitizedHtml = sanitizeAndCleanGameHtml(rawText);
       sanitizedHtml = sanitizedHtml.replace(
-        /https:\/\/cdn\.jsdelivr\.net\/gh\/a456pur\/seraph@main/g,
+        /https:\/\/(?:raw|rawcdn)\.githack\.com\/a456pur\/seraph\/main/g,
+        "/api/public/seraph",
+      );
+      sanitizedHtml = sanitizedHtml.replace(
+        /https:\/\/cdn\.jsdelivr\.net\/gh\/a456pur\/seraph(?:@main)?/g,
         "/api/public/seraph",
       );
       return res.send(sanitizedHtml);
@@ -854,7 +1002,11 @@ router.get("/seraph/*", async (req, res) => {
     if (cleanPathNoQuery.endsWith(".js") || cleanPathNoQuery.endsWith(".mjs")) {
       let jsText = await response.text();
       jsText = jsText.replace(
-        /https:\/\/cdn\.jsdelivr\.net\/gh\/a456pur\/seraph@main/g,
+        /https:\/\/(?:raw|rawcdn)\.githack\.com\/a456pur\/seraph\/main/g,
+        "/api/public/seraph",
+      );
+      jsText = jsText.replace(
+        /https:\/\/cdn\.jsdelivr\.net\/gh\/a456pur\/seraph(?:@main)?/g,
         "/api/public/seraph",
       );
       const buffer = Buffer.from(jsText, "utf-8");
@@ -865,7 +1017,11 @@ router.get("/seraph/*", async (req, res) => {
     if (cleanPathNoQuery.endsWith(".css")) {
       let cssText = await response.text();
       cssText = cssText.replace(
-        /https:\/\/cdn\.jsdelivr\.net\/gh\/a456pur\/seraph@main/g,
+        /https:\/\/(?:raw|rawcdn)\.githack\.com\/a456pur\/seraph\/main/g,
+        "/api/public/seraph",
+      );
+      cssText = cssText.replace(
+        /https:\/\/cdn\.jsdelivr\.net\/gh\/a456pur\/seraph(?:@main)?/g,
         "/api/public/seraph",
       );
       const buffer = Buffer.from(cssText, "utf-8");
@@ -901,15 +1057,21 @@ router.get("/3kh0/*", async (req, res) => {
       return serveAsset(req, res, cached.buffer, rawPath, cached.mime, cached.encoding === "gzip");
     }
 
-    const primaryUrl = `https://cdn.jsdelivr.net/gh/3kh0/3kh0-Assets@main/${rawPath}`;
+    const primaryUrl = `https://raw.githack.com/3kh0/3kh0-Assets/main/${rawPath}`;
     let response = await fetch(primaryUrl, { redirect: "follow" });
     if (!response.ok) {
-      const fallbackUrl = `https://raw.githubusercontent.com/3kh0/3kh0-Assets/main/${rawPath}`;
-      const r2 = await fetch(fallbackUrl, { redirect: "follow" });
-      if (!r2.ok) {
-        return res.status(404).send("3kh0 game asset not found");
+      const cdnFallback = `https://rawcdn.githack.com/3kh0/3kh0-Assets/main/${rawPath}`;
+      const rFallback = await fetch(cdnFallback, { redirect: "follow" });
+      if (rFallback.ok) {
+        response = rFallback;
+      } else {
+        const fallbackUrl = `https://raw.githubusercontent.com/3kh0/3kh0-Assets/main/${rawPath}`;
+        const r2 = await fetch(fallbackUrl, { redirect: "follow" });
+        if (!r2.ok) {
+          return res.status(404).send("3kh0 game asset not found");
+        }
+        response = r2;
       }
-      response = r2;
     }
 
     const cleanPathNoQuery = rawPath.split("?")[0] || "";
@@ -923,7 +1085,11 @@ router.get("/3kh0/*", async (req, res) => {
       const rawText = await response.text();
       let sanitizedHtml = sanitizeAndCleanGameHtml(rawText);
       sanitizedHtml = sanitizedHtml.replace(
-        /https:\/\/cdn\.jsdelivr\.net\/gh\/3kh0\/3kh0-Assets@main/g,
+        /https:\/\/(?:raw|rawcdn)\.githack\.com\/3kh0\/3kh0-Assets\/main/g,
+        "/api/public/3kh0",
+      );
+      sanitizedHtml = sanitizedHtml.replace(
+        /https:\/\/cdn\.jsdelivr\.net\/gh\/3kh0\/3kh0-Assets(?:@main)?/g,
         "/api/public/3kh0",
       );
       return res.send(sanitizedHtml);
@@ -932,7 +1098,11 @@ router.get("/3kh0/*", async (req, res) => {
     if (cleanPathNoQuery.endsWith(".js") || cleanPathNoQuery.endsWith(".mjs")) {
       let jsText = await response.text();
       jsText = jsText.replace(
-        /https:\/\/cdn\.jsdelivr\.net\/gh\/3kh0\/3kh0-Assets@main/g,
+        /https:\/\/(?:raw|rawcdn)\.githack\.com\/3kh0\/3kh0-Assets\/main/g,
+        "/api/public/3kh0",
+      );
+      jsText = jsText.replace(
+        /https:\/\/cdn\.jsdelivr\.net\/gh\/3kh0\/3kh0-Assets(?:@main)?/g,
         "/api/public/3kh0",
       );
       const buffer = Buffer.from(jsText, "utf-8");
@@ -957,35 +1127,12 @@ router.get("/3kh0/*", async (req, res) => {
   }
 });
 
-let gnZoneSlugMapCache: Record<string, string> | null = null;
-async function getGnZoneSlugMap(): Promise<Record<string, string>> {
-  if (gnZoneSlugMapCache) return gnZoneSlugMapCache;
-  try {
-    const res = await fetch("https://cdn.jsdelivr.net/gh/freebuisness/assets@latest/zones.json");
-    if (res.ok) {
-      const zones = (await res.json()) as Array<{ name?: string; url?: string }>;
-      const map: Record<string, string> = {};
-      for (const z of zones) {
-        if (!z.url || !z.name) continue;
-        const filename = String(z.url).replace("{HTML_URL}/", "");
-        const cleanName = String(z.name)
-          .toLowerCase()
-          .replace(/[^a-z0-9]/g, "");
-        map[cleanName] = filename;
-      }
-      gnZoneSlugMapCache = map;
-      return map;
-    }
-  } catch {}
-  return {};
-}
-
 // Helper to fetch authentic game fallback from open-source GitHub repositories
 async function fetchAuthenticGameFallback(rawPath: string): Promise<string | null> {
   const cleanSlug = rawPath
     .replace(/^game\//, "")
     .replace(/^1788211172[^/]+\//, "")
-    .replace(/^(selenite|truffled|quasar|builtin)\//, "")
+    .replace(/^(selenite|truffled|quasar|builtin|sdk)\//, "")
     .split("?")[0];
 
   if (!cleanSlug) return null;
@@ -995,74 +1142,115 @@ async function fetchAuthenticGameFallback(rawPath: string): Promise<string | nul
 
   const candidates: { url: string; baseHref: string }[] = [];
 
-  if (cleanNormSlug === "soniccd") {
+  // Static alias overrides for games with unique filenames
+  const ALIASES: Record<string, string> = {
+    papaspizza: "227.html",
+    papaspizzeria: "227.html",
+    papaspizzaeria: "227.html",
+    sonic2: "549.html",
+    "2sonic": "549.html",
+    geometrydashremastered: "785-upd3.html",
+    geodashrm: "785-upd3.html",
+    geometrydash: "785-upd3.html",
+    pokemonblue: "505.html",
+    pokemoncrystal: "506-f.html",
+    pokemonfirered: "694.html",
+    pokemonheartgold: "696-f.html",
+    undertale: "456-f.html",
+    run3: "177.html",
+    run3editor: "177.html",
+    editor: "177.html",
+    gravityrun: "177.html",
+    bloonsplayerpack5: "74.html",
+    wheely1: "201.html",
+    tanks: "225.html",
+    extremerun3d: "233.html",
+    extremerun: "233.html",
+    soniccd: "589-f.html",
+  };
+
+  if (ALIASES[cleanNormSlug]) {
+    const fn = ALIASES[cleanNormSlug];
     candidates.push({
-      url: "https://raw.githubusercontent.com/freebuisness/html/main/589-f.html",
-      baseHref: "https://cdn.jsdelivr.net/gh/freebuisness/html@main/",
+      url: `https://raw.githubusercontent.com/gn-math/html/main/${fn}`,
+      baseHref: "https://rawcdn.githack.com/gn-math/html/main/",
+    });
+    candidates.push({
+      url: `https://rawcdn.githack.com/gn-math/html/main/${fn}`,
+      baseHref: "https://rawcdn.githack.com/gn-math/html/main/",
     });
   }
 
-  if (cleanNormSlug === "ddlc" || cleanNormSlug === "dokidokiliteratureclub") {
+  // 1. Check static GN zones map for exact file match
+  const mappedGnFile =
+    resolveExactGnFile(cleanSlug) ||
+    resolveExactGnFile(baseSlug) ||
+    resolveExactGnFile(cleanNormSlug);
+  if (mappedGnFile) {
     candidates.push({
-      url: "https://raw.githubusercontent.com/EmeraldGreenR/EmeraldGreenR.github.io/main/index.html",
-      baseHref: "https://cdn.jsdelivr.net/gh/EmeraldGreenR/EmeraldGreenR.github.io@main/",
+      url: `https://raw.githubusercontent.com/gn-math/html/main/${mappedGnFile}`,
+      baseHref: "https://rawcdn.githack.com/gn-math/html/main/",
+    });
+    candidates.push({
+      url: `https://rawcdn.githack.com/gn-math/html/main/${mappedGnFile}`,
+      baseHref: "https://rawcdn.githack.com/gn-math/html/main/",
     });
   }
 
-  // Check mapped GN zone game filename
-  const gnMap = await getGnZoneSlugMap();
-  if (gnMap[cleanNormSlug]) {
-    const gnFile = gnMap[cleanNormSlug];
+  // 2. Check Seraph authentic game catalog (raw.githubusercontent.com & rawcdn.githack.com)
+  if (cleanNormSlug) {
     candidates.push({
-      url: `https://raw.githubusercontent.com/freebuisness/html/main/${gnFile}`,
-      baseHref: "https://cdn.jsdelivr.net/gh/freebuisness/html@main/",
+      url: `https://raw.githubusercontent.com/a456pur/seraph/main/games/${cleanNormSlug}/index.html`,
+      baseHref: `/api/public/seraph/games/${cleanNormSlug}/`,
     });
     candidates.push({
-      url: `https://cdn.jsdelivr.net/gh/freebuisness/html@main/${gnFile}`,
-      baseHref: "https://cdn.jsdelivr.net/gh/freebuisness/html@main/",
+      url: `https://rawcdn.githack.com/a456pur/seraph/main/games/${cleanNormSlug}/index.html`,
+      baseHref: `/api/public/seraph/games/${cleanNormSlug}/`,
+    });
+  }
+  if (baseSlug && baseSlug !== cleanNormSlug) {
+    candidates.push({
+      url: `https://raw.githubusercontent.com/a456pur/seraph/main/games/${baseSlug}/index.html`,
+      baseHref: `/api/public/seraph/games/${baseSlug}/`,
     });
   }
 
-  // Direct file matches
-  if (/^\d+/.test(baseSlug) || cleanSlug.endsWith(".html")) {
-    const targetFile = cleanSlug.endsWith(".html") ? cleanSlug : `${baseSlug}.html`;
+  // 3. Check Selenite-old authentic game catalog
+  if (cleanNormSlug) {
     candidates.push({
-      url: `https://cdn.jsdelivr.net/gh/freebuisness/html@main/${targetFile}`,
-      baseHref: "https://cdn.jsdelivr.net/gh/freebuisness/html@main/",
+      url: `https://raw.githubusercontent.com/selenite-cc/selenite-old/main/${cleanNormSlug}/index.html`,
+      baseHref: `/api/public/g/${cleanNormSlug}/`,
     });
     candidates.push({
-      url: `https://raw.githubusercontent.com/freebuisness/html/main/${targetFile}`,
-      baseHref: "https://cdn.jsdelivr.net/gh/freebuisness/html@main/",
+      url: `https://rawcdn.githack.com/selenite-cc/selenite-old/main/${cleanNormSlug}/index.html`,
+      baseHref: `/api/public/g/${cleanNormSlug}/`,
+    });
+  }
+  if (baseSlug && baseSlug !== cleanNormSlug) {
+    candidates.push({
+      url: `https://raw.githubusercontent.com/selenite-cc/selenite-old/main/${baseSlug}/index.html`,
+      baseHref: `/api/public/g/${baseSlug}/`,
     });
   }
 
-  // Open-source repos
-  candidates.push(
-    {
-      url: `https://cdn.jsdelivr.net/gh/freebuisness/html@main/${baseSlug}.html`,
-      baseHref: "https://cdn.jsdelivr.net/gh/freebuisness/html@main/",
-    },
-    {
-      url: `https://cdn.jsdelivr.net/gh/a456pur/seraph@main/games/${baseSlug}/index.html`,
-      baseHref: `https://cdn.jsdelivr.net/gh/a456pur/seraph@main/games/${baseSlug}/`,
-    },
-    {
-      url: `https://cdn.jsdelivr.net/gh/Selenite-CC/Selenite@main/public/games/${baseSlug}/index.html`,
-      baseHref: `https://cdn.jsdelivr.net/gh/Selenite-CC/Selenite@main/public/games/${baseSlug}/`,
-    },
-    {
-      url: `https://cdn.jsdelivr.net/gh/3kh0/3kh0-Assets@main/${baseSlug}/index.html`,
-      baseHref: `https://cdn.jsdelivr.net/gh/3kh0/3kh0-Assets@main/${baseSlug}/`,
-    },
-    {
-      url: `https://cdn.jsdelivr.net/gh/classroom-google-com/classroom-google-com.github.io@main/${baseSlug}/index.html`,
-      baseHref: `https://cdn.jsdelivr.net/gh/classroom-google-com/classroom-google-com.github.io@main/${baseSlug}/`,
-    },
-    {
-      url: `https://raw.githubusercontent.com/freebuisness/html/main/${baseSlug}.html`,
-      baseHref: "https://cdn.jsdelivr.net/gh/freebuisness/html@main/",
-    },
-  );
+  // 4. Check 3kh0 assets catalog
+  if (cleanNormSlug) {
+    candidates.push({
+      url: `https://raw.githubusercontent.com/3kh0/3kh0-Assets/main/${cleanNormSlug}/index.html`,
+      baseHref: `/api/public/3kh0/${cleanNormSlug}/`,
+    });
+  }
+
+  // 5. Direct file matches in gn-math
+  const targetFile = cleanSlug.endsWith(".html") ? cleanSlug : `${baseSlug}.html`;
+  candidates.push({
+    url: `https://raw.githubusercontent.com/gn-math/html/main/${targetFile}`,
+    baseHref: "https://rawcdn.githack.com/gn-math/html/main/",
+  });
+  candidates.push({
+    url: `https://rawcdn.githack.com/gn-math/html/main/${targetFile}`,
+    baseHref: "https://rawcdn.githack.com/gn-math/html/main/",
+  });
 
   for (const c of candidates) {
     try {
@@ -1072,6 +1260,12 @@ async function fetchAuthenticGameFallback(rawPath: string): Promise<string | nul
         if (
           !html.includes("WhittierSchool") &&
           !html.includes("Whittier School") &&
+          !html.includes("Empowering K-12 Students") &&
+          !html.includes("Page Not Found") &&
+          !html.includes("broken game") &&
+          !html.includes("request a bug") &&
+          !html.includes("searched the proxy the first time") &&
+          !html.includes("Couldn't find the requested file") &&
           html.length > 100
         ) {
           if (html.includes("<base href=")) {
@@ -1095,7 +1289,7 @@ function renderInteractiveErrorHtml(rawPath: string): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Source Connection - Frosted Arcade</title>
+  <title>Game Mirror Standby - Frosted Arcade</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -1122,14 +1316,14 @@ function renderInteractiveErrorHtml(rawPath: string): string {
     .icon {
       width: 52px;
       height: 52px;
-      background: rgba(245, 158, 11, 0.12);
-      border: 1px solid rgba(245, 158, 11, 0.3);
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.3);
       border-radius: 16px;
       display: flex;
       align-items: center;
       justify-content: center;
       margin: 0 auto 20px;
-      color: #f59e0b;
+      color: #38bdf8;
     }
     h2 { font-size: 20px; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.02em; }
     p { font-size: 13px; color: #a3a3a3; line-height: 1.5; margin-bottom: 24px; }
@@ -1141,7 +1335,7 @@ function renderInteractiveErrorHtml(rawPath: string): string {
       border-radius: 100px;
       font-size: 11px;
       color: #38bdf8;
-      font-mono: monospace;
+      font-family: monospace;
       margin-bottom: 16px;
     }
     .btn-group { display: flex; flex-direction: column; gap: 10px; }
@@ -1171,24 +1365,17 @@ function renderInteractiveErrorHtml(rawPath: string): string {
       <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
     </div>
     <span class="badge">Target: ${cleanName}</span>
-    <h2>Connecting to Backup Server</h2>
-    <p>The primary server for this game source is taking longer than expected. Click below to refresh or switch to an alternate mirror.</p>
+    <h2>Connecting Authentic Mirror</h2>
+    <p>The primary game source is reconnecting. Click below to refresh or switch to the verified authentic mirror.</p>
     <div class="btn-group">
       <button class="btn btn-primary" onclick="window.location.reload()">
-        <span>Auto-Retry Game Load</span>
+        <span>Auto-Reload Game</span>
       </button>
-      <button class="btn btn-secondary" onclick="tryAlternativeMirror()">
-        <span>Try Secondary CDN Mirror</span>
+      <button class="btn btn-secondary" onclick="window.history.back()">
+        <span>Return to Arcade</span>
       </button>
     </div>
   </div>
-  <script>
-    function tryAlternativeMirror() {
-      const url = new URL(window.location.href);
-      url.searchParams.set('mirror', 'alt_' + Date.now());
-      window.location.href = url.toString();
-    }
-  </script>
 </body>
 </html>`;
 }
@@ -1212,8 +1399,8 @@ router.all("/sdk/*", async (req, res) => {
       }
     }
 
-    // Direct authentic game interceptor for Baldi and known game slugs
-    if (method === "GET" && rawPath.includes("baldi-plus")) {
+    // Proactively check authentic GitHub open-source repositories for game HTML requests
+    if (method === "GET") {
       const authenticHtml = await fetchAuthenticGameFallback(rawPath);
       if (authenticHtml) {
         res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -1294,9 +1481,15 @@ router.all("/sdk/*", async (req, res) => {
             if (
               bufferStr.includes("WhittierSchool") ||
               bufferStr.includes("Whittier School") ||
-              bufferStr.includes("Empowering K-12 Students")
+              bufferStr.includes("Empowering K-12 Students") ||
+              bufferStr.includes("Page Not Found") ||
+              bufferStr.includes("broken game") ||
+              bufferStr.includes("request a bug") ||
+              bufferStr.includes("searched the proxy the first time")
             ) {
-              console.warn(`[Proxy] School block on ${domain} for ${rawPath}`);
+              console.warn(
+                `[Proxy] Detected broken proxy or school block on ${domain} for ${rawPath}`,
+              );
               continue;
             }
             response = resObj;

@@ -286,6 +286,15 @@ iframe {
   height: 100%;
   border: 0;
   outline: none;
+  overflow: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+iframe::-webkit-scrollbar {
+  display: none;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 /* Perfect Fullscreen & Zoom Scaling Override Rules */
