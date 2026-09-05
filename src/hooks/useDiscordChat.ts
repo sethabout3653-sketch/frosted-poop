@@ -123,6 +123,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const [isDeafened, setIsDeafened] = useState(false);
   const [isSelfSpeaking, setIsSelfSpeaking] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
+  const [isCameraStarting, setIsCameraStarting] = useState(false);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
 
@@ -1001,15 +1002,18 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       setIsCameraOn(false);
       return;
     }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+  setIsCameraStarting(true);
+  try {
+  const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
       cameraStreamRef.current = stream;
       setCameraStream(stream);
       setIsCameraOn(true);
       setVoiceError(null);
-    } catch {
-      setVoiceError("Camera access was blocked. Allow camera permission to enable video in General Voice.");
-    }
+  } catch {
+  setVoiceError("Camera access was blocked. Allow camera permission to enable video in General Voice.");
+  } finally {
+  setIsCameraStarting(false);
+  }
   };
 
   const leaveVoiceChannel = async () => {
@@ -1104,6 +1108,7 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     toggleMute,
   toggleDeafen,
   isCameraOn,
+  isCameraStarting,
   cameraStream,
   toggleCamera,
   studioVoiceMode,

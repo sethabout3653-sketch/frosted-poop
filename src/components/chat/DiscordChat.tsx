@@ -138,6 +138,7 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
     toggleMute,
     toggleDeafen,
     isCameraOn,
+    isCameraStarting,
     cameraStream,
     toggleCamera,
     studioVoiceMode,
@@ -220,6 +221,7 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
             occupants={voiceStates[currentVoiceChannelId] || []}
             cameraStream={cameraStream}
             isCameraOn={isCameraOn}
+            isCameraStarting={isCameraStarting}
             isMuted={isMuted}
             isSelfSpeaking={voiceStates[currentVoiceChannelId]?.some((user) => user.userId === currentUser.id && user.isSpeaking) || false}
             onToggleCamera={toggleCamera}
