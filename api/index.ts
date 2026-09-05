@@ -7,7 +7,7 @@ import { chatRouter } from "../src/server/chatServer";
 let stripeClient: Stripe | null = null;
 function getStripe(): Stripe {
   if (!stripeClient) {
-    const key = process.env.STRIPE_SECRET_KEY;
+    const key = process.env["STRIPE_SECRET_KEY"];
     if (!key) {
       throw new Error("STRIPE_SECRET_KEY environment variable is required");
     }
@@ -27,43 +27,14 @@ app.use((req, res, next) => {
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
-  next();
+  return next();
 });
 
-// 2. Safe Body Parser that avoids stream consumption deadlocks on Vercel
-app.use((req, res, next) => {
-  // Skip body parsing for proxy routes to avoid stream issues and allow raw forwarding
-  if (req.url.startsWith("/api/public") || req.url.startsWith("/public")) {
-    return next();
-  }
-
-  if (req.body !== undefined && req.body !== null) {
-    if (typeof req.body === "string" && req.body.length > 0) {
-      try {
-        req.body = JSON.parse(req.body);
-      } catch {
-        // Keep original string
-      }
-    } else if (Buffer.isBuffer(req.body)) {
-      try {
-        req.body = JSON.parse(req.body.toString("utf-8"));
-      } catch {
-        // Keep original buffer
-      }
-    }
-    return next();
-  }
-
-  // If stream is still readable and not closed
-  if (!req.complete && req.readable) {
-    express.json({ limit: "25mb" })(req, res, (err) => {
-      if (err) return next(err);
-      express.urlencoded({ extended: true, limit: "25mb" })(req, res, next);
-    });
-  } else {
-    next();
-  }
-});
+// 2. Use Express's parsers directly. Vercel has already populated the request
+// body in some runtimes, so inspecting or manually consuming the stream here
+// can throw "stream is not readable" and crash the function.
+app.use(express.json({ limit: "25mb", strict: false }));
+app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
 // 3. Normalize Vercel serverless request URLs across routing patterns
 app.use((req, _res, next) => {
@@ -71,23 +42,25 @@ app.use((req, _res, next) => {
 
   // If Vercel catch-all passed query params (e.g. all: ['chat', 'join'])
   if (req.query) {
-    if (req.query.all) {
-      const parts = Array.isArray(req.query.all) ? req.query.all : [req.query.all];
+    if (req.query["all"]) {
+      const parts = Array.isArray(req.query["all"]) ? req.query["all"] : [req.query["all"]];
       url = "/" + parts.join("/");
-    } else if (req.query.slug) {
-      const parts = Array.isArray(req.query.slug) ? req.query.slug : [req.query.slug];
+    } else if (req.query["slug"]) {
+      const parts = Array.isArray(req.query["slug"]) ? req.query["slug"] : [req.query["slug"]];
       url = "/chat/" + parts.join("/");
     }
   }
 
   const matchedHeader = (req.headers["x-matched-path"] || req.headers["x-now-route-matches"]) as
     string | undefined;
+  // Rewrites can invoke this function with req.url set to /api/index. Restore
+  // the original route from Vercel's matched-path header so Express does not
+  // turn valid API requests into a 404.
   if (
     matchedHeader &&
-    !matchedHeader.startsWith("/api/public") && // Avoid overwriting proxy paths with generic catch-all
-    (matchedHeader.includes("/chat") ||
-      matchedHeader.includes("/public") ||
-      matchedHeader.includes("/health"))
+    matchedHeader !== "/api/index" &&
+    matchedHeader !== "/api" &&
+    !matchedHeader.includes(":path*")
   ) {
     url = matchedHeader;
   }
