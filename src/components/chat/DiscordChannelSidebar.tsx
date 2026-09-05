@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Search,
   Hash,
@@ -14,6 +14,8 @@ import {
   AlertCircle,
   ShieldAlert,
   X,
+  Video,
+  VideoOff,
 } from "lucide-react";
 import type { Channel, User, VoiceUser } from "@/types/chat";
 
@@ -37,7 +39,24 @@ interface Props {
   onLeaveVoice: () => void;
   onToggleMute: () => void;
   onToggleDeafen: () => void;
+  isCameraOn?: boolean;
+  cameraStream?: MediaStream | null;
+  onToggleCamera?: () => void;
   onLogout: () => void;
+}
+
+function LocalVideoPreview({ stream }: { stream: MediaStream }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+      void videoRef.current.play().catch(() => undefined);
+    }
+    return () => {
+      if (videoRef.current) videoRef.current.srcObject = null;
+    };
+  }, [stream]);
+  return <div className="mx-1 overflow-hidden rounded-lg border border-blue-500/30 bg-neutral-950"><video ref={videoRef} muted playsInline className="aspect-video w-full object-cover" /><div className="px-2 py-1 text-[10px] font-semibold text-blue-300">Your camera</div></div>;
 }
 
 export function DiscordChannelSidebar({
@@ -60,6 +79,9 @@ export function DiscordChannelSidebar({
   onLeaveVoice,
   onToggleMute,
   onToggleDeafen,
+  isCameraOn = false,
+  cameraStream = null,
+  onToggleCamera,
   onLogout,
 }: Props) {
   const [textOpen, setTextOpen] = useState(true);
@@ -227,70 +249,26 @@ export function DiscordChannelSidebar({
 
       {/* Voice Status Controls Panel */}
       {currentVoiceChannelId && (
-        <div className="flex flex-col gap-1.5 border-t border-neutral-800 bg-[#0c0c0c] p-2.5 mx-1 rounded-t-lg shadow-inner">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-emerald-400 shrink-0">
-              <div className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+        <>
+          {isCameraOn && cameraStream && <LocalVideoPreview stream={cameraStream} />}
+          <div className="flex flex-col gap-1.5 border-t border-neutral-800 bg-[#0c0c0c] p-2.5 mx-1 rounded-t-lg shadow-inner">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-emerald-400 shrink-0">
+                <div className="relative flex h-2 w-2"><span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" /></div>
+                <span className="text-[11px] font-bold tracking-tight">Voice Connected</span>
               </div>
-              <span className="text-[11px] font-bold tracking-tight">Voice Connected</span>
+              <span className="text-[10px] text-neutral-400 font-semibold truncate max-w-[90px] text-right">{channels.find((c) => c.id === currentVoiceChannelId)?.name || "General Voice"}</span>
             </div>
-            <span className="text-[10px] text-neutral-400 font-semibold truncate max-w-[90px] text-right">
-              {channels.find((c) => c.id === currentVoiceChannelId)?.name || "General Voice"}
-            </span>
-          </div>
-
-          {/* Live Mic Activity Bar */}
-          <div className="flex items-center gap-1.5 mt-0.5 px-1">
-            <span className="text-[9px] text-neutral-400 uppercase font-bold tracking-wider shrink-0">
-              Mic
-            </span>
-            <div className="flex-1 h-1.5 bg-neutral-800 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-emerald-500 to-green-400 transition-all duration-75"
-                style={{ width: `${isMuted || isDeafened ? 0 : micLevel}%` }}
-              />
+            <div className="flex items-center gap-1.5 mt-0.5 px-1"><span className="text-[9px] text-neutral-400 uppercase font-bold tracking-wider shrink-0">Mic</span><div className="flex-1 h-1.5 bg-neutral-800 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-emerald-500 to-green-400 transition-all duration-75" style={{ width: `${isMuted || isDeafened ? 0 : micLevel}%` }} /></div></div>
+            <div className="flex items-center justify-around mt-1">
+              <button onClick={onToggleMute} className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all cursor-pointer ${isMuted ? "bg-rose-500/20 text-rose-400 border border-rose-500/25" : "hover:bg-neutral-800 text-neutral-400 hover:text-white"}`} title={isMuted ? "Unmute Mic" : "Mute Mic"}>{isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}</button>
+              <button onClick={onToggleDeafen} className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all cursor-pointer ${isDeafened ? "bg-amber-500/20 text-amber-400 border border-amber-500/25" : "hover:bg-neutral-800 text-neutral-400 hover:text-white"}`} title={isDeafened ? "Undeafen Audio" : "Deafen Audio"}><Headphones className="h-4 w-4" /></button>
+              {onToggleCamera && <button onClick={onToggleCamera} className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all cursor-pointer ${isCameraOn ? "bg-blue-500/20 text-blue-400 border border-blue-500/25" : "hover:bg-neutral-800 text-neutral-400 hover:text-white"}`} title={isCameraOn ? "Turn camera off" : "Turn camera on"}>{isCameraOn ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}</button>}
+              <button onClick={onLeaveVoice} className="flex h-7 w-7 items-center justify-center rounded-lg bg-rose-600 hover:bg-rose-700 text-white shadow-sm transition-all cursor-pointer" title="Disconnect Voice"><PhoneOff className="h-4 w-4" /></button>
             </div>
-            <span className="text-[9px] text-emerald-400 font-mono font-bold shrink-0">
-              {isMuted || isDeafened ? "MUTE" : "LIVE"}
-            </span>
           </div>
-
-          <div className="flex items-center justify-around mt-1">
-            <button
-              onClick={onToggleMute}
-              className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all cursor-pointer ${
-                isMuted
-                  ? "bg-rose-500/20 text-rose-400 border border-rose-500/25"
-                  : "hover:bg-neutral-800 text-neutral-400 hover:text-white"
-              }`}
-              title={isMuted ? "Unmute Mic" : "Mute Mic"}
-            >
-              {isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-            </button>
-            <button
-              onClick={onToggleDeafen}
-              className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all cursor-pointer ${
-                isDeafened
-                  ? "bg-amber-500/20 text-amber-400 border border-amber-500/25"
-                  : "hover:bg-neutral-800 text-neutral-400 hover:text-white"
-              }`}
-              title={isDeafened ? "Undeafen Audio" : "Deafen Audio"}
-            >
-              <Headphones className={`h-4 w-4 ${isDeafened ? "text-amber-400" : ""}`} />
-            </button>
-            <button
-              onClick={onLeaveVoice}
-              className="flex h-7 w-7 items-center justify-center rounded-lg bg-rose-600 hover:bg-rose-700 text-white shadow-sm transition-all cursor-pointer"
-              title="Disconnect Voice"
-            >
-              <PhoneOff className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
+        </>
       )}
-
       {/* User Status Bar at Bottom */}
       {currentUser && (
         <div className="flex h-14 items-center justify-between border-t border-neutral-900 bg-[#000000] px-3">

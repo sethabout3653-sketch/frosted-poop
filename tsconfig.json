@@ -2,7 +2,6 @@
   "include": [
     "src/**/*.ts",
     "src/**/*.tsx",
-    "vite.config.ts",
     "eslint.config.js",
     "server.ts",
     "api/**/*.ts"
@@ -12,7 +11,7 @@
     "jsx": "react-jsx",
     "module": "ESNext",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["vite/client", "node"],
+    "types": ["node"],
     "moduleResolution": "Bundler",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": false,

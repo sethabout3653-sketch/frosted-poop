@@ -1,10 +1,22 @@
 {
   "version": 2,
-  "buildCommand": "vite build",
+  "buildCommand": "pnpm build",
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/((?!assets/|public/|.*\\..*).*)",
+      "source": "/api/health",
+      "destination": "/api/health"
+    },
+    {
+      "source": "/api",
+      "destination": "/api/health"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/((?!api/|api$|assets/|public/|.*\\..*).*)",
       "destination": "/index.html"
     }
   ]
