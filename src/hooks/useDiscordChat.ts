@@ -122,6 +122,9 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
   const [isMuted, setIsMuted] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
   const [isSelfSpeaking, setIsSelfSpeaking] = useState(false);
+  const [isCameraOn, setIsCameraOn] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
 
   // Audio & WebRTC Refs
   const rawStreamRef = useRef<MediaStream | null>(null);
@@ -285,6 +288,12 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
       processedStreamRef.current.getTracks().forEach((track) => track.stop());
       processedStreamRef.current = null;
     }
+    if (cameraStreamRef.current) {
+      cameraStreamRef.current.getTracks().forEach((track) => track.stop());
+      cameraStreamRef.current = null;
+      setCameraStream(null);
+    }
+    setIsCameraOn(false);
 
     Object.entries(pcsRef.current).forEach(([peerId, pc]) => {
       pc.close();
@@ -984,6 +993,25 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     }
   };
 
+  const toggleCamera = async () => {
+    if (isCameraOn) {
+      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+      cameraStreamRef.current = null;
+      setCameraStream(null);
+      setIsCameraOn(false);
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+      cameraStreamRef.current = stream;
+      setCameraStream(stream);
+      setIsCameraOn(true);
+      setVoiceError(null);
+    } catch {
+      setVoiceError("Camera access was blocked. Allow camera permission to enable video in General Voice.");
+    }
+  };
+
   const leaveVoiceChannel = async () => {
     cleanupVoice();
     if (currentUser) {
@@ -1074,8 +1102,11 @@ export function useDiscordChat({ token, currentUser, onLogout }: Props) {
     joinVoiceChannel,
     leaveVoiceChannel,
     toggleMute,
-    toggleDeafen,
-    studioVoiceMode,
+  toggleDeafen,
+  isCameraOn,
+  cameraStream,
+  toggleCamera,
+  studioVoiceMode,
     setStudioVoiceMode,
     echoCancellation,
     setEchoCancellation,

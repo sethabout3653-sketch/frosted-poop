@@ -18,6 +18,9 @@ export interface VoiceStateInfo {
   leaveVoice: () => void;
   toggleMute: () => void;
   toggleDeafen: () => void;
+  isCameraOn: boolean;
+  cameraStream: MediaStream | null;
+  toggleCamera: () => void;
 }
 
 interface Props {
@@ -133,6 +136,9 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
     leaveVoiceChannel,
     toggleMute,
     toggleDeafen,
+    isCameraOn,
+    cameraStream,
+    toggleCamera,
     studioVoiceMode,
     setStudioVoiceMode,
     echoCancellation,
@@ -198,6 +204,9 @@ export function DiscordChat({ onReturnToGames, onVoiceStateChange }: Props) {
         onLeaveVoice={leaveVoiceChannel}
         onToggleMute={toggleMute}
         onToggleDeafen={toggleDeafen}
+        isCameraOn={isCameraOn}
+        cameraStream={cameraStream}
+        onToggleCamera={toggleCamera}
         onLogout={handleLogout}
       />
 
